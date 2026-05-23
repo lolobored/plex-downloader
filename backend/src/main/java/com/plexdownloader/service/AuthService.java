@@ -7,6 +7,7 @@ import com.plexdownloader.model.User;
 import com.plexdownloader.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -28,7 +29,7 @@ public class AuthService {
         return plexPinClient.buildAuthUrl(code);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public Optional<JwtResponse> checkPin(Long pinId) {
         String authToken = plexPinClient.pollPin(pinId);
         if (authToken == null || authToken.isBlank()) {
