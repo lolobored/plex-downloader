@@ -1,0 +1,32 @@
+package com.plexdownloader.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import java.time.Instant;
+
+@Data @Entity @Table(name = "download_queue")
+public class DownloadQueueItem {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "media_type", nullable = false)
+    private MediaType mediaType;
+    @Column(name = "media_id", nullable = false)
+    private Long mediaId;
+    @Enumerated(EnumType.STRING)
+    private Status status = Status.PENDING;
+    @Column(name = "queue_position")
+    private Integer queuePosition;
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    private String errorMessage;
+    @Column(name = "requested_at", updatable = false)
+    private Instant requestedAt = Instant.now();
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
+    public enum MediaType { MOVIE, EPISODE }
+    public enum Status { PENDING, IN_PROGRESS, DONE, ERROR }
+}
