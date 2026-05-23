@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/plexdownloader}
+    username: ${SPRING_DATASOURCE_USERNAME:plexdl}
+    password: ${SPRING_DATASOURCE_PASSWORD:plexdl}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-minimum-32-chars-long-change-in-prod}
+    expiration-ms: 86400000
