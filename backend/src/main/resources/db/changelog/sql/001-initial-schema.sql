@@ -7,8 +7,8 @@ CREATE TABLE users (
     username   VARCHAR(255) NOT NULL,
     avatar_url TEXT,
     role       VARCHAR(20) NOT NULL DEFAULT 'USER',
-    last_login_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 -- changeset plexdownloader:001-settings
@@ -27,7 +27,7 @@ CREATE TABLE movies (
     poster_url  TEXT,
     file_path   TEXT,
     duration_ms BIGINT,
-    synced_at   TIMESTAMP
+    synced_at   TIMESTAMP WITH TIME ZONE
 );
 CREATE TABLE movie_genres (
     movie_id BIGINT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
@@ -42,7 +42,7 @@ CREATE TABLE tv_shows (
     year       INT,
     summary    TEXT,
     poster_url TEXT,
-    synced_at  TIMESTAMP
+    synced_at  TIMESTAMP WITH TIME ZONE
 );
 CREATE TABLE show_genres (
     show_id BIGINT NOT NULL REFERENCES tv_shows(id) ON DELETE CASCADE,
@@ -58,7 +58,7 @@ CREATE TABLE seasons (
     title          VARCHAR(255),
     poster_url     TEXT,
     episode_count  INT,
-    synced_at      TIMESTAMP
+    synced_at      TIMESTAMP WITH TIME ZONE
 );
 
 -- changeset plexdownloader:001-episodes
@@ -76,7 +76,7 @@ CREATE TABLE episodes (
     director         VARCHAR(500),
     writer           VARCHAR(500),
     video_resolution VARCHAR(50),
-    synced_at        TIMESTAMP
+    synced_at        TIMESTAMP WITH TIME ZONE
 );
 
 -- changeset plexdownloader:001-actors
@@ -108,7 +108,7 @@ CREATE TABLE download_queue (
     status         VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     queue_position INT,
     error_message  TEXT,
-    requested_at   TIMESTAMP NOT NULL DEFAULT NOW(),
-    completed_at   TIMESTAMP
+    requested_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    completed_at   TIMESTAMP WITH TIME ZONE
 );
 CREATE INDEX idx_download_queue_status ON download_queue(status);

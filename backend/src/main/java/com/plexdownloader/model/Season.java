@@ -2,9 +2,10 @@ package com.plexdownloader.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 import java.time.Instant;
 
-@Data @Entity @Table(name = "seasons")
+@Data @ToString(exclude = "show") @Entity @Table(name = "seasons")
 public class Season {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

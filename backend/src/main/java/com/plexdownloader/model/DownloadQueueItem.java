@@ -2,9 +2,10 @@ package com.plexdownloader.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 import java.time.Instant;
 
-@Data @Entity @Table(name = "download_queue")
+@Data @ToString(exclude = "user") @Entity @Table(name = "download_queue")
 public class DownloadQueueItem {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
