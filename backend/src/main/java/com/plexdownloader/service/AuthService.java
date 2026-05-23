@@ -36,7 +36,7 @@ public class AuthService {
             return Optional.empty();
         }
         PlexUserInfo info = plexPinClient.getUserInfo(authToken);
-        User user = upsertUser(info);
+        User user = upsertUser(info, authToken);
         return Optional.of(new JwtResponse(
             jwtService.generateToken(user),
             user.getUsername(),
@@ -44,11 +44,12 @@ public class AuthService {
         ));
     }
 
-    private User upsertUser(PlexUserInfo info) {
+    private User upsertUser(PlexUserInfo info, String authToken) {
         return userRepository.findByPlexAccountId(info.id())
             .map(existing -> {
                 existing.setUsername(info.username());
                 existing.setAvatarUrl(info.thumb());
+                existing.setPlexToken(authToken);
                 existing.setLastLoginAt(Instant.now());
                 return userRepository.save(existing);
             })
@@ -57,8 +58,8 @@ public class AuthService {
                 u.setPlexAccountId(info.id());
                 u.setUsername(info.username());
                 u.setAvatarUrl(info.thumb());
+                u.setPlexToken(authToken);
                 u.setLastLoginAt(Instant.now());
-                // First user to authenticate becomes ADMIN
                 u.setRole(userRepository.count() == 0 ? User.Role.ADMIN : User.Role.USER);
                 return userRepository.save(u);
             });

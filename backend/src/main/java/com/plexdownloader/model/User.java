@@ -14,6 +14,8 @@ public class User {
     private String username;
     @Column(name = "avatar_url")
     private String avatarUrl;
+    @Column(name = "plex_token")
+    private String plexToken;
     @Enumerated(EnumType.STRING)
     private Role role = Role.USER;
     @Column(name = "last_login_at")

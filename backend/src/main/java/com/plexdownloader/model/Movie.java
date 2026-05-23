@@ -25,9 +25,26 @@ public class Movie {
     private Long durationMs;
     @Column(name = "synced_at")
     private Instant syncedAt;
+    @Column(name = "tmdb_id")
+    private Long tmdbId;
+    @Column(name = "imdb_id")
+    private String imdbId;
+    private Float rating;
+    private String studio;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "movie_genres", joinColumns = @JoinColumn(name = "movie_id"))
     @Column(name = "genre")
     private List<String> genres = new ArrayList<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "movie_directors", joinColumns = @JoinColumn(name = "movie_id"))
+    @Column(name = "director")
+    private List<String> directors = new ArrayList<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "movie_actors",
+        joinColumns = @JoinColumn(name = "movie_id"),
+        inverseJoinColumns = @JoinColumn(name = "actor_id"))
+    private List<Actor> actors = new ArrayList<>();
 }

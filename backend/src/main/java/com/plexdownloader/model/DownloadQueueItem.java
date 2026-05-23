@@ -23,6 +23,10 @@ public class DownloadQueueItem {
     private Integer queuePosition;
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
+    @Column(name = "source_file_path", columnDefinition = "TEXT")
+    private String sourceFilePath;
+    @Column(name = "dest_file_path", columnDefinition = "TEXT")
+    private String destFilePath;
     @Column(name = "requested_at", updatable = false)
     private Instant requestedAt = Instant.now();
     @Column(name = "completed_at")
