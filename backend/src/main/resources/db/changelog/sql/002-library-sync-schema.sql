@@ -12,8 +12,10 @@ ALTER TABLE movies ADD COLUMN studio VARCHAR(255);
 -- changeset plexdownloader:002-movie-directors
 CREATE TABLE movie_directors (
     movie_id BIGINT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
-    director VARCHAR(255) NOT NULL
+    director VARCHAR(255) NOT NULL,
+    PRIMARY KEY (movie_id, director)
 );
+CREATE INDEX idx_movie_directors_movie_id ON movie_directors(movie_id);
 
 -- changeset plexdownloader:002-tvshows-extra-fields
 ALTER TABLE tv_shows ADD COLUMN tmdb_id BIGINT;
