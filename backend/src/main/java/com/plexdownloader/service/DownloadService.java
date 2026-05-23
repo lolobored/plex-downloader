@@ -4,6 +4,7 @@ import com.plexdownloader.model.*;
 import com.plexdownloader.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -21,8 +22,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DownloadService {
 
-    @Lazy
-    private final DownloadService self;
+    private DownloadService self;
     private final MovieRepository movieRepo;
     private final EpisodeRepository episodeRepo;
     private final SeasonRepository seasonRepo;
@@ -30,6 +30,12 @@ public class DownloadService {
     private final DownloadQueueRepository queueRepo;
     private final PathMappingService pathMapping;
     private final SettingsService settings;
+
+    @Autowired
+    @Lazy
+    public void setSelf(DownloadService self) {
+        this.self = self;
+    }
 
     public List<Long> enqueueMovie(Long movieId, User user) {
         Movie movie = movieRepo.findById(movieId)
