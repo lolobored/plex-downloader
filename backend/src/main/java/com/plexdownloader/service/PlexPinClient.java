@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.Objects;
+
 @Component
 public class PlexPinClient {
 
@@ -29,7 +31,7 @@ public class PlexPinClient {
             .uri("/api/v2/pins?strong=true")
             .retrieve()
             .body(PlexPinApiResponse.class);
-        assert resp != null;
+        Objects.requireNonNull(resp, "plex.tv returned null body for createPin");
         return new PlexPinInitResponse(resp.getId(), resp.getCode());
     }
 
@@ -48,7 +50,7 @@ public class PlexPinClient {
             .header("X-Plex-Token", authToken)
             .retrieve()
             .body(PlexUserApiResponse.class);
-        assert resp != null;
+        Objects.requireNonNull(resp, "plex.tv returned null body for getUserInfo");
         return new PlexUserInfo(String.valueOf(resp.getId()), resp.getUsername(), resp.getThumb());
     }
 
