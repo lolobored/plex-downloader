@@ -2,6 +2,7 @@ package com.plexdownloader.service;
 
 import com.plexdownloader.model.*;
 import com.plexdownloader.repository.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,6 +10,7 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -28,7 +30,14 @@ class DownloadServiceTest {
     @Mock DownloadQueueRepository queueRepo;
     @Mock PathMappingService pathMapping;
     @Mock SettingsService settings;
-    @InjectMocks DownloadService service;
+    @Spy @InjectMocks DownloadService service;
+
+    @BeforeEach
+    void injectSelf() throws Exception {
+        Field selfField = DownloadService.class.getDeclaredField("self");
+        selfField.setAccessible(true);
+        selfField.set(service, service);
+    }
 
     @TempDir Path tempDir;
 

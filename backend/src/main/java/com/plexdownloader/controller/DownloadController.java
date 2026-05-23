@@ -6,8 +6,10 @@ import com.plexdownloader.model.DownloadQueueItem;
 import com.plexdownloader.model.User;
 import com.plexdownloader.service.DownloadService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -26,7 +28,7 @@ public class DownloadController {
             case "EPISODE" -> downloadService.enqueueEpisode(req.id(), user);
             case "SEASON"  -> downloadService.enqueueSeason(req.id(), user);
             case "SHOW"    -> downloadService.enqueueShow(req.id(), user);
-            default -> throw new IllegalArgumentException("Unknown type: " + req.type());
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown type: " + req.type());
         };
         return new DownloadResponse(jobIds, "QUEUED");
     }

@@ -4,6 +4,7 @@ import com.plexdownloader.model.*;
 import com.plexdownloader.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DownloadService {
 
+    @Lazy
+    private final DownloadService self;
     private final MovieRepository movieRepo;
     private final EpisodeRepository episodeRepo;
     private final SeasonRepository seasonRepo;
@@ -34,7 +37,7 @@ public class DownloadService {
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.MOVIE,
             movieId, movie.getFilePath());
         item = queueRepo.save(item);
-        executeCopyAsync(item.getId());
+        self.executeCopyAsync(item.getId());
         return List.of(item.getId());
     }
 
@@ -44,7 +47,7 @@ public class DownloadService {
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
             episodeId, ep.getFilePath());
         item = queueRepo.save(item);
-        executeCopyAsync(item.getId());
+        self.executeCopyAsync(item.getId());
         return List.of(item.getId());
     }
 
@@ -56,7 +59,7 @@ public class DownloadService {
             DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
                 ep.getId(), ep.getFilePath());
             item = queueRepo.save(item);
-            executeCopyAsync(item.getId());
+            self.executeCopyAsync(item.getId());
             ids.add(item.getId());
         }
         return ids;
