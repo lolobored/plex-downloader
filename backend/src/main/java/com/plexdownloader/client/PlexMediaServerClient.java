@@ -9,6 +9,8 @@ import com.plexdownloader.repository.UserRepository;
 import com.plexdownloader.service.SettingsService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,6 +25,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PlexMediaServerClient {
 
+    private static final Logger log = LoggerFactory.getLogger(PlexMediaServerClient.class);
     private static final int PAGE_SIZE = 50;
 
     private final SettingsService settings;
@@ -32,7 +35,8 @@ public class PlexMediaServerClient {
         String baseUrl = settings.getRequired("plex.server.url");
         String token = userRepository.findById(1L)
             .map(u -> u.getPlexToken())
-            .orElseThrow(() -> new IllegalStateException("No admin user found for Plex token"));
+            .filter(t -> t != null && !t.isBlank())
+            .orElseThrow(() -> new IllegalStateException("Admin user has no Plex token — complete Plex login first"));
 
         return RestClient.builder()
             .baseUrl(baseUrl)
@@ -97,13 +101,15 @@ public class PlexMediaServerClient {
             .accept(MediaType.IMAGE_JPEG)
             .retrieve()
             .body(byte[].class);
-        if (bytes != null && bytes.length > 0) {
-            try {
-                Files.createDirectories(destination.getParent());
-                Files.write(destination, bytes);
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to write poster to " + destination, e);
-            }
+        if (bytes == null || bytes.length == 0) {
+            log.warn("downloadThumb: empty response for thumbPath={}, destination={}", thumbPath, destination);
+            return;
+        }
+        try {
+            Files.createDirectories(destination.getParent());
+            Files.write(destination, bytes);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write poster to " + destination, e);
         }
     }
 
