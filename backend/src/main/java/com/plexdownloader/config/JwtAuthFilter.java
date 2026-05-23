@@ -2,6 +2,7 @@ package com.plexdownloader.config;
 
 import com.plexdownloader.repository.UserRepository;
 import com.plexdownloader.service.JwtService;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,8 +31,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
-            if (jwtService.isValid(token)) {
-                String plexId = jwtService.extractPlexAccountId(token);
+            jwtService.validateToken(token).ifPresent(claims -> {
+                String plexId = claims.getSubject();
                 userRepository.findByPlexAccountId(plexId).ifPresent(user -> {
                     var auth = new UsernamePasswordAuthenticationToken(
                         user, null,
@@ -39,7 +40,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     );
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 });
-            }
+            });
         }
         chain.doFilter(request, response);
     }
