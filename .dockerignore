@@ -1,0 +1,27 @@
+# Git and CI
+.git
+.github
+.superpowers
+
+# Documentation
+docs
+*.md
+LICENSE
+
+# Local dev data (not needed in image)
+volumes
+dev-data
+
+# Backend test sources and build artifacts
+backend/src/test
+backend/build
+backend/.gradle
+
+# Frontend test and node_modules
+frontend/node_modules
+frontend/dist
+frontend/src/views/__tests__
+frontend/src/__tests__
+
+# Individual service Dockerfiles (root one is used for production)
+backend/.sdkmanrc
