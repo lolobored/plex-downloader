@@ -58,6 +58,12 @@ _shutdown() {
 }
 trap _shutdown TERM INT
 
+# ── Ensure /plex-conversion subdirs are accessible by other containers (e.g. Tdarr) ──
+mkdir -p /plex-conversion/in-flight /plex-conversion/libraries
+chmod -R 777 /plex-conversion/in-flight /plex-conversion/libraries
+
 # ── Start Spring Boot ──────────────────────────────────────────────────────────
+# umask 0000: dirs/files created by the JVM get 777/666, allowing Tdarr (different UID) to write
 echo "[boot] Starting plex-downloader..."
+umask 0000
 exec java -jar /app/app.jar
