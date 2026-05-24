@@ -10,8 +10,17 @@
         <input name="plexUrl" v-model="form.plexUrl" type="url" placeholder="http://localhost:32400" />
       </div>
       <div class="field">
-        <label>Plex Token</label>
-        <input name="plexToken" v-model="form.plexToken" type="password" placeholder="xxxxxxxxxxxxxxxxxxxx" />
+        <button class="btn-load" data-testid="load-libraries-btn" @click="loadLibraries" :disabled="loadingLibraries">
+          {{ loadingLibraries ? 'Loading…' : '↻ Test connection & load libraries' }}
+        </button>
+        <p v-if="libraryError" class="error-inline">{{ libraryError }}</p>
+      </div>
+      <div v-if="availableLibraries.length" class="field">
+        <label>Libraries to sync</label>
+        <div v-for="lib in availableLibraries" :key="lib.key" class="checkbox-row">
+          <input type="checkbox" :id="'lib-' + lib.key" :value="lib.key" v-model="selectedLibraryKeys" />
+          <label :for="'lib-' + lib.key" class="checkbox-label">{{ lib.title }} <span class="lib-type">({{ lib.type }})</span></label>
+        </div>
       </div>
       <button class="btn-save" @click="save" :disabled="saving">
         {{ saving ? 'Saving…' : 'Save' }}
@@ -86,7 +95,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { getSettings, putSettings, getSyncStatus, triggerSync } from '@/api/admin.js'
+import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries } from '@/api/admin.js'
 
 const authStore  = useAuthStore()
 const saving     = ref(false)
@@ -96,9 +105,13 @@ const syncStatus = ref(null)
 let saveOkTimer = null
 onUnmounted(() => clearTimeout(saveOkTimer))
 
+const availableLibraries  = ref([])
+const selectedLibraryKeys = ref([])
+const loadingLibraries    = ref(false)
+const libraryError        = ref(null)
+
 const form = reactive({
   plexUrl:            '',
-  plexToken:          '',
   plexPathPrefixPlex: '',
   plexPathPrefixApp:  '',
   plexPosterDir:      '',
@@ -113,7 +126,6 @@ onMounted(async () => {
   try {
     const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
     form.plexUrl            = s['plex.server.url']        ?? ''
-    form.plexToken          = ''  // never pre-fill tokens
     form.plexPathPrefixPlex = s['plex.path.prefix.plex']  ?? ''
     form.plexPathPrefixApp  = s['plex.path.prefix.app']   ?? ''
     form.plexPosterDir      = s['plex.poster.dir']        ?? ''
@@ -122,6 +134,8 @@ onMounted(async () => {
     form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
     form.tdarrUrl           = s['tdarr.server.url']       ?? ''
     form.tdarrSyncCron      = s['tdarr.sync.cron']        ?? ''
+    const storedLibs = s['plex.sync.libraries'] ?? ''
+    selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
     syncStatus.value = ss
   } catch (e) {
     console.error('Failed to load settings:', e)
@@ -136,19 +150,30 @@ async function save() {
     'plex.path.prefix.plex':  form.plexPathPrefixPlex,
     'plex.path.prefix.app':   form.plexPathPrefixApp,
     'plex.sync.cron':         form.syncCron,
+    'plex.sync.libraries':    selectedLibraryKeys.value.join(','),
     'watched.sync.cron':      form.watchedSyncCron,
     'tdarr.server.url':       form.tdarrUrl,
     'tdarr.sync.cron':        form.tdarrSyncCron
   }
-  if (form.plexToken) payload['plex.server.token'] = form.plexToken
   try {
     await putSettings(payload)
-    form.plexToken = ''
     saveOk.value = true
     clearTimeout(saveOkTimer)
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
   } finally {
     saving.value = false
+  }
+}
+
+async function loadLibraries() {
+  loadingLibraries.value = true
+  libraryError.value = null
+  try {
+    availableLibraries.value = await getPlexLibraries()
+  } catch {
+    libraryError.value = 'Could not load libraries. Check server URL and ensure you are logged in.'
+  } finally {
+    loadingLibraries.value = false
   }
 }
 
@@ -191,4 +216,11 @@ input.readonly { opacity: 0.6; cursor: default; }
             border-radius: 6px; padding: 8px 16px; }
 .btn-sync:hover:not(:disabled) { border-color: var(--accent-blue); }
 .error { color: var(--red); padding: 40px; text-align: center; }
+.checkbox-row   { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.checkbox-label { font-size: .9rem; cursor: pointer; color: var(--text); }
+.lib-type       { color: var(--text-muted); font-size: .8rem; }
+.btn-load       { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+                  border-radius: 6px; padding: 8px 16px; font-size: .9rem; }
+.btn-load:hover:not(:disabled) { border-color: var(--accent-blue); }
+.error-inline   { color: var(--red); font-size: .85rem; margin-top: 6px; }
 </style>

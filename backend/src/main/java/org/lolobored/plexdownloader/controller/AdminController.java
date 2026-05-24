@@ -1,5 +1,7 @@
 package org.lolobored.plexdownloader.controller;
 
+import org.lolobored.plexdownloader.client.PlexMediaServerClient;
+import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
 import org.lolobored.plexdownloader.service.LibrarySyncScheduler;
 import org.lolobored.plexdownloader.service.LibrarySyncService;
@@ -10,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -21,17 +25,27 @@ public class AdminController {
     private final SettingsService settingsService;
     private final LibrarySyncService syncService;
     private final LibrarySyncScheduler syncScheduler;
+    private final PlexMediaServerClient plexClient;
 
     @GetMapping("/settings")
     public Map<String, String> getSettings() {
-        return Map.of(
-            "plex.server.url",         settingsService.get("plex.server.url").orElse(""),
-            "plex.path.prefix.plex",   settingsService.get("plex.path.prefix.plex").orElse(""),
-            "plex.path.prefix.app",    settingsService.get("plex.path.prefix.app").orElse(""),
-            "plex.poster.dir",         settingsService.get("plex.poster.dir").orElse(""),
-            "plex.conversion.dir",     settingsService.get("plex.conversion.dir").orElse(""),
-            "plex.sync.cron",          settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *")
-        );
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("plex.server.url",         settingsService.get("plex.server.url").orElse(""));
+        result.put("plex.path.prefix.plex",   settingsService.get("plex.path.prefix.plex").orElse(""));
+        result.put("plex.path.prefix.app",    settingsService.get("plex.path.prefix.app").orElse(""));
+        result.put("plex.poster.dir",         settingsService.get("plex.poster.dir").orElse(""));
+        result.put("plex.conversion.dir",     settingsService.get("plex.conversion.dir").orElse(""));
+        result.put("plex.sync.cron",          settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
+        result.put("plex.sync.libraries",     settingsService.get("plex.sync.libraries").orElse(""));
+        result.put("watched.sync.cron",       settingsService.get("watched.sync.cron").orElse("0 */15 * * * *"));
+        result.put("tdarr.server.url",        settingsService.get("tdarr.server.url").orElse(""));
+        result.put("tdarr.sync.cron",         settingsService.get("tdarr.sync.cron").orElse("0 */30 * * * *"));
+        return result;
+    }
+
+    @GetMapping("/plex/libraries")
+    public List<PlexLibrary> getPlexLibraries() {
+        return plexClient.getLibraries();
     }
 
     @PutMapping("/settings")

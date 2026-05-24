@@ -9,6 +9,7 @@ import org.lolobored.plexdownloader.model.Movie;
 import org.lolobored.plexdownloader.model.Season;
 import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class LibrarySyncServiceTest {
@@ -33,6 +35,12 @@ class LibrarySyncServiceTest {
     @Mock ActorRepository actorRepo;
     @Mock SettingsService settings;
     @InjectMocks LibrarySyncService service;
+
+    @BeforeEach
+    void setupSettings() {
+        // default: no library filter — sync all
+        lenient().when(settings.get("plex.sync.libraries")).thenReturn(Optional.empty());
+    }
 
     @Test
     void syncAllUpsertsSingleMovie() {
@@ -162,5 +170,41 @@ class LibrarySyncServiceTest {
         verify(showRepo).save(argThat(s -> "Breaking Bad".equals(s.getTitle())));
         verify(seasonRepo).save(argThat(s -> s.getSeasonNumber() == 1));
         verify(episodeRepo).save(argThat(e -> "Pilot".equals(e.getTitle())));
+    }
+
+    @Test
+    void syncAll_filtersToSelectedLibraries() {
+        PlexLibrary movies = lib("1", "Movies", "movie", "tv.plex.agents.movie");
+        PlexLibrary shows  = lib("2", "TV Shows", "show", "tv.plex.agents.series");
+
+        when(plexClient.getLibraries()).thenReturn(List.of(movies, shows));
+        when(settings.get("plex.sync.libraries")).thenReturn(Optional.of("1"));
+        when(plexClient.getLibraryContents("1", 0)).thenReturn(new PlexLibraryPage(0, List.of()));
+
+        service.syncAll();
+
+        verify(plexClient).getLibraryContents("1", 0);
+        verify(plexClient, never()).getLibraryContents(eq("2"), anyInt());
+    }
+
+    @Test
+    void syncAll_syncsAllWhenNoLibraryFilterSet() {
+        PlexLibrary movies = lib("1", "Movies", "movie", "tv.plex.agents.movie");
+        PlexLibrary shows  = lib("2", "TV Shows", "show", "tv.plex.agents.series");
+
+        when(plexClient.getLibraries()).thenReturn(List.of(movies, shows));
+        when(settings.get("plex.sync.libraries")).thenReturn(Optional.empty());
+        when(plexClient.getLibraryContents(anyString(), eq(0))).thenReturn(new PlexLibraryPage(0, List.of()));
+
+        service.syncAll();
+
+        verify(plexClient).getLibraryContents("1", 0);
+        verify(plexClient).getLibraryContents("2", 0);
+    }
+
+    private PlexLibrary lib(String key, String title, String type, String agent) {
+        PlexLibrary l = new PlexLibrary();
+        l.setKey(key); l.setTitle(title); l.setType(type); l.setAgent(agent);
+        return l;
     }
 }

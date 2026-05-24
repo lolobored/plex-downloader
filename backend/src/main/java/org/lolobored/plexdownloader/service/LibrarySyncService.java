@@ -16,9 +16,12 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -62,9 +65,17 @@ public class LibrarySyncService {
         lastError = null;
 
         try {
+            String selectedRaw = settings.get("plex.sync.libraries").orElse("").trim();
+            Set<String> selectedKeys = selectedRaw.isEmpty()
+                ? Set.of()
+                : Arrays.stream(selectedRaw.split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty())
+                    .collect(Collectors.toSet());
+
             List<PlexLibrary> libraries = plexClient.getLibraries().stream()
                 .filter(l -> !AGENT_NONE.equals(l.getAgent()))
                 .filter(l -> "movie".equals(l.getType()) || "show".equals(l.getType()))
+                .filter(l -> selectedKeys.isEmpty() || selectedKeys.contains(l.getKey()))
                 .toList();
 
             for (PlexLibrary lib : libraries) {

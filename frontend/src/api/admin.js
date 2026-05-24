@@ -17,3 +17,8 @@ export async function getSyncStatus() {
 export async function triggerSync() {
   await http.post('/api/admin/sync')
 }
+
+export async function getPlexLibraries() {
+  const { data } = await http.get('/api/admin/plex/libraries')
+  return data  // [{ key, title, type, agent }, ...]
+}
