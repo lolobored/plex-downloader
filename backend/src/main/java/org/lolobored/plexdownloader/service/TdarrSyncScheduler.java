@@ -42,17 +42,21 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         );
         log.info("Tdarr sync: checking {} items", items.size());
         for (DownloadQueueItem item : items) {
-            Optional<TdarrClient.TdarrFileStatus> statusOpt =
-                tdarrClient.getFileStatus(item.getDestFilePath());
-            if (statusOpt.isEmpty()) {
-                log.warn("Tdarr unreachable, skipping item {}", item.getId());
-                continue;
+            try {
+                Optional<TdarrClient.TdarrFileStatus> statusOpt =
+                    tdarrClient.getFileStatus(item.getDestFilePath());
+                if (statusOpt.isEmpty()) {
+                    log.warn("Tdarr unreachable, skipping item {}", item.getId());
+                    continue;
+                }
+                TdarrClient.TdarrFileStatus ts = statusOpt.get();
+                item.setTdarrStatus(ts.status());
+                item.setTdarrError(ts.errorMessage());
+                queueRepo.save(item);
+                log.info("Tdarr status updated: item={} status={}", item.getId(), ts.status());
+            } catch (Exception e) {
+                log.error("Tdarr sync failed for item {}: {}", item.getId(), e.getMessage());
             }
-            TdarrClient.TdarrFileStatus ts = statusOpt.get();
-            item.setTdarrStatus(ts.status());
-            item.setTdarrError(ts.errorMessage());
-            queueRepo.save(item);
-            log.info("Tdarr status updated: item={} status={}", item.getId(), ts.status());
         }
     }
 }
