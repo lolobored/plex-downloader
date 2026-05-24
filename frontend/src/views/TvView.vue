@@ -15,11 +15,7 @@
         :title="s.title"
         :subtitle="`${s.totalSeasons} season${s.totalSeasons === 1 ? '' : 's'}`"
         @click="router.push(`/tv/${s.id}`)"
-      >
-        <template #badge>
-          <DownloadButton type="SHOW" :mediaId="s.id" small />
-        </template>
-      </PosterCard>
+      />
     </div>
 
     <div v-if="totalPages > 1" class="pagination">
@@ -36,7 +32,6 @@ import { useRouter } from 'vue-router'
 import { getShows } from '@/api/library.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
-import DownloadButton from '@/components/DownloadButton.vue'
 
 const router     = useRouter()
 const shows      = ref([])

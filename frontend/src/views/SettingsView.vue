@@ -45,8 +45,12 @@
     <section class="card-section">
       <h3>Library Sync</h3>
       <div class="field">
-        <label>Sync cron expression</label>
+        <label>Library sync cron expression</label>
         <input name="syncCron" v-model="form.syncCron" type="text" placeholder="0 0 */6 * * *" />
+      </div>
+      <div class="field">
+        <label>Watched status sync cron</label>
+        <input name="watchedSyncCron" v-model="form.watchedSyncCron" type="text" placeholder="0 */15 * * * *" />
       </div>
       <div class="sync-status" v-if="syncStatus">
         <span :class="['state', syncStatus.state.toLowerCase()]">{{ syncStatus.state }}</span>
@@ -86,7 +90,8 @@ const form = reactive({
   plexPathPrefixApp:  '',
   plexPosterDir:      '',
   plexConversionDir:  '',
-  syncCron:           ''
+  syncCron:           '',
+  watchedSyncCron:    ''
 })
 
 onMounted(async () => {
@@ -98,6 +103,7 @@ onMounted(async () => {
   form.plexPosterDir      = s['plex.poster.dir']        ?? ''
   form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
   form.syncCron           = s['plex.sync.cron']         ?? ''
+  form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
   syncStatus.value = ss
 })
 
@@ -108,7 +114,8 @@ async function save() {
     'plex.server.url':        form.plexUrl,
     'plex.path.prefix.plex':  form.plexPathPrefixPlex,
     'plex.path.prefix.app':   form.plexPathPrefixApp,
-    'plex.sync.cron':         form.syncCron
+    'plex.sync.cron':         form.syncCron,
+    'watched.sync.cron':      form.watchedSyncCron
   }
   if (form.plexToken) payload['plex.server.token'] = form.plexToken
   try {
