@@ -86,4 +86,10 @@ class DownloadServiceTest {
             () -> service.enqueueMovie(99L, user)
         );
     }
+
+    @Test
+    void downloadQueueItem_hasDefaultTdarrStatusNone() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        assertThat(item.getTdarrStatus()).isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
+    }
 }

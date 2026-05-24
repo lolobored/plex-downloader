@@ -21,6 +21,11 @@ public class DownloadQueueItem {
     private Long mediaId;
     @Enumerated(EnumType.STRING)
     private Status status = Status.PENDING;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tdarr_status", nullable = false)
+    private TdarrStatus tdarrStatus = TdarrStatus.NONE;
+    @Column(name = "tdarr_error", columnDefinition = "TEXT")
+    private String tdarrError;
     @Column(name = "queue_position")
     private Integer queuePosition;
     @Column(name = "error_message", columnDefinition = "TEXT")
@@ -36,4 +41,5 @@ public class DownloadQueueItem {
 
     public enum MediaType { MOVIE, EPISODE }
     public enum Status { PENDING, IN_PROGRESS, DONE, ERROR }
+    public enum TdarrStatus { NONE, PROCESSING, TRANSCODED, TDARR_ERROR }
 }
