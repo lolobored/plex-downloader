@@ -40,6 +40,7 @@ public class PlaylistSyncService {
     private PlaylistSyncService self;
 
     public void syncAll() {
+        log.info("Playlist sync: fetching playlists from Plex");
         List<PlexPlaylist> plexPlaylists;
         try {
             plexPlaylists = plexClient.getPlaylists();
@@ -47,18 +48,22 @@ public class PlaylistSyncService {
             log.warn("Failed to fetch playlists from Plex: {}", e.getMessage());
             return;
         }
+        log.info("Playlist sync: found {} video playlist(s) on Plex", plexPlaylists.size());
         PlaylistSyncService proxy = self != null ? self : this;
         for (PlexPlaylist pp : plexPlaylists) {
             try {
+                log.info("Playlist sync: syncing '{}' (ratingKey={})", pp.getTitle(), pp.getRatingKey());
                 proxy.syncPlaylist(pp);
             } catch (Exception e) {
                 log.warn("Failed to sync playlist {}: {}", pp.getRatingKey(), e.getMessage());
             }
         }
+        log.info("Playlist sync: done");
     }
 
     @Transactional
     void syncPlaylist(PlexPlaylist pp) {
+        log.info("Playlist '{}': fetching {} item(s) from Plex", pp.getTitle(), pp.getLeafCount());
         // Upsert Playlist row
         Playlist local = playlistRepo.findByPlexId(pp.getRatingKey()).orElseGet(Playlist::new);
         local.setPlexId(pp.getRatingKey());
@@ -82,6 +87,8 @@ public class PlaylistSyncService {
 
         Set<String> added   = new HashSet<>(newPlexIds); added.removeAll(oldPlexIds);
         Set<String> removed = new HashSet<>(oldPlexIds); removed.removeAll(newPlexIds);
+        log.info("Playlist '{}': {} item(s) fetched, +{} added, -{} removed",
+            pp.getTitle(), fetched.size(), added.size(), removed.size());
 
         // Persist removals
         for (String plexId : removed) {
