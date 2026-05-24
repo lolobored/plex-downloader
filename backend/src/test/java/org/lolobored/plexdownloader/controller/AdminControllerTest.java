@@ -35,6 +35,7 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -163,7 +164,7 @@ class AdminControllerTest {
 
     @Test
     void getTdarrTestReturnsOkWhenPingSucceeds() throws Exception {
-        when(tdarrClient.ping("http://tdarr:8265")).thenReturn(true);
+        when(tdarrClient.ping(eq("http://tdarr:8265"), any())).thenReturn(true);
 
         mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
             .andExpect(status().isOk())
@@ -172,7 +173,7 @@ class AdminControllerTest {
 
     @Test
     void getTdarrTestReturnsNotOkWhenPingFails() throws Exception {
-        when(tdarrClient.ping("http://tdarr:8265")).thenReturn(false);
+        when(tdarrClient.ping(eq("http://tdarr:8265"), any())).thenReturn(false);
 
         mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
             .andExpect(status().isOk())

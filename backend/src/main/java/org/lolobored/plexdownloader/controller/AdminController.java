@@ -36,6 +36,7 @@ public class AdminController {
         result.put("plex.sync.cron",      settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
         result.put("plex.sync.libraries", settingsService.get("plex.sync.libraries").orElse(""));
         result.put("tdarr.server.url",    settingsService.get("tdarr.server.url").orElse(""));
+        result.put("tdarr.api.key",       settingsService.get("tdarr.api.key").orElse(""));
         result.put("tdarr.sync.cron",     settingsService.get("tdarr.sync.cron").orElse("0 */30 * * * *"));
         return result;
     }
@@ -49,10 +50,11 @@ public class AdminController {
     }
 
     @GetMapping("/tdarr/test")
-    public Map<String, Object> testTdarr(@RequestParam(required = false) String url) {
+    public Map<String, Object> testTdarr(@RequestParam(required = false) String url,
+                                         @RequestParam(required = false) String apiKey) {
         String target = (url != null && !url.isBlank()) ? url
             : settingsService.get("tdarr.server.url").orElse("");
-        boolean ok = tdarrClient.ping(target);
+        boolean ok = tdarrClient.ping(target, apiKey);
         return ok ? Map.of("ok", true)
                   : Map.of("ok", false, "error", "Could not reach Tdarr server at " + target);
     }

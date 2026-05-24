@@ -80,7 +80,8 @@ describe('SettingsView', () => {
     const w = factory()
     await flushPromises()
     expect(w.find('input[name="plexToken"]').exists()).toBe(false)
-    expect(w.find('input[type="password"]').exists()).toBe(false)
+    // Tdarr API key field is password type; no Plex token field should exist
+    expect(w.find('input[name="plexToken"]').exists()).toBe(false)
   })
 
   it('shows load libraries button', async () => {

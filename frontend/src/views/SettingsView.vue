@@ -88,6 +88,10 @@
         <p v-if="tdarrTestOk === false" class="error-inline tdarr-status">✗ {{ tdarrTestError }}</p>
       </div>
       <div class="field">
+        <label>Tdarr API key <span class="hint">(required when auth is enabled on Tdarr)</span></label>
+        <input name="tdarrApiKey" v-model="form.tdarrApiKey" type="password" placeholder="tapi_…" autocomplete="off" />
+      </div>
+      <div class="field">
         <label>Sync Tdarr status every</label>
         <select name="tdarrSyncCron" v-model="form.tdarrSyncCron" class="select-field">
           <option v-for="o in TDARR_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
@@ -148,9 +152,10 @@ const tdarrTestOk   = ref(null)   // null=untested, true=ok, false=fail
 const tdarrTestError = ref('')
 
 const form = reactive({
-  plexUrl:      '',
-  syncCron:     '',
-  tdarrUrl:     '',
+  plexUrl:       '',
+  syncCron:      '',
+  tdarrUrl:      '',
+  tdarrApiKey:   '',
   tdarrSyncCron: ''
 })
 
@@ -160,6 +165,7 @@ onMounted(async () => {
     form.plexUrl      = s['plex.server.url']  ?? ''
     form.syncCron     = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
     form.tdarrUrl           = s['tdarr.server.url']       ?? ''
+    form.tdarrApiKey        = s['tdarr.api.key']          ?? ''
     form.tdarrSyncCron      = matchCron(s['tdarr.sync.cron'],   TDARR_OPTIONS)
     const storedLibs = s['plex.sync.libraries'] ?? ''
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
@@ -181,6 +187,7 @@ async function save() {
     'plex.sync.cron':        form.syncCron,
     'plex.sync.libraries':   selectedLibraryKeys.value.join(','),
     'tdarr.server.url':      form.tdarrUrl,
+    'tdarr.api.key':         form.tdarrApiKey,
     'tdarr.sync.cron':       form.tdarrSyncCron
   }
   try {
@@ -198,7 +205,7 @@ async function testTdarrConnection() {
   tdarrTestOk.value = null
   tdarrTestError.value = ''
   try {
-    const result = await testTdarr(form.tdarrUrl)
+    const result = await testTdarr(form.tdarrUrl, form.tdarrApiKey)
     tdarrTestOk.value = result.ok
     if (!result.ok) tdarrTestError.value = result.error ?? 'Connection failed'
   } catch {
@@ -304,6 +311,7 @@ input.readonly { opacity: 0.6; cursor: default; }
                   border-radius: 6px; padding: 8px 16px; font-size: .9rem; }
 .btn-load:hover:not(:disabled) { border-color: var(--accent-blue); }
 .error-inline   { color: var(--red); font-size: .85rem; margin-top: 6px; }
+.hint           { font-size: .75rem; color: var(--text-muted); font-weight: 400; }
 .url-row        { display: flex; gap: 8px; align-items: center; }
 .url-row input  { flex: 1; }
 .tdarr-status   { margin-top: 4px; }

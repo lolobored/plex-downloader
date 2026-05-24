@@ -27,6 +27,24 @@ public class TdarrClient {
         String errorMessage,
         String outputFilePath) {}
 
+    // ---------- internal helpers ----------
+
+    private String apiKey() {
+        return settings.get("tdarr.api.key").orElse("").trim();
+    }
+
+    private RestClient.RequestBodySpec withAuth(RestClient.RequestBodySpec spec) {
+        String key = apiKey();
+        return key.isBlank() ? spec : spec.header("x-api-key", key);
+    }
+
+    private RestClient.RequestHeadersSpec<?> withAuth(RestClient.RequestHeadersSpec<?> spec) {
+        String key = apiKey();
+        return key.isBlank() ? spec : spec.header("x-api-key", key);
+    }
+
+    // ---------- public API ----------
+
     public Optional<TdarrFileStatus> getFileStatus(String absoluteFilePath) {
         String baseUrl = settings.get("tdarr.server.url").orElse("").trim();
         if (baseUrl.isBlank()) {
@@ -55,24 +73,31 @@ public class TdarrClient {
             "mode",       "getByID",
             "docID",      filePath
         );
-        return RestClient.create().post()
+        return withAuth(RestClient.create().post()
             .uri(baseUrl + "/api/v2/cruddb")
             .contentType(MediaType.APPLICATION_JSON)
-            .body(body)
+            .body(body))
             .retrieve()
             .body(TdarrFileResponse.class);
     }
 
-    private DownloadQueueItem.TdarrStatus mapStatus(String tdarrStatus) {
-        if (tdarrStatus == null || tdarrStatus.isBlank()) {
-            return DownloadQueueItem.TdarrStatus.NONE;
+    /**
+     * Returns true if the Tdarr server at {@code url} responds to its status endpoint.
+     * {@code apiKey} overrides the stored setting (pass null to use stored value).
+     */
+    public boolean ping(String url, String apiKey) {
+        if (url == null || url.isBlank()) return false;
+        String key = (apiKey != null && !apiKey.isBlank()) ? apiKey : this.apiKey();
+        try {
+            RestClient.RequestHeadersSpec<?> req = RestClient.create().get()
+                .uri(url.stripTrailing() + "/api/v2/status");
+            if (!key.isBlank()) req = req.header("x-api-key", key);
+            req.retrieve().toBodilessEntity();
+            return true;
+        } catch (RestClientException e) {
+            log.debug("Tdarr ping failed for {}: {}", url, e.getMessage());
+            return false;
         }
-        return switch (tdarrStatus) {
-            case "Queued", "Processing" -> DownloadQueueItem.TdarrStatus.PROCESSING;
-            case "Done transcoding", "No action needed" -> DownloadQueueItem.TdarrStatus.TRANSCODED;
-            case "Transcode error", "Health error" -> DownloadQueueItem.TdarrStatus.TDARR_ERROR;
-            default -> DownloadQueueItem.TdarrStatus.NONE;
-        };
     }
 
     /** Package-private so tests can stub it with @Spy. */
@@ -82,29 +107,12 @@ public class TdarrClient {
             "mode",       "deleteOne",
             "docID",      filePath
         );
-        RestClient.create().post()
+        withAuth(RestClient.create().post()
             .uri(baseUrl + "/api/v2/cruddb")
             .contentType(MediaType.APPLICATION_JSON)
-            .body(body)
+            .body(body))
             .retrieve()
             .toBodilessEntity();
-    }
-
-    /**
-     * Returns true if the Tdarr server at {@code url} responds to its status endpoint.
-     */
-    public boolean ping(String url) {
-        if (url == null || url.isBlank()) return false;
-        try {
-            RestClient.create().get()
-                .uri(url.stripTrailing() + "/api/v2/status")
-                .retrieve()
-                .toBodilessEntity();
-            return true;
-        } catch (RestClientException e) {
-            log.debug("Tdarr ping failed for {}: {}", url, e.getMessage());
-            return false;
-        }
     }
 
     public void deleteFile(String filePath) {
@@ -118,6 +126,18 @@ public class TdarrClient {
         } catch (RestClientException e) {
             log.warn("Tdarr deleteFile failed for {}: {}", filePath, e.getMessage());
         }
+    }
+
+    private DownloadQueueItem.TdarrStatus mapStatus(String tdarrStatus) {
+        if (tdarrStatus == null || tdarrStatus.isBlank()) {
+            return DownloadQueueItem.TdarrStatus.NONE;
+        }
+        return switch (tdarrStatus) {
+            case "Queued", "Processing" -> DownloadQueueItem.TdarrStatus.PROCESSING;
+            case "Done transcoding", "No action needed" -> DownloadQueueItem.TdarrStatus.TRANSCODED;
+            case "Transcode error", "Health error" -> DownloadQueueItem.TdarrStatus.TDARR_ERROR;
+            default -> DownloadQueueItem.TdarrStatus.NONE;
+        };
     }
 
     @Data
