@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-output-file-path
+      author: plexdownloader
+      changes:
+        - addColumn:
+            tableName: download_queue
+            columns:
+              - column:
+                  name: output_file_path
+                  type: TEXT
+
+  - changeSet:
+      id: 007-migrate-path-prefixes
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: >
+              INSERT INTO settings (key, value)
+              SELECT 'plex.path.prefix.movies.plex', value FROM settings WHERE key = 'plex.path.prefix.plex'
+              ON CONFLICT (key) DO NOTHING
+        - sql:
+            sql: >
+              INSERT INTO settings (key, value)
+              SELECT 'plex.path.prefix.movies.app', value FROM settings WHERE key = 'plex.path.prefix.app'
+              ON CONFLICT (key) DO NOTHING
+        - sql:
+            sql: >
+              INSERT INTO settings (key, value)
+              SELECT 'plex.path.prefix.tv.plex', value FROM settings WHERE key = 'plex.path.prefix.plex'
+              ON CONFLICT (key) DO NOTHING
+        - sql:
+            sql: >
+              INSERT INTO settings (key, value)
+              SELECT 'plex.path.prefix.tv.app', value FROM settings WHERE key = 'plex.path.prefix.app'
+              ON CONFLICT (key) DO NOTHING
+        - delete:
+            tableName: settings
+            where: "key IN ('plex.path.prefix.plex', 'plex.path.prefix.app')"
