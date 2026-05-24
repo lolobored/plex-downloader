@@ -69,6 +69,12 @@
         </span>
         <span v-if="syncStatus.error" class="sync-error">{{ syncStatus.error }}</span>
       </div>
+      <div v-if="syncing" class="sync-progress">
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+        <span v-if="syncStatus?.itemsSynced" class="progress-label">
+          Synced {{ syncStatus.itemsSynced }} items…
+        </span>
+      </div>
       <div class="sync-actions">
         <button class="btn-save" @click="save" :disabled="saving">Save</button>
         <button class="btn-sync" data-testid="sync-btn" @click="sync" :disabled="syncing">
@@ -131,7 +137,8 @@ const saveOk     = ref(false)
 const syncing    = ref(false)
 const syncStatus = ref(null)
 let saveOkTimer = null
-onUnmounted(() => clearTimeout(saveOkTimer))
+let destroyed = false
+onUnmounted(() => { clearTimeout(saveOkTimer); destroyed = true })
 
 const availableLibraries  = ref([])
 const selectedLibraryKeys = ref([])
@@ -203,13 +210,22 @@ async function loadLibraries() {
   }
 }
 
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+
 async function sync() {
   syncing.value = true
   try {
     await triggerSync()
-    syncStatus.value = await getSyncStatus()
+    await sleep(600)          // give backend a moment to flip to RUNNING
+    while (!destroyed) {
+      const s = await getSyncStatus()
+      if (destroyed) break
+      syncStatus.value = s
+      if (s.state !== 'RUNNING') break
+      await sleep(1500)
+    }
   } finally {
-    syncing.value = false
+    if (!destroyed) syncing.value = false
   }
 }
 </script>
@@ -240,6 +256,18 @@ input.readonly { opacity: 0.6; cursor: default; }
 .state.error   { background: var(--red); color: #fff; }
 .last-sync  { font-size: .85rem; color: var(--text-muted); }
 .sync-error { font-size: .85rem; color: var(--red); }
+.sync-progress { margin: 10px 0 4px; }
+.progress-bar { height: 4px; border-radius: 2px; background: var(--surface2); overflow: hidden; }
+.progress-fill {
+  height: 100%; width: 40%; border-radius: 2px;
+  background: var(--accent-blue);
+  animation: slide 1.4s ease-in-out infinite;
+}
+@keyframes slide {
+  0%   { transform: translateX(-200%); }
+  100% { transform: translateX(400%); }
+}
+.progress-label { font-size: .8rem; color: var(--text-muted); display: block; margin-top: 4px; }
 .sync-actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
 .btn-sync { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
             border-radius: 6px; padding: 8px 16px; }
