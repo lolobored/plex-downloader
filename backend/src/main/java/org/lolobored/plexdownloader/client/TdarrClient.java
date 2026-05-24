@@ -83,9 +83,11 @@ public class TdarrClient {
 
     protected TdarrFileResponse fetchStatus(String baseUrl, String filePath) {
         Map<String, Object> body = Map.of(
-            "collection", "FileJSONDB",
-            "mode",       "getByID",
-            "docID",      filePath
+            "data", Map.of(
+                "collection", "FileJSONDB",
+                "mode",       "getByID",
+                "docID",      filePath
+            )
         );
         return withAuth(HTTP_CLIENT.post()
             .uri(baseUrl + "/api/v2/cruddb")
@@ -128,9 +130,11 @@ public class TdarrClient {
     /** Package-private so tests can stub it with @Spy. */
     void callDelete(String baseUrl, String filePath) {
         Map<String, Object> body = Map.of(
-            "collection", "FileJSONDB",
-            "mode",       "deleteOne",
-            "docID",      filePath
+            "data", Map.of(
+                "collection", "FileJSONDB",
+                "mode",       "deleteOne",
+                "docID",      filePath
+            )
         );
         withAuth(HTTP_CLIENT.post()
             .uri(baseUrl + "/api/v2/cruddb")
