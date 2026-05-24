@@ -2,6 +2,7 @@ package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
 import org.lolobored.plexdownloader.client.dto.PlexItem;
+import org.lolobored.plexdownloader.service.PlaylistSyncService;
 import org.lolobored.plexdownloader.client.dto.PlexItem.PlexTag;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.client.dto.PlexLibraryPage;
@@ -37,6 +38,7 @@ public class LibrarySyncService {
 
     private final PlexMediaServerClient plexClient;
     private final PosterStorageService posterStorage;
+    private final PlaylistSyncService playlistSyncService;
     private final MovieRepository movieRepo;
     private final TvShowRepository showRepo;
     private final SeasonRepository seasonRepo;
@@ -111,6 +113,7 @@ public class LibrarySyncService {
                 libraryProgressMap.computeIfPresent(lib.getKey(), (k, v) ->
                     new LibraryProgress(k, v.title(), v.itemsSynced(), v.totalItems(), true));
             }
+            playlistSyncService.syncAll();
             lastSyncAt = Instant.now();
             state.set(SyncState.IDLE);
         } catch (Exception e) {

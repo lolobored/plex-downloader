@@ -34,6 +34,7 @@ class LibrarySyncServiceTest {
     @Mock EpisodeRepository episodeRepo;
     @Mock ActorRepository actorRepo;
     @Mock SettingsService settings;
+    @Mock PlaylistSyncService playlistSyncService;
     @InjectMocks LibrarySyncService service;
 
     @BeforeEach
@@ -183,7 +184,7 @@ class LibrarySyncServiceTest {
 
         service.syncAll();
 
-        verify(plexClient).getLibraryContents("1", 0);
+        verify(plexClient, atLeastOnce()).getLibraryContents("1", 0);
         verify(plexClient, never()).getLibraryContents(eq("2"), anyInt());
     }
 
@@ -198,8 +199,15 @@ class LibrarySyncServiceTest {
 
         service.syncAll();
 
-        verify(plexClient).getLibraryContents("1", 0);
-        verify(plexClient).getLibraryContents("2", 0);
+        verify(plexClient, atLeastOnce()).getLibraryContents("1", 0);
+        verify(plexClient, atLeastOnce()).getLibraryContents("2", 0);
+    }
+
+    @Test
+    void syncAll_callsPlaylistSyncAfterLibraries() {
+        when(plexClient.getLibraries()).thenReturn(List.of());
+        service.syncAll();
+        verify(playlistSyncService).syncAll();
     }
 
     private PlexLibrary lib(String key, String title, String type, String agent) {
