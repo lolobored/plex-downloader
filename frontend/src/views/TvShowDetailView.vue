@@ -11,7 +11,7 @@
         <p class="genres">{{ show.genres?.join(', ') }}</p>
         <p class="rating">★ {{ show.rating?.toFixed(1) }}</p>
         <p class="summary">{{ show.summary }}</p>
-        <DownloadButton type="SHOW" :mediaId="show.id" />
+        <SubscribeButton :showId="show.id" />
       </div>
     </div>
 
@@ -27,7 +27,7 @@
           @click="router.push(`/tv/${show.id}/seasons/${s.id}`)"
         >
           <template #badge>
-            <DownloadButton type="SEASON" :mediaId="s.id" small />
+            <SubscribeButton :showId="show.id" small />
           </template>
         </PosterCard>
       </div>
@@ -46,23 +46,28 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getShow, getSeasons } from '@/api/library.js'
+import { useWatchedStore } from '@/stores/watched.js'
 import PosterCard from '@/components/PosterCard.vue'
-import DownloadButton from '@/components/DownloadButton.vue'
+import SubscribeButton from '@/components/SubscribeButton.vue'
 
-const route   = useRoute()
-const router  = useRouter()
-const show    = ref(null)
-const seasons = ref([])
-const loading = ref(true)
+const route        = useRoute()
+const router       = useRouter()
+const watchedStore = useWatchedStore()
+const show         = ref(null)
+const seasons      = ref([])
+const loading      = ref(true)
 
 async function load() {
   try {
+    const showId = Number(route.params.showId)
     const [s, ss] = await Promise.all([
-      getShow(route.params.showId),
-      getSeasons(route.params.showId)
+      getShow(showId),
+      getSeasons(showId)
     ])
     show.value    = s
     seasons.value = ss
+    watchedStore.fetchWatched(showId)
+    watchedStore.fetchSubscriptions()
   } finally {
     loading.value = false
   }

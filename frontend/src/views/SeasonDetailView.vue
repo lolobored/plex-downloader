@@ -9,7 +9,7 @@
         <h1>{{ show.title }}</h1>
         <h2>{{ season.title || `Season ${season.seasonNumber}` }}</h2>
         <p class="ep-count">{{ season.episodeCount }} episodes</p>
-        <DownloadButton type="SEASON" :mediaId="season.id" />
+        <SubscribeButton :showId="show.id" />
       </div>
     </div>
 
@@ -27,7 +27,8 @@
             <p class="ep-title">{{ ep.title }}</p>
             <p class="ep-air">{{ ep.airDate }}</p>
           </div>
-          <DownloadButton type="EPISODE" :mediaId="ep.id" small />
+          <span v-if="watchedStore.isWatched(show.id, ep.id)" class="watched-badge">✓</span>
+          <DownloadButton v-else type="EPISODE" :mediaId="ep.id" small />
         </div>
       </div>
     </div>
@@ -38,14 +39,17 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getShow, getSeason, getEpisodes } from '@/api/library.js'
+import { useWatchedStore } from '@/stores/watched.js'
+import SubscribeButton from '@/components/SubscribeButton.vue'
 import DownloadButton from '@/components/DownloadButton.vue'
 
-const route   = useRoute()
-const router  = useRouter()
-const show    = ref(null)
-const season  = ref(null)
-const episodes = ref([])
-const loading = ref(true)
+const route        = useRoute()
+const router       = useRouter()
+const watchedStore = useWatchedStore()
+const show         = ref(null)
+const season       = ref(null)
+const episodes     = ref([])
+const loading      = ref(true)
 
 async function load() {
   const { showId, seasonId } = route.params
@@ -58,6 +62,7 @@ async function load() {
     show.value     = sh
     season.value   = se
     episodes.value = eps
+    watchedStore.fetchWatched(Number(showId))
   } finally {
     loading.value  = false
   }
@@ -87,5 +92,7 @@ h3 { font-size: 1.1rem; margin-bottom: 12px; }
 .ep-num  { font-size: .75rem; color: var(--text-muted); }
 .ep-title { font-size: .9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-air  { font-size: .75rem; color: var(--text-muted); margin-top: 2px; }
+.watched-badge { font-size: .8rem; color: var(--green); font-weight: 700; padding: 2px 8px;
+                 background: rgba(39,174,96,.15); border-radius: 10px; white-space: nowrap; }
 .loading { color: var(--text-muted); padding: 40px; text-align: center; }
 </style>
