@@ -1,0 +1,77 @@
+<h2>Movie Detail Page</h2>
+<p class="subtitle">Clicking a poster opens this view (modal or full page?)</p>
+
+<div class="options">
+  <div class="option" data-choice="modal" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Slide-over / Modal</h3>
+      <p>Detail slides in from right or appears as overlay. Stay on library page. Quick dismiss.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="fullpage" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Full Page</h3>
+      <p>Navigate to dedicated route <code>/movies/:id</code>. More space for cast, episodes. Back button to library.</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:24px;background:#0f0f0f;border-radius:8px;overflow:hidden;border:1px solid #333;max-width:900px;margin-left:auto;margin-right:auto">
+
+  <!-- Nav -->
+  <div style="background:#1a1a1a;padding:10px 20px;display:flex;align-items:center;gap:24px;border-bottom:1px solid #333">
+    <span style="color:#e5a00d;font-weight:bold">🎬 PlexDL</span>
+    <span style="color:#aaa;font-size:.9em">← Movies</span>
+  </div>
+
+  <!-- Hero section -->
+  <div style="display:flex;gap:24px;padding:24px;background:linear-gradient(135deg,#0d1b2a,#1a0d2e)">
+    <!-- Poster -->
+    <div style="background:linear-gradient(135deg,#1c3a5e,#2d1b4e);width:130px;min-width:130px;height:195px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:3em;border:1px solid #333">🎬</div>
+    <!-- Info -->
+    <div style="flex:1">
+      <div style="color:#eee;font-size:1.4em;font-weight:bold">Inception</div>
+      <div style="color:#888;font-size:.85em;margin:4px 0 12px">2010 · 2h 28m · Action, Sci-Fi, Thriller</div>
+      <div style="color:#bbb;font-size:.88em;line-height:1.5;max-width:520px">A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.</div>
+      <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+        <button style="background:#e5a00d;border:none;border-radius:6px;padding:8px 20px;color:#000;font-weight:bold;font-size:.9em;cursor:pointer">⬇ Download</button>
+        <span style="color:#666;font-size:.8em">MKV · 4K · 28.4 GB</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cast -->
+  <div style="padding:16px 24px;border-top:1px solid #222">
+    <div style="color:#aaa;font-size:.8em;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Cast</div>
+    <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:4px">
+      <div style="text-align:center;min-width:64px">
+        <div style="background:#2a2a2a;width:48px;height:48px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.4em">👤</div>
+        <div style="color:#ddd;font-size:.72em;margin-top:4px">Leonardo<br>DiCaprio</div>
+        <div style="color:#666;font-size:.65em">Dom Cobb</div>
+      </div>
+      <div style="text-align:center;min-width:64px">
+        <div style="background:#2a2a2a;width:48px;height:48px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.4em">👤</div>
+        <div style="color:#ddd;font-size:.72em;margin-top:4px">Joseph<br>Gordon-Levitt</div>
+        <div style="color:#666;font-size:.65em">Arthur</div>
+      </div>
+      <div style="text-align:center;min-width:64px">
+        <div style="background:#2a2a2a;width:48px;height:48px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.4em">👤</div>
+        <div style="color:#ddd;font-size:.72em;margin-top:4px">Elliot<br>Page</div>
+        <div style="color:#666;font-size:.65em">Ariadne</div>
+      </div>
+      <div style="text-align:center;min-width:64px">
+        <div style="background:#2a2a2a;width:48px;height:48px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.4em">👤</div>
+        <div style="color:#ddd;font-size:.72em;margin-top:4px">Tom<br>Hardy</div>
+        <div style="color:#666;font-size:.65em">Eames</div>
+      </div>
+      <div style="text-align:center;min-width:64px">
+        <div style="background:#2a2a2a;width:48px;height:48px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:1.4em">👤</div>
+        <div style="color:#ddd;font-size:.72em;margin-top:4px">Ken<br>Watanabe</div>
+        <div style="color:#666;font-size:.65em">Saito</div>
+      </div>
+    </div>
+  </div>
+
+</div>

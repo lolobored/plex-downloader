@@ -1,0 +1,99 @@
+<h2>TV Show Detail — Episode Selection</h2>
+<p class="subtitle">How should users pick episodes to download?</p>
+
+<div class="cards">
+
+  <!-- Option A: Season accordion -->
+  <div class="card" data-choice="accordion" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f0f0f;padding:10px;font-size:.75em;font-family:monospace">
+      <div style="display:flex;gap:10px;margin-bottom:8px">
+        <div style="background:linear-gradient(135deg,#1c3a5e,#2d1b4e);width:55px;height:80px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:1.6em">📺</div>
+        <div>
+          <div style="color:#eee;font-weight:bold">Breaking Bad</div>
+          <div style="color:#888;font-size:.85em">2008–2013 · 5 seasons</div>
+          <div style="margin-top:6px;display:flex;gap:6px">
+            <button style="background:#e5a00d;border:none;border-radius:4px;padding:3px 8px;color:#000;font-size:.75em;font-weight:bold">⬇ All seasons</button>
+          </div>
+        </div>
+      </div>
+      <!-- Season 1 open -->
+      <div style="background:#1a1a1a;border-radius:4px;margin-bottom:4px">
+        <div style="padding:6px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span style="color:#eee;font-size:.85em">▼ Season 1 <span style="color:#888">(7 ep)</span></span>
+          <button style="background:#e5a00d;border:none;border-radius:3px;padding:2px 6px;color:#000;font-size:.7em">⬇ Season</button>
+        </div>
+        <div style="padding:0 10px 6px;display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:#222;border-radius:3px">
+            <span style="color:#ccc;font-size:.75em">E01 · Pilot</span>
+            <button style="background:#333;border:1px solid #e5a00d;border-radius:3px;padding:1px 5px;color:#e5a00d;font-size:.65em">⬇</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:#222;border-radius:3px">
+            <span style="color:#ccc;font-size:.75em">E02 · Cat's in the Bag</span>
+            <button style="background:#2a4a2a;border:1px solid #4caf50;border-radius:3px;padding:1px 5px;color:#4caf50;font-size:.65em">✓</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:#222;border-radius:3px">
+            <span style="color:#ccc;font-size:.75em">E03 · ...And the Bag's in the River</span>
+            <button style="background:#333;border:1px solid #e5a00d;border-radius:3px;padding:1px 5px;color:#e5a00d;font-size:.65em">⬇</button>
+          </div>
+        </div>
+      </div>
+      <!-- Season 2 closed -->
+      <div style="background:#1a1a1a;border-radius:4px">
+        <div style="padding:6px 10px;display:flex;justify-content:space-between;align-items:center">
+          <span style="color:#888;font-size:.85em">▶ Season 2 <span style="color:#666">(13 ep)</span></span>
+          <button style="background:#e5a00d;border:none;border-radius:3px;padding:2px 6px;color:#000;font-size:.7em">⬇ Season</button>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Season Accordion</h3>
+      <p>Expand/collapse seasons. Download whole season or individual episodes. Compact, works for long series.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Season tabs -->
+  <div class="card" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f0f0f;padding:10px;font-size:.75em;font-family:monospace">
+      <div style="display:flex;gap:10px;margin-bottom:8px">
+        <div style="background:linear-gradient(135deg,#1c3a5e,#2d1b4e);width:55px;height:80px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:1.6em">📺</div>
+        <div>
+          <div style="color:#eee;font-weight:bold">Breaking Bad</div>
+          <div style="color:#888;font-size:.85em">2008–2013 · 5 seasons</div>
+          <div style="margin-top:6px">
+            <button style="background:#e5a00d;border:none;border-radius:4px;padding:3px 8px;color:#000;font-size:.75em;font-weight:bold">⬇ All seasons</button>
+          </div>
+        </div>
+      </div>
+      <!-- Season tabs -->
+      <div style="display:flex;gap:4px;margin-bottom:6px">
+        <div style="background:#e5a00d;border-radius:4px 4px 0 0;padding:3px 8px;color:#000;font-size:.75em;font-weight:bold">S1</div>
+        <div style="background:#222;border-radius:4px 4px 0 0;padding:3px 8px;color:#888;font-size:.75em">S2</div>
+        <div style="background:#222;border-radius:4px 4px 0 0;padding:3px 8px;color:#888;font-size:.75em">S3</div>
+        <div style="background:#222;border-radius:4px 4px 0 0;padding:3px 8px;color:#888;font-size:.75em">S4</div>
+        <div style="background:#222;border-radius:4px 4px 0 0;padding:3px 8px;color:#888;font-size:.75em">S5</div>
+        <div style="margin-left:auto">
+          <button style="background:#e5a00d;border:none;border-radius:3px;padding:2px 6px;color:#000;font-size:.7em">⬇ S1</button>
+        </div>
+      </div>
+      <div style="background:#1a1a1a;border-radius:0 4px 4px 4px;padding:6px;display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:#222;border-radius:3px">
+          <span style="color:#ccc;font-size:.75em">E01 · Pilot</span>
+          <button style="background:#333;border:1px solid #e5a00d;border-radius:3px;padding:1px 5px;color:#e5a00d;font-size:.65em">⬇</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:#222;border-radius:3px">
+          <span style="color:#ccc;font-size:.75em">E02 · Cat's in the Bag</span>
+          <button style="background:#2a4a2a;border:1px solid #4caf50;border-radius:3px;padding:1px 5px;color:#4caf50;font-size:.65em">✓</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 6px;background:#222;border-radius:3px">
+          <span style="color:#ccc;font-size:.75em">E03 · ...And the Bag's in the River</span>
+          <button style="background:#333;border:1px solid #e5a00d;border-radius:3px;padding:1px 5px;color:#e5a00d;font-size:.65em">⬇</button>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Season Tabs</h3>
+      <p>Tab per season, always one season visible. Cleaner for shows with few seasons. Harder to compare across seasons.</p>
+    </div>
+  </div>
+
+</div>

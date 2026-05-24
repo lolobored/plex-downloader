@@ -1,0 +1,93 @@
+<h2>System Architecture</h2>
+<p class="subtitle">Plex Downloader — component overview</p>
+
+<div style="display:flex;flex-direction:column;gap:20px;max-width:900px;margin:0 auto">
+
+  <!-- Row 1: User + Frontend -->
+  <div style="display:flex;justify-content:center;gap:16px;align-items:center">
+    <div style="background:#1e3a5f;border:2px solid #4a90d9;border-radius:8px;padding:12px 24px;text-align:center;min-width:120px">
+      <div style="font-size:1.5em">👤</div>
+      <div style="font-weight:bold;color:#4a90d9">Browser</div>
+      <div style="font-size:.8em;color:#aaa">Any device</div>
+    </div>
+    <div style="color:#4a90d9;font-size:1.4em">↕</div>
+    <div style="background:#1e3a5f;border:2px solid #4a90d9;border-radius:8px;padding:12px 24px;text-align:center;min-width:140px">
+      <div style="font-size:1.5em">🖼</div>
+      <div style="font-weight:bold;color:#4a90d9">Vue 3 Frontend</div>
+      <div style="font-size:.8em;color:#aaa">Vite · served by Nginx</div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="text-align:center;color:#4a90d9;font-size:1.4em">↕ REST / JSON</div>
+
+  <!-- Row 2: Spring Boot Backend -->
+  <div style="background:#1a3320;border:2px solid #4caf50;border-radius:8px;padding:16px;max-width:700px;margin:0 auto;width:100%">
+    <div style="font-weight:bold;color:#4caf50;font-size:1.1em;margin-bottom:12px">⚙ Spring Boot Backend (on Synology)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">
+      <div style="background:#0d1f14;border:1px solid #4caf50;border-radius:6px;padding:8px 14px;font-size:.85em;text-align:center">
+        <div style="color:#4caf50;font-weight:bold">Auth Controller</div>
+        <div style="color:#aaa">Plex OAuth · JWT issue</div>
+      </div>
+      <div style="background:#0d1f14;border:1px solid #4caf50;border-radius:6px;padding:8px 14px;font-size:.85em;text-align:center">
+        <div style="color:#4caf50;font-weight:bold">Library API</div>
+        <div style="color:#aaa">Browse movies · shows · search</div>
+      </div>
+      <div style="background:#0d1f14;border:1px solid #4caf50;border-radius:6px;padding:8px 14px;font-size:.85em;text-align:center">
+        <div style="color:#4caf50;font-weight:bold">Plex Sync Job</div>
+        <div style="color:#aaa">Scheduled · caches library to DB</div>
+      </div>
+      <div style="background:#0d1f14;border:1px solid #4caf50;border-radius:6px;padding:8px 14px;font-size:.85em;text-align:center">
+        <div style="color:#4caf50;font-weight:bold">Download Service</div>
+        <div style="color:#aaa">File copy → conversion folder</div>
+      </div>
+      <div style="background:#0d1f14;border:1px solid #4caf50;border-radius:6px;padding:8px 14px;font-size:.85em;text-align:center">
+        <div style="color:#4caf50;font-weight:bold">Queue Manager</div>
+        <div style="color:#aaa">Status · history · per-user</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: split — Plex API + Postgres -->
+  <div style="display:flex;gap:16px;justify-content:center;align-items:stretch;flex-wrap:wrap">
+    <div style="text-align:center;color:#888;font-size:.85em;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+      <div style="color:#4caf50">↕ HTTP · Plex token</div>
+    </div>
+
+    <div style="background:#2a1e00;border:2px solid #ff9900;border-radius:8px;padding:12px 20px;text-align:center;min-width:160px">
+      <div style="font-size:1.4em">🎬</div>
+      <div style="font-weight:bold;color:#ff9900">Plex Media Server</div>
+      <div style="font-size:.8em;color:#aaa">localhost:32400 · on Synology</div>
+    </div>
+
+    <div style="text-align:center;color:#888;font-size:.85em;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+      <div style="color:#4caf50">↕ JDBC</div>
+    </div>
+
+    <div style="background:#1e1e3a;border:2px solid #9c88ff;border-radius:8px;padding:12px 20px;text-align:center;min-width:160px">
+      <div style="font-size:1.4em">🗄</div>
+      <div style="font-weight:bold;color:#9c88ff">PostgreSQL</div>
+      <div style="font-size:.8em;color:#aaa">users · media cache · queue</div>
+    </div>
+  </div>
+
+  <!-- Row 4: Volumes -->
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <div style="color:#4caf50;font-size:.85em;text-align:center;align-self:center">↕ volume mounts</div>
+  </div>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <div style="background:#1a1a2e;border:1px dashed #888;border-radius:6px;padding:8px 16px;text-align:center;font-size:.85em">
+      <div style="color:#ccc">📁 /movies</div>
+      <div style="color:#888">read-only</div>
+    </div>
+    <div style="background:#1a1a2e;border:1px dashed #888;border-radius:6px;padding:8px 16px;text-align:center;font-size:.85em">
+      <div style="color:#ccc">📁 /tvshows</div>
+      <div style="color:#888">read-only</div>
+    </div>
+    <div style="background:#1a1a2e;border:1px dashed #4caf50;border-radius:6px;padding:8px 16px;text-align:center;font-size:.85em">
+      <div style="color:#4caf50">📁 /conversion</div>
+      <div style="color:#888">write · tdarr watches</div>
+    </div>
+  </div>
+
+</div>

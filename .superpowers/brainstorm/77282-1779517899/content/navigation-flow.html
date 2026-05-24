@@ -1,0 +1,74 @@
+<h2>Navigation Flow — confirmed design</h2>
+<p class="subtitle">Full page navigation throughout. Does this match what you showed?</p>
+
+<div style="max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:12px">
+
+  <!-- Movies flow -->
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px">
+    <div style="color:#e5a00d;font-size:.8em;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Movies</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="background:#222;border:1px solid #444;border-radius:6px;padding:8px 14px;text-align:center">
+        <div style="color:#eee;font-size:.85em;font-weight:bold">/movies</div>
+        <div style="color:#888;font-size:.72em">Poster grid + search + filters</div>
+      </div>
+      <div style="color:#4a90d9;font-size:1.2em">→</div>
+      <div style="background:#222;border:1px solid #444;border-radius:6px;padding:8px 14px;text-align:center">
+        <div style="color:#eee;font-size:.85em;font-weight:bold">/movies/:id</div>
+        <div style="color:#888;font-size:.72em">Poster · title · synopsis · cast · ⬇ Download</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TV Shows flow -->
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:16px">
+    <div style="color:#e5a00d;font-size:.8em;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">TV Shows</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+
+      <div style="background:#222;border:1px solid #444;border-radius:6px;padding:8px 14px;text-align:center">
+        <div style="color:#eee;font-size:.85em;font-weight:bold">/tv</div>
+        <div style="color:#888;font-size:.72em">Poster grid</div>
+        <div style="color:#888;font-size:.68em">title + season count</div>
+      </div>
+
+      <div style="color:#4a90d9;font-size:1.2em">→</div>
+
+      <div style="background:#222;border:1px solid #4a90d9;border-radius:6px;padding:8px 14px;text-align:center">
+        <div style="color:#eee;font-size:.85em;font-weight:bold">/tv/:showId</div>
+        <div style="color:#888;font-size:.72em">Show poster · synopsis · cast</div>
+        <div style="color:#4a90d9;font-size:.68em">+ Seasons grid (poster per season)</div>
+        <div style="color:#888;font-size:.68em">⬇ Download all seasons</div>
+      </div>
+
+      <div style="color:#4a90d9;font-size:1.2em">→</div>
+
+      <div style="background:#222;border:1px solid #4a90d9;border-radius:6px;padding:8px 14px;text-align:center">
+        <div style="color:#eee;font-size:.85em;font-weight:bold">/tv/:showId/seasons/:s</div>
+        <div style="color:#888;font-size:.72em">Season poster · "Season X"</div>
+        <div style="color:#4a90d9;font-size:.68em">+ Episodes grid (landscape thumbs)</div>
+        <div style="color:#888;font-size:.68em">⬇ Download whole season</div>
+      </div>
+
+      <div style="color:#4a90d9;font-size:1.2em">→</div>
+
+      <div style="background:#222;border:1px solid #4a90d9;border-radius:6px;padding:8px 14px;text-align:center">
+        <div style="color:#eee;font-size:.85em;font-weight:bold">/tv/:showId/seasons/:s/episodes/:e</div>
+        <div style="color:#888;font-size:.72em">Thumb · title · air date · duration</div>
+        <div style="color:#888;font-size:.72em">director · video/audio info · synopsis</div>
+        <div style="color:#4a90d9;font-size:.68em">cast row · ⬇ Download episode</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Download actions summary -->
+  <div style="background:#1a1a2e;border:1px solid #4a90d9;border-radius:8px;padding:14px 16px">
+    <div style="color:#4a90d9;font-size:.8em;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Download actions available at each level</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:.78em">
+      <div style="color:#888">Movie page<br><span style="color:#e5a00d">⬇ Download movie</span></div>
+      <div style="color:#888">Show page<br><span style="color:#e5a00d">⬇ Download all seasons</span></div>
+      <div style="color:#888">Season page<br><span style="color:#e5a00d">⬇ Download season</span></div>
+      <div style="color:#888">Episode page<br><span style="color:#e5a00d">⬇ Download episode</span></div>
+    </div>
+  </div>
+
+</div>

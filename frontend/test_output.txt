@@ -1,0 +1,15 @@
+
+> plex-downloader-frontend@0.1.0 test
+> vitest src/api/__tests__/library.test.js --run
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v1.6.1 /Users/laurentlaborde/projects/plex-downloader/frontend
+
+ ✓ src/api/__tests__/library.test.js  (5 tests) 1ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  08:32:29
+   Duration  226ms (transform 12ms, setup 0ms, collect 12ms, tests 1ms, environment 120ms, prepare 23ms)
+
