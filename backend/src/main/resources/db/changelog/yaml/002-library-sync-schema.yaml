@@ -1,0 +1,52 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-users-plex-token
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: "ALTER TABLE users ADD COLUMN plex_token TEXT"
+
+  - changeSet:
+      id: 002-movies-extra-fields
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE movies ADD COLUMN tmdb_id BIGINT;
+              ALTER TABLE movies ADD COLUMN imdb_id VARCHAR(50);
+              ALTER TABLE movies ADD COLUMN rating FLOAT;
+              ALTER TABLE movies ADD COLUMN studio VARCHAR(255)
+
+  - changeSet:
+      id: 002-movie-directors
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE movie_directors (
+                  movie_id BIGINT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+                  director VARCHAR(255) NOT NULL,
+                  PRIMARY KEY (movie_id, director)
+              )
+        - sql:
+            sql: "CREATE INDEX idx_movie_directors_movie_id ON movie_directors(movie_id)"
+
+  - changeSet:
+      id: 002-tvshows-extra-fields
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE tv_shows ADD COLUMN tmdb_id BIGINT;
+              ALTER TABLE tv_shows ADD COLUMN tvdb_id BIGINT;
+              ALTER TABLE tv_shows ADD COLUMN rating FLOAT;
+              ALTER TABLE tv_shows ADD COLUMN total_seasons INT
+
+  - changeSet:
+      id: 002-download-queue-paths
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE download_queue ADD COLUMN source_file_path TEXT;
+              ALTER TABLE download_queue ADD COLUMN dest_file_path TEXT

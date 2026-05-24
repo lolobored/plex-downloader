@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-tdarr-status-columns
+      author: plexdownloader
+      changes:
+        - addColumn:
+            tableName: download_queue
+            columns:
+              - column:
+                  name: tdarr_status
+                  type: VARCHAR(20)
+                  defaultValue: "NONE"
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN tdarr_error TEXT"
+
+  - changeSet:
+      id: 004-tdarr-settings
+      author: plexdownloader
+      changes:
+        - insert:
+            tableName: settings
+            columns:
+              - column:
+                  name: key
+                  value: tdarr.server.url
+              - column:
+                  name: value
+                  value: ""
+        - insert:
+            tableName: settings
+            columns:
+              - column:
+                  name: key
+                  value: tdarr.sync.cron
+              - column:
+                  name: value
+                  value: "0 */30 * * * *"

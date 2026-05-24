@@ -1,4 +1,4 @@
 databaseChangeLog:
   - includeAll:
-      path: db/changelog/sql/
+      path: db/changelog/yaml/
       relativeToChangelogFile: false
