@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { initPin, checkPin } from '@/api/auth.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -32,6 +32,10 @@ const loading = ref(false)
 const polling = ref(false)
 const error   = ref(null)
 let pollInterval = null
+
+onBeforeUnmount(() => {
+  if (pollInterval) clearInterval(pollInterval)
+})
 
 async function startLogin() {
   error.value = null
