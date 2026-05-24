@@ -38,12 +38,12 @@
         <div v-if="loading && allMovies.length" class="loading-more">Loading more…</div>
       </div>
 
-      <!-- Alphabet sidebar -->
-      <nav v-if="allLetters.length" class="alpha-sidebar" aria-label="Jump to letter">
+      <!-- Alphabet sidebar — always show A-Z; grey out empty letters -->
+      <nav class="alpha-sidebar" aria-label="Jump to letter">
         <button
-          v-for="letter in allLetters"
+          v-for="letter in ALPHABET"
           :key="letter"
-          :class="['alpha-btn', { active: letter === activeLetter }]"
+          :class="['alpha-btn', { active: letter === activeLetter, empty: !loadedLetters.has(letter) }]"
           :title="letter"
           @click="scrollToLetter(letter)"
         >{{ letter }}</button>
@@ -60,7 +60,8 @@ import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import DownloadButton from '@/components/DownloadButton.vue'
 
-const router = useRouter()
+const router   = useRouter()
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
 const allMovies    = ref([])
 const loading      = ref(false)
@@ -99,7 +100,8 @@ const groupedMovies = computed(() => {
     .map(([letter, movies]) => ({ letter, movies }))
 })
 
-const allLetters = computed(() => groupedMovies.value.map(g => g.letter))
+const allLetters    = computed(() => groupedMovies.value.map(g => g.letter))
+const loadedLetters = computed(() => new Set(allLetters.value))
 
 async function loadMore() {
   if (loading.value || !hasMore.value) return
@@ -169,6 +171,7 @@ function updateActiveLetter() {
 }
 
 function scrollToLetter(letter) {
+  if (!loadedLetters.value.has(letter)) return
   const el = sectionRefs[letter]
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
@@ -244,7 +247,7 @@ h2 { font-size: 1.5rem; font-weight: 600; }
   flex-shrink: 0;
   transition: color .1s, background .1s;
 }
-.alpha-btn:hover {
+.alpha-btn:hover:not(.empty) {
   color: var(--text);
   background: var(--surface2);
 }
@@ -252,5 +255,9 @@ h2 { font-size: 1.5rem; font-weight: 600; }
   color: var(--accent);
   background: var(--surface2);
   border-radius: 4px;
+}
+.alpha-btn.empty {
+  color: var(--border);
+  cursor: default;
 }
 </style>
