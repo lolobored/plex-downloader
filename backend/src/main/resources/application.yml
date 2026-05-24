@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/plexdownloader}
-    username: ${SPRING_DATASOURCE_USERNAME:plexdl}
-    password: ${SPRING_DATASOURCE_PASSWORD:plexdl}
+    url: jdbc:postgresql://db:5432/plexdownloader
+    username: plexdl
+    password: postgres
   jpa:
     hibernate:
       ddl-auto: validate

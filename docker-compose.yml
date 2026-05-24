@@ -10,9 +10,6 @@ services:
       - "3615:8080"
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/plexdownloader
-      SPRING_DATASOURCE_USERNAME: plexdl
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
     volumes:
       # Same host paths as Plex — no translation needed
@@ -38,7 +35,7 @@ services:
     environment:
       POSTGRES_DB: plexdownloader
       POSTGRES_USER: plexdl
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: postgres
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
     healthcheck:
