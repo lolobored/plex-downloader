@@ -8,6 +8,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -62,20 +66,35 @@ class TdarrSyncSchedulerTest {
     }
 
     @Test
-    void syncAll_storesTranslatedOutputPathWhenTranscoded() {
-        DownloadQueueItem item = doneItem("/conversion/in-flight/movies/film/film.mkv");
+    void syncAll_storesTranslatedOutputPathWhenTranscoded(@TempDir Path tmp) throws Exception {
+        // Build: tmp/in-flight/movies/film/film.mkv  and  tmp/libraries/movies/film/film.mp4
+        Path inFlightDir = tmp.resolve("in-flight/movies/film");
+        Files.createDirectories(inFlightDir);
+        Path srcFile = inFlightDir.resolve("film.mkv");
+        Files.writeString(srcFile, "original");
+
+        Path libDir = tmp.resolve("libraries/movies/film");
+        Files.createDirectories(libDir);
+        Path libFile = libDir.resolve("film.mp4");
+        Files.writeString(libFile, "transcoded");
+
+        DownloadQueueItem item = doneItem(srcFile.toString());
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(tdarrClient.getFileStatus(anyString()))
+
+        // In-flight entry gone from Tdarr → NONE; libraries entry → TRANSCODED
+        when(tdarrClient.getFileStatus(srcFile.toString()))
             .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
-                DownloadQueueItem.TdarrStatus.TRANSCODED, null,
-                "/plex-conversion/libraries/movies/film/film.mp4")));
+                DownloadQueueItem.TdarrStatus.NONE, null, null)));
+        when(tdarrClient.getFileStatus(libFile.toString()))
+            .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
+                DownloadQueueItem.TdarrStatus.TRANSCODED, null, null)));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         scheduler.syncAll();
 
         verify(queueRepo).save(argThat(i ->
             i.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED &&
-            "/plex-conversion/libraries/movies/film/film.mp4".equals(i.getOutputFilePath())
+            libFile.toString().equals(i.getOutputFilePath())
         ));
     }
 

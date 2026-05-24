@@ -248,7 +248,7 @@ class DownloadServiceTest {
         service.cancel(12L, caller);
 
         assertThat(outputFile).doesNotExist();
-        verify(tdarrClient, never()).deleteFile(anyString());
+        verify(tdarrClient).deleteFile(outputFile.toString()); // evict libraries entry
         verify(queueRepo).delete(item);
     }
 

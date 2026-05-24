@@ -157,13 +157,14 @@ public class TdarrClient {
 
     /**
      * Maps Tdarr's actual API fields to our internal status.
-     * HealthCheck:            "Queued" | "Processing" | "Healthy" | "HealthError"
-     * TranscodeDecisionMaker: "Queued" | "Processing" | "Transcoded" | "Not required" | "TranscodeError"
+     * HealthCheck:            "Queued" | "Processing" | "Success" | "HealthError"
+     * TranscodeDecisionMaker: "Queued" | "Processing" | "Transcoded" | "Transcode success" | "Not required" | "TranscodeError"
      */
     private DownloadQueueItem.TdarrStatus mapStatus(String healthCheck, String transcode) {
         if ("HealthError".equals(healthCheck)) return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
         if ("TranscodeError".equals(transcode))  return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
-        if ("Transcoded".equals(transcode) || "Not required".equals(transcode))
+        if ("Transcoded".equals(transcode) || "Transcode success".equals(transcode)
+                || "Not required".equals(transcode))
             return DownloadQueueItem.TdarrStatus.TRANSCODED;
         if ("Queued".equals(transcode) || "Processing".equals(transcode)
                 || "Queued".equals(healthCheck) || "Processing".equals(healthCheck))

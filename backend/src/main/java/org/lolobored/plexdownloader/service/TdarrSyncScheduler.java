@@ -16,6 +16,10 @@ import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -65,20 +69,65 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         return item;
     }
 
-    private void applyTdarrStatus(DownloadQueueItem item) {
+    void applyTdarrStatus(DownloadQueueItem item) {
         Optional<TdarrClient.TdarrFileStatus> statusOpt = tdarrClient.getFileStatus(item.getDestFilePath());
         if (statusOpt.isEmpty()) {
             log.warn("Tdarr unreachable, skipping item {}", item.getId());
             return;
         }
         TdarrClient.TdarrFileStatus ts = statusOpt.get();
-        item.setTdarrStatus(ts.status());
+        DownloadQueueItem.TdarrStatus newStatus = ts.status();
+        String outputPath = null;
+
+        if (newStatus == DownloadQueueItem.TdarrStatus.NONE) {
+            // In-flight entry gone from Tdarr — file may have been transcoded and re-tracked in libraries
+            Path libFile = deriveLibrariesPath(item.getDestFilePath());
+            if (libFile != null) {
+                Optional<TdarrClient.TdarrFileStatus> libStatusOpt = tdarrClient.getFileStatus(libFile.toString());
+                if (libStatusOpt.isPresent()
+                        && libStatusOpt.get().status() == DownloadQueueItem.TdarrStatus.TRANSCODED) {
+                    newStatus = DownloadQueueItem.TdarrStatus.TRANSCODED;
+                    outputPath = libFile.toString();
+                    log.info("Item {} transcoded, found output at {}", item.getId(), libFile);
+                }
+            }
+            // Don't downgrade already-TRANSCODED items if Tdarr entry simply isn't found
+            if (newStatus == DownloadQueueItem.TdarrStatus.NONE
+                    && item.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED) {
+                log.debug("Item {} already TRANSCODED, in-flight entry gone — keeping status", item.getId());
+                return;
+            }
+        }
+
+        item.setTdarrStatus(newStatus);
         item.setTdarrError(ts.errorMessage());
-        if (ts.status() == DownloadQueueItem.TdarrStatus.TRANSCODED
-                && ts.outputFilePath() != null) {
-            item.setOutputFilePath(ts.outputFilePath());
+        if (outputPath != null) {
+            item.setOutputFilePath(outputPath);
         }
         queueRepo.save(item);
-        log.info("Tdarr status updated: item={} status={}", item.getId(), ts.status());
+        log.info("Tdarr status updated: item={} status={}", item.getId(), newStatus);
+    }
+
+    /**
+     * Derives the libraries-equivalent path for an in-flight file.
+     * Walks the parent dir to handle extension changes (e.g. .m4v → .mp4).
+     */
+    Path deriveLibrariesPath(String destFilePath) {
+        String candidate = destFilePath.replace("/in-flight/", "/libraries/");
+        if (candidate.equals(destFilePath)) return null; // path had no /in-flight/ segment
+        Path exact = Path.of(candidate);
+        if (Files.exists(exact)) return exact;
+        Path parent = exact.getParent();
+        String stem = exact.getFileName().toString().replaceFirst("\\.[^.]+$", "");
+        if (!Files.isDirectory(parent)) return null;
+        try (var stream = Files.list(parent)) {
+            return stream
+                .filter(p -> p.getFileName().toString().startsWith(stem))
+                .findFirst()
+                .orElse(null);
+        } catch (IOException e) {
+            log.warn("Could not search libraries dir {}: {}", parent, e.getMessage());
+            return null;
+        }
     }
 }

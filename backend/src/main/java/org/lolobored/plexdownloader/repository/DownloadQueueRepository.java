@@ -27,6 +27,8 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
            "AND i.mediaId IN (SELECT e.id FROM Episode e WHERE e.season.show.id = :showId)")
     Set<Long> findActiveEpisodeIdsForShow(@Param("userId") Long userId, @Param("showId") Long showId);
 
+    boolean existsByStatusIn(Collection<DownloadQueueItem.Status> statuses);
+
     boolean existsByUser_IdAndMediaTypeAndMediaId(Long userId, DownloadQueueItem.MediaType type, Long mediaId);
 
     Optional<DownloadQueueItem> findByUser_IdAndMediaTypeAndMediaId(

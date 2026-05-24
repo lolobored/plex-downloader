@@ -151,7 +151,7 @@ public class DownloadService {
                 "Copy in progress, retry when DONE");
         }
 
-        // Delete in-flight file (always attempt)
+        // Delete in-flight file (always attempt — may already be gone after transcoding)
         try {
             Files.deleteIfExists(Path.of(item.getDestFilePath()));
         } catch (IOException e) {
@@ -159,16 +159,29 @@ public class DownloadService {
         }
 
         if (item.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED) {
-            // Delete transcoded output from /libraries
-            if (item.getOutputFilePath() != null) {
+            // Resolve libraries path: use stored outputFilePath or derive from destFilePath
+            String librariesPath = item.getOutputFilePath();
+            if (librariesPath == null) {
+                Path derived = deriveLibrariesPath(item.getDestFilePath());
+                if (derived != null) librariesPath = derived.toString();
+            }
+            if (librariesPath != null) {
+                final String lp = librariesPath;
                 try {
-                    Files.deleteIfExists(Path.of(item.getOutputFilePath()));
+                    Files.deleteIfExists(Path.of(lp));
                 } catch (IOException e) {
-                    log.warn("Could not delete output file {}: {}", item.getOutputFilePath(), e.getMessage());
+                    log.warn("Could not delete transcoded file {}: {}", lp, e.getMessage());
                 }
+                try {
+                    tdarrClient.deleteFile(lp);  // evict libraries entry from Tdarr DB
+                } catch (Exception e) {
+                    log.warn("Tdarr eviction (libraries) failed for item {}: {}", itemId, e.getMessage());
+                }
+            } else {
+                log.warn("Item {} is TRANSCODED but could not resolve libraries path", itemId);
             }
         } else {
-            // Evict from Tdarr DB
+            // Evict in-flight entry from Tdarr DB
             try {
                 tdarrClient.deleteFile(item.getDestFilePath());
             } catch (Exception e) {
@@ -177,6 +190,7 @@ public class DownloadService {
         }
 
         queueRepo.delete(item);
+        pruneConversionDirs();
     }
 
     @Async("downloadExecutor")
@@ -215,10 +229,41 @@ public class DownloadService {
         }
         queueRepo.save(item);
 
-        // Prune empty dirs in both conversion trees after every copy
+        // Prune empty dirs only when no more copies are queued or in-progress
+        boolean moreWork = queueRepo.existsByStatusIn(
+            List.of(DownloadQueueItem.Status.PENDING, DownloadQueueItem.Status.IN_PROGRESS));
+        if (!moreWork) {
+            pruneConversionDirs();
+        }
+    }
+
+    private void pruneConversionDirs() {
         String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
         pruneEmptyDirs(Path.of(conversionDir, "in-flight"));
         pruneEmptyDirs(Path.of(conversionDir, "libraries"));
+    }
+
+    /**
+     * Derives the libraries-equivalent path for an in-flight file.
+     * Walks the parent dir to handle extension changes (e.g. .m4v → .mp4 after transcoding).
+     */
+    private Path deriveLibrariesPath(String destFilePath) {
+        String candidate = destFilePath.replace("/in-flight/", "/libraries/");
+        if (candidate.equals(destFilePath)) return null;
+        Path exact = Path.of(candidate);
+        if (Files.exists(exact)) return exact;
+        Path parent = exact.getParent();
+        String stem = exact.getFileName().toString().replaceFirst("\\.[^.]+$", "");
+        if (!Files.isDirectory(parent)) return null;
+        try (var stream = Files.list(parent)) {
+            return stream
+                .filter(p -> p.getFileName().toString().startsWith(stem))
+                .findFirst()
+                .orElse(null);
+        } catch (IOException e) {
+            log.warn("Could not search libraries dir {}: {}", parent, e.getMessage());
+            return null;
+        }
     }
 
     /**
