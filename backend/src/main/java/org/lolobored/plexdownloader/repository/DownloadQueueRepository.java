@@ -8,6 +8,11 @@ import java.util.*;
 
 public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem, Long> {
 
+    List<DownloadQueueItem> findByStatusAndTdarrStatusNotIn(
+        DownloadQueueItem.Status status,
+        Collection<DownloadQueueItem.TdarrStatus> tdarrStatuses
+    );
+
     List<DownloadQueueItem> findAllByOrderByQueuePositionAsc();
 
     @Query("SELECT i FROM DownloadQueueItem i WHERE i.status = 'IN_PROGRESS'")
