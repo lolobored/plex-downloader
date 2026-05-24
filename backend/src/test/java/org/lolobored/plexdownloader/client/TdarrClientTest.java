@@ -8,6 +8,7 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -108,6 +109,30 @@ class TdarrClientTest {
 
         assertThat(client.getFileStatus("/file.mkv").get().status())
             .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
+    }
+
+    @Test
+    void getFileStatus_includesOutputFilePath_whenTranscoded() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setTdarrStatus("Done transcoding");
+        resp.setOutputFilePaths(List.of("/media/plex-download/libraries/movies/film.mp4"));
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        Optional<TdarrClient.TdarrFileStatus> result = client.getFileStatus("/file.mkv");
+
+        assertThat(result.get().status()).isEqualTo(DownloadQueueItem.TdarrStatus.TRANSCODED);
+        assertThat(result.get().outputFilePath()).isEqualTo("/media/plex-download/libraries/movies/film.mp4");
+    }
+
+    @Test
+    void getFileStatus_outputFilePath_isNull_whenNotTranscoded() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setTdarrStatus("Queued");
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        assertThat(client.getFileStatus("/file.mkv").get().outputFilePath()).isNull();
     }
 
     @Test

@@ -22,7 +22,10 @@ public class TdarrClient {
 
     private final SettingsService settings;
 
-    public record TdarrFileStatus(DownloadQueueItem.TdarrStatus status, String errorMessage) {}
+    public record TdarrFileStatus(
+        DownloadQueueItem.TdarrStatus status,
+        String errorMessage,
+        String outputFilePath) {}
 
     public Optional<TdarrFileStatus> getFileStatus(String absoluteFilePath) {
         String baseUrl = settings.get("tdarr.server.url").orElse("").trim();
@@ -32,12 +35,14 @@ public class TdarrClient {
         try {
             TdarrFileResponse response = fetchStatus(baseUrl, absoluteFilePath);
             if (response == null) {
-                return Optional.of(new TdarrFileStatus(DownloadQueueItem.TdarrStatus.NONE, null));
+                return Optional.of(new TdarrFileStatus(DownloadQueueItem.TdarrStatus.NONE, null, null));
             }
             DownloadQueueItem.TdarrStatus status = mapStatus(response.getTdarrStatus());
             String error = status == DownloadQueueItem.TdarrStatus.TDARR_ERROR
                 ? response.getErrorMessage() : null;
-            return Optional.of(new TdarrFileStatus(status, error));
+            String outputPath = (response.getOutputFilePaths() != null && !response.getOutputFilePaths().isEmpty())
+                ? response.getOutputFilePaths().get(0) : null;
+            return Optional.of(new TdarrFileStatus(status, error, outputPath));
         } catch (RestClientException e) {
             log.warn("Tdarr API error for {}: {}", absoluteFilePath, e.getMessage());
             return Optional.empty();
@@ -105,5 +110,7 @@ public class TdarrClient {
         private String tdarrStatus;
         @JsonProperty("errorMessage")
         private String errorMessage;
+        @JsonProperty("outputFilePaths")
+        private java.util.List<String> outputFilePaths;
     }
 }
