@@ -41,9 +41,7 @@ async function startLogin() {
   error.value = null
   loading.value = true
   try {
-    const { pinId, code } = await initPin()
-    const authUrl = `https://app.plex.tv/auth#?clientID=plexdl&code=${code}` +
-                    `&forwardUrl=${encodeURIComponent(window.location.origin + '/login')}`
+    const { pinId, authUrl } = await initPin()
     window.open(authUrl, '_blank')
     polling.value = true
     loading.value = false

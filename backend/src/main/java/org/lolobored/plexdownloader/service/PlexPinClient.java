@@ -32,7 +32,7 @@ public class PlexPinClient {
             .retrieve()
             .body(PlexPinApiResponse.class);
         Objects.requireNonNull(resp, "plex.tv returned null body for createPin");
-        return new PlexPinInitResponse(resp.getId(), resp.getCode());
+        return new PlexPinInitResponse(resp.getId(), resp.getCode(), buildAuthUrl(resp.getCode()));
     }
 
     /** Returns authToken string, or null if user hasn't authorized yet. */
@@ -55,9 +55,14 @@ public class PlexPinClient {
     }
 
     public String buildAuthUrl(String code) {
-        return "https://app.plex.tv/auth#?clientID=" + CLIENT_ID
-            + "&code=" + code
-            + "&context[device][product]=" + PRODUCT;
+        return "https://app.plex.tv/auth/#!?" +
+            "clientID=" + CLIENT_ID +
+            "&code=" + code +
+            "&context[device][product]=" + PRODUCT +
+            "&context[device][version]=Plex+OAuth" +
+            "&context[device][platform]=Web" +
+            "&context[device][model]=Plex+OAuth" +
+            "&context[device][layout]=desktop";
     }
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)

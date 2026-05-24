@@ -52,7 +52,7 @@ class AuthControllerTest {
 
     @Test
     void initPinReturnsIdAndCode() throws Exception {
-        when(authService.initPin()).thenReturn(new PlexPinInitResponse(42L, "abc123"));
+        when(authService.initPin()).thenReturn(new PlexPinInitResponse(42L, "abc123", "https://app.plex.tv/auth/#!?clientID=plex-downloader-app&code=abc123"));
 
         mockMvc.perform(post("/api/auth/plex/pin"))
             .andExpect(status().isOk())

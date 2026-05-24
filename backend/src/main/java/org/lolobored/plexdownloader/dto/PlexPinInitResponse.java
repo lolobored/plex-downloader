@@ -1,2 +1,2 @@
 package org.lolobored.plexdownloader.dto;
-public record PlexPinInitResponse(Long pinId, String code) {}
+public record PlexPinInitResponse(Long pinId, String code, String authUrl) {}
