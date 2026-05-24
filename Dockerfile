@@ -17,9 +17,20 @@ COPY backend/src ./src
 COPY --from=frontend-build /app/dist ./src/main/resources/static
 RUN ./gradlew bootJar --no-daemon -x test -q
 
-# ── Stage 3: minimal runtime image ────────────────────────────────────────────
+# ── Stage 3: runtime image with embedded PostgreSQL ───────────────────────────
 FROM eclipse-temurin:21-jre-alpine
+# Install PostgreSQL and su-exec (for privilege-dropping to the postgres user)
+RUN apk add --no-cache postgresql postgresql-contrib su-exec
+
+# Postgres data directory — will be populated on first boot
+ENV PGDATA=/var/lib/postgresql/data
+RUN mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA"
+
 WORKDIR /app
 COPY --from=backend-build /app/build/libs/*.jar app.jar
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+VOLUME ["/var/lib/postgresql/data"]
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
