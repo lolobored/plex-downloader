@@ -50,12 +50,16 @@
     <section class="card-section">
       <h3>Library Sync</h3>
       <div class="field">
-        <label>Library sync cron expression</label>
-        <input name="syncCron" v-model="form.syncCron" type="text" placeholder="0 0 */6 * * *" />
+        <label>Sync library every</label>
+        <select name="syncCron" v-model="form.syncCron" class="select-field">
+          <option v-for="o in SYNC_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
+        </select>
       </div>
       <div class="field">
-        <label>Watched status sync cron</label>
-        <input name="watchedSyncCron" v-model="form.watchedSyncCron" type="text" placeholder="0 */15 * * * *" />
+        <label>Sync watched status every</label>
+        <select name="watchedSyncCron" v-model="form.watchedSyncCron" class="select-field">
+          <option v-for="o in WATCHED_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
+        </select>
       </div>
       <div class="sync-status" v-if="syncStatus">
         <span :class="['state', syncStatus.state.toLowerCase()]">{{ syncStatus.state }}</span>
@@ -66,7 +70,7 @@
         <span v-if="syncStatus.error" class="sync-error">{{ syncStatus.error }}</span>
       </div>
       <div class="sync-actions">
-        <button class="btn-save" @click="save" :disabled="saving">Save cron</button>
+        <button class="btn-save" @click="save" :disabled="saving">Save</button>
         <button class="btn-sync" data-testid="sync-btn" @click="sync" :disabled="syncing">
           {{ syncing ? 'Syncing…' : '↻ Sync Now' }}
         </button>
@@ -80,8 +84,10 @@
         <input name="tdarrUrl" v-model="form.tdarrUrl" type="url" placeholder="http://192.168.1.10:8265" />
       </div>
       <div class="field">
-        <label>Tdarr sync cron</label>
-        <input name="tdarrSyncCron" v-model="form.tdarrSyncCron" type="text" placeholder="0 */30 * * * *" />
+        <label>Sync Tdarr status every</label>
+        <select name="tdarrSyncCron" v-model="form.tdarrSyncCron" class="select-field">
+          <option v-for="o in TDARR_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
+        </select>
       </div>
       <button class="btn-save" @click="save" :disabled="saving">Save</button>
     </section>
@@ -92,6 +98,32 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries } from '@/api/admin.js'
+
+const SYNC_OPTIONS = [
+  { label: 'Every hour',     cron: '0 0 * * * *'    },
+  { label: 'Every 6 hours',  cron: '0 0 */6 * * *'  },
+  { label: 'Every 12 hours', cron: '0 0 */12 * * *' },
+  { label: 'Every day',      cron: '0 0 0 * * *'    },
+]
+
+const WATCHED_OPTIONS = [
+  { label: 'Every 15 minutes', cron: '0 */15 * * * *' },
+  { label: 'Every 30 minutes', cron: '0 */30 * * * *' },
+  { label: 'Every hour',       cron: '0 0 * * * *'    },
+  { label: 'Every 6 hours',    cron: '0 0 */6 * * *'  },
+]
+
+const TDARR_OPTIONS = [
+  { label: 'Every 15 minutes', cron: '0 */15 * * * *' },
+  { label: 'Every 30 minutes', cron: '0 */30 * * * *' },
+  { label: 'Every hour',       cron: '0 0 * * * *'    },
+  { label: 'Every 6 hours',    cron: '0 0 */6 * * *'  },
+]
+
+function matchCron(value, options) {
+  const match = options.find(o => o.cron === value)
+  return match ? match.cron : options[0].cron
+}
 
 const authStore  = useAuthStore()
 const saving     = ref(false)
@@ -124,10 +156,10 @@ onMounted(async () => {
     form.plexPathPrefixPlex = s['plex.path.prefix.plex']  ?? ''
     form.plexPathPrefixApp  = s['plex.path.prefix.app']   ?? ''
     form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
-    form.syncCron           = s['plex.sync.cron']         ?? ''
-    form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
+    form.syncCron           = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
+    form.watchedSyncCron    = matchCron(s['watched.sync.cron'], WATCHED_OPTIONS)
     form.tdarrUrl           = s['tdarr.server.url']       ?? ''
-    form.tdarrSyncCron      = s['tdarr.sync.cron']        ?? ''
+    form.tdarrSyncCron      = matchCron(s['tdarr.sync.cron'],   TDARR_OPTIONS)
     const storedLibs = s['plex.sync.libraries'] ?? ''
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
     syncStatus.value = ss
@@ -193,6 +225,9 @@ input { background: var(--surface2); border: 1px solid var(--border); color: var
         border-radius: 6px; padding: 8px 12px; font-size: .9rem; }
 input:focus { outline: none; border-color: var(--accent-blue); }
 input.readonly { opacity: 0.6; cursor: default; }
+.select-field { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+                border-radius: 6px; padding: 8px 12px; font-size: .9rem; cursor: pointer; }
+.select-field:focus { outline: none; border-color: var(--accent-blue); }
 .btn-save { background: var(--accent); color: #000; border: none; border-radius: 6px;
             padding: 8px 20px; font-weight: 600; }
 .btn-save:disabled { opacity: 0.6; }
