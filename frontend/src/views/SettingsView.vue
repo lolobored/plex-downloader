@@ -110,18 +110,22 @@ const form = reactive({
 })
 
 onMounted(async () => {
-  const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
-  form.plexUrl            = s['plex.server.url']        ?? ''
-  form.plexToken          = ''  // never pre-fill tokens
-  form.plexPathPrefixPlex = s['plex.path.prefix.plex']  ?? ''
-  form.plexPathPrefixApp  = s['plex.path.prefix.app']   ?? ''
-  form.plexPosterDir      = s['plex.poster.dir']        ?? ''
-  form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
-  form.syncCron           = s['plex.sync.cron']         ?? ''
-  form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
-  form.tdarrUrl           = s['tdarr.server.url']       ?? ''
-  form.tdarrSyncCron      = s['tdarr.sync.cron']        ?? ''
-  syncStatus.value = ss
+  try {
+    const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
+    form.plexUrl            = s['plex.server.url']        ?? ''
+    form.plexToken          = ''  // never pre-fill tokens
+    form.plexPathPrefixPlex = s['plex.path.prefix.plex']  ?? ''
+    form.plexPathPrefixApp  = s['plex.path.prefix.app']   ?? ''
+    form.plexPosterDir      = s['plex.poster.dir']        ?? ''
+    form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
+    form.syncCron           = s['plex.sync.cron']         ?? ''
+    form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
+    form.tdarrUrl           = s['tdarr.server.url']       ?? ''
+    form.tdarrSyncCron      = s['tdarr.sync.cron']        ?? ''
+    syncStatus.value = ss
+  } catch (e) {
+    console.error('Failed to load settings:', e)
+  }
 })
 
 async function save() {
