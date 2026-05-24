@@ -1,4 +1,6 @@
 services:
+
+  # ─── plex-downloader ────────────────────────────────────────────────────────
   plex-downloader:
     build:
       context: .
@@ -8,21 +10,80 @@ services:
       - "3615:8080"
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/plexdownloader
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/plexdownloader
       SPRING_DATASOURCE_USERNAME: plexdl
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      - ${MOVIES_PATH:-./dev-data/movies}:/movies:ro
-      - ${TVSHOWS_PATH:-./dev-data/tvshows}:/tvshows:ro
-      - ${CONVERSION_PATH:-./dev-data/conversion}:/conversion:rw
+      # Same host paths as Plex — no translation needed
+      - ${MOVIES_PATH:-/volume1/video/Movies}:/movies:ro
+      - ${TV_PATH:-/volume1/video/TV}:/tv:ro
+      # Same host path as Tdarr — in-flight files + tdarr output live here
+      - ${PLEX_CONVERSION_PATH:-/volume1/downloads/plex-download}:/plex-conversion:rw
       - ./volumes/posters:/posters:rw
-      - ./volumes/postgres:/var/lib/postgresql/data
-    extra_hosts:
-      - "lolobored.local:192.168.4.100"
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 90s
+
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: plexdownloader
+      POSTGRES_USER: plexdl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plexdl -d plexdownloader"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── Plex Media Server ──────────────────────────────────────────────────────
+  # Mount identical paths to plex-downloader so file paths match without translation.
+  plex:
+    image: plexinc/pms-docker:latest
+    restart: unless-stopped
+    network_mode: host           # Plex needs host networking for DLNA / GDM discovery
+    environment:
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+      ADVERTISE_IP: http://${HOST_IP:-127.0.0.1}:32400/
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./volumes/plex/config:/config
+      - ./volumes/plex/transcode:/transcode
+      # Same mount points as plex-downloader
+      - ${MOVIES_PATH:-/volume1/video/Movies}:/movies:ro
+      - ${TV_PATH:-/volume1/video/TV}:/tv:ro
+      - ${PLEX_CONVERSION_PATH:-/volume1/downloads/plex-download}:/plex-conversion:ro
+
+  # ─── Tdarr ──────────────────────────────────────────────────────────────────
+  # Watches /plex-conversion/in-flight — same host folder as plex-downloader's
+  # output, so Tdarr sees files at exactly the path plex-downloader recorded.
+  tdarr:
+    image: haveagitgat/tdarr:latest
+    restart: unless-stopped
+    ports:
+      - "8265:8265"   # web UI
+      - "8266:8266"   # server
+    environment:
+      TZ: ${TZ:-UTC}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      serverIP: 0.0.0.0
+      serverPort: 8266
+      webUIPort: 8265
+    volumes:
+      - ./volumes/tdarr/server:/app/server
+      - ./volumes/tdarr/configs:/app/configs
+      - ./volumes/tdarr/logs:/app/logs
+      # Same host folder — Tdarr picks up in-flight files and writes output here
+      - ${PLEX_CONVERSION_PATH:-/volume1/downloads/plex-download}:/plex-conversion:rw

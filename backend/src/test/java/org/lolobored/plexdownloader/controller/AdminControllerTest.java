@@ -85,26 +85,22 @@ class AdminControllerTest {
     }
 
     @Test
-    void getSettingsReturnsAllKeysWithoutToken() throws Exception {
+    void getSettingsReturnsExpectedKeysWithoutToken() throws Exception {
         when(settingsService.get(anyString())).thenReturn(Optional.empty());
         when(settingsService.get("plex.server.url")).thenReturn(Optional.of("http://plex:32400"));
-        when(settingsService.get("plex.path.prefix.movies.plex")).thenReturn(Optional.of("/movies"));
-        when(settingsService.get("plex.path.prefix.movies.app")).thenReturn(Optional.of("/movies"));
-        when(settingsService.get("plex.path.prefix.tv.plex")).thenReturn(Optional.of("/tv"));
-        when(settingsService.get("plex.path.prefix.tv.app")).thenReturn(Optional.of("/tvshows"));
+        when(settingsService.get("plex.sync.libraries")).thenReturn(Optional.of("1,2"));
         when(settingsService.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
-        when(settingsService.get("tdarr.path.prefix.conversion")).thenReturn(Optional.of("/media/plex-download"));
         when(settingsService.get("tdarr.sync.cron")).thenReturn(Optional.of("0 */30 * * * *"));
 
         mockMvc.perform(get("/api/admin/settings"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$['plex.server.url']").value("http://plex:32400"))
-            .andExpect(jsonPath("$['plex.path.prefix.movies.plex']").value("/movies"))
-            .andExpect(jsonPath("$['plex.path.prefix.tv.app']").value("/tvshows"))
-            .andExpect(jsonPath("$['tdarr.path.prefix.conversion']").value("/media/plex-download"))
-            .andExpect(jsonPath("$['plex.path.prefix.plex']").doesNotExist())
-            .andExpect(jsonPath("$['plex.path.prefix.app']").doesNotExist())
-            .andExpect(jsonPath("$['plex.server.token']").doesNotExist());
+            .andExpect(jsonPath("$['plex.sync.libraries']").value("1,2"))
+            .andExpect(jsonPath("$['tdarr.server.url']").value("http://tdarr:8265"))
+            .andExpect(jsonPath("$['tdarr.sync.cron']").value("0 */30 * * * *"))
+            .andExpect(jsonPath("$['plex.server.token']").doesNotExist())
+            .andExpect(jsonPath("$['plex.path.prefix.movies.plex']").doesNotExist())
+            .andExpect(jsonPath("$['tdarr.path.prefix.conversion']").doesNotExist());
     }
 
     @Test

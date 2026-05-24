@@ -22,7 +22,6 @@ class TdarrSyncSchedulerTest {
     @Mock TdarrClient tdarrClient;
     @Mock DownloadQueueRepository queueRepo;
     @Mock SettingsService settings;
-    @Mock PathMappingService pathMapping;
     @InjectMocks TdarrSyncScheduler scheduler;
 
     private DownloadQueueItem doneItem(String destPath) {
@@ -38,7 +37,6 @@ class TdarrSyncSchedulerTest {
     void syncAll_skipsItem_whenTdarrReturnsEmpty() {
         DownloadQueueItem item = doneItem("/conversion/in-flight/movies/test/movie.mkv");
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/media/in-flight/movies/test/movie.mkv");
         when(tdarrClient.getFileStatus(anyString())).thenReturn(Optional.empty());
 
         scheduler.syncAll();
@@ -50,7 +48,6 @@ class TdarrSyncSchedulerTest {
     void syncAll_updatesStatusToProcessing() {
         DownloadQueueItem item = doneItem("/conversion/in-flight/movies/test/movie.mkv");
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/media/in-flight/movies/test/movie.mkv");
         when(tdarrClient.getFileStatus(anyString()))
             .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
                 DownloadQueueItem.TdarrStatus.PROCESSING, null, null)));
@@ -68,20 +65,17 @@ class TdarrSyncSchedulerTest {
     void syncAll_storesTranslatedOutputPathWhenTranscoded() {
         DownloadQueueItem item = doneItem("/conversion/in-flight/movies/film/film.mkv");
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/media/in-flight/movies/film/film.mkv");
         when(tdarrClient.getFileStatus(anyString()))
             .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
                 DownloadQueueItem.TdarrStatus.TRANSCODED, null,
-                "/media/plex-download/libraries/movies/film/film.mp4")));
-        when(pathMapping.tdarrToApp("/media/plex-download/libraries/movies/film/film.mp4"))
-            .thenReturn("/conversion/libraries/movies/film/film.mp4");
+                "/plex-conversion/libraries/movies/film/film.mp4")));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         scheduler.syncAll();
 
         verify(queueRepo).save(argThat(i ->
             i.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED &&
-            "/conversion/libraries/movies/film/film.mp4".equals(i.getOutputFilePath())
+            "/plex-conversion/libraries/movies/film/film.mp4".equals(i.getOutputFilePath())
         ));
     }
 
@@ -89,7 +83,6 @@ class TdarrSyncSchedulerTest {
     void syncAll_doesNotSetOutputPath_whenOutputIsNull() {
         DownloadQueueItem item = doneItem("/conversion/in-flight/movies/film/film.mkv");
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/media/in-flight/movies/film/film.mkv");
         when(tdarrClient.getFileStatus(anyString()))
             .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
                 DownloadQueueItem.TdarrStatus.TRANSCODED, null, null)));
@@ -107,7 +100,6 @@ class TdarrSyncSchedulerTest {
     void syncAll_updatesStatusToError_withMessage() {
         DownloadQueueItem item = doneItem("/conversion/in-flight/movies/test/movie.mkv");
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/media/in-flight/movies/test/movie.mkv");
         when(tdarrClient.getFileStatus(anyString()))
             .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
                 DownloadQueueItem.TdarrStatus.TDARR_ERROR, "codec not supported", null)));
@@ -132,17 +124,15 @@ class TdarrSyncSchedulerTest {
     }
 
     @Test
-    void syncAll_usesAppToTdarrPathForDocId() {
+    void syncAll_usesDestFilePathDirectlyForDocId() {
         DownloadQueueItem item = doneItem("/conversion/in-flight/movies/film/film.mkv");
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
-        when(pathMapping.appToTdarr("/conversion/in-flight/movies/film/film.mkv"))
-            .thenReturn("/media/plex-download/in-flight/movies/film/film.mkv");
-        when(tdarrClient.getFileStatus("/media/plex-download/in-flight/movies/film/film.mkv"))
+        when(tdarrClient.getFileStatus("/conversion/in-flight/movies/film/film.mkv"))
             .thenReturn(Optional.empty());
 
         scheduler.syncAll();
 
-        verify(tdarrClient).getFileStatus("/media/plex-download/in-flight/movies/film/film.mkv");
+        verify(tdarrClient).getFileStatus("/conversion/in-flight/movies/film/film.mkv");
     }
 
     @Test

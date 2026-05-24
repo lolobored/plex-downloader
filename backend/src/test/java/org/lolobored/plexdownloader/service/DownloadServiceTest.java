@@ -36,7 +36,6 @@ class DownloadServiceTest {
     @Mock SeasonRepository seasonRepo;
     @Mock TvShowRepository showRepo;
     @Mock DownloadQueueRepository queueRepo;
-    @Mock PathMappingService pathMapping;
     @Mock SettingsService settings;
     @Mock TdarrClient tdarrClient;
     @Spy @InjectMocks DownloadService service;
@@ -55,8 +54,7 @@ class DownloadServiceTest {
         Path sourceFile = tempDir.resolve("movie.mkv");
         Files.writeString(sourceFile, "fake");
 
-        when(settings.getRequired("plex.conversion.dir")).thenReturn(tempDir.toString());
-        when(pathMapping.translate("/plex/movies/movie.mkv")).thenReturn(sourceFile.toString());
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
 
         Movie movie = new Movie();
         movie.setId(1L);
@@ -113,8 +111,7 @@ class DownloadServiceTest {
         user.setId(1L);
 
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
-        when(settings.getRequired("plex.conversion.dir")).thenReturn("/conv");
-        when(pathMapping.translate("/plex/movies/dark.mkv")).thenReturn("/mnt/movies/dark.mkv");
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
             DownloadQueueItem i = inv.getArgument(0);
@@ -152,8 +149,7 @@ class DownloadServiceTest {
         when(episodeRepo.findById(1L)).thenReturn(Optional.of(ep));
         when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
         when(showRepo.findById(100L)).thenReturn(Optional.of(show));
-        when(settings.getRequired("plex.conversion.dir")).thenReturn("/conv");
-        when(pathMapping.translate("/plex/tvshows/bb/s01e01.mkv")).thenReturn("/mnt/tvshows/bb/s01e01.mkv");
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
             DownloadQueueItem i = inv.getArgument(0);
@@ -180,8 +176,7 @@ class DownloadServiceTest {
         user.setId(1L);
 
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
-        when(settings.getRequired("plex.conversion.dir")).thenReturn("/conversion");
-        when(pathMapping.translate("/movies/inception.mkv")).thenReturn("/movies/inception.mkv");
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conversion"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(1L); return i; });
 
@@ -206,7 +201,6 @@ class DownloadServiceTest {
         item.setUser(owner);
 
         when(queueRepo.findById(10L)).thenReturn(Optional.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/tdarr/film.mkv");
 
         User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
         service.cancel(10L, caller);
@@ -226,13 +220,11 @@ class DownloadServiceTest {
         item.setUser(owner);
 
         when(queueRepo.findById(11L)).thenReturn(Optional.of(item));
-        when(pathMapping.appToTdarr("/conversion/in-flight/films/film.mkv"))
-            .thenReturn("/media/in-flight/films/film.mkv");
 
         User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
         service.cancel(11L, caller);
 
-        verify(tdarrClient).deleteFile("/media/in-flight/films/film.mkv");
+        verify(tdarrClient).deleteFile("/conversion/in-flight/films/film.mkv");
         verify(queueRepo).delete(item);
     }
 
@@ -316,7 +308,6 @@ class DownloadServiceTest {
         item.setUser(owner);
 
         when(queueRepo.findById(15L)).thenReturn(Optional.of(item));
-        when(pathMapping.appToTdarr(anyString())).thenReturn("/media/in-flight/films/film.mkv");
 
         User admin = new User(); admin.setId(2L); admin.setRole(User.Role.ADMIN);
         service.cancel(15L, admin);
@@ -333,12 +324,11 @@ class DownloadServiceTest {
 
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(5L);
-        item.setSourceFilePath("/plex/source.mkv");
+        item.setSourceFilePath(sourceFile.toString());
         item.setDestFilePath(destFile.toString());
         item.setStatus(DownloadQueueItem.Status.PENDING);
 
         when(queueRepo.findById(5L)).thenReturn(Optional.of(item));
-        when(pathMapping.translate("/plex/source.mkv")).thenReturn(sourceFile.toString());
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.executeCopyAsync(5L);

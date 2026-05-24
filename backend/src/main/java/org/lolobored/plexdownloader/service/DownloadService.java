@@ -33,7 +33,6 @@ public class DownloadService {
     private final SeasonRepository seasonRepo;
     private final TvShowRepository showRepo;
     private final DownloadQueueRepository queueRepo;
-    private final PathMappingService pathMapping;
     private final SettingsService settings;
     private final TdarrClient tdarrClient;
 
@@ -114,9 +113,8 @@ public class DownloadService {
 
     private DownloadQueueItem buildItem(User user, DownloadQueueItem.MediaType type,
                                         Long mediaId, String plexFilePath, String subDir) {
-        String appPath = pathMapping.translate(plexFilePath);
-        String conversionDir = settings.getRequired("plex.conversion.dir");
-        String filename = Path.of(appPath).getFileName().toString();
+        String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
+        String filename = Path.of(plexFilePath).getFileName().toString();
         String destPath = Path.of(conversionDir, "in-flight", subDir, filename).toString();
 
         int nextPos = queueRepo.findMaxQueuePosition().orElse(0) + 1;
@@ -164,7 +162,7 @@ public class DownloadService {
         } else {
             // Evict from Tdarr DB
             try {
-                tdarrClient.deleteFile(pathMapping.appToTdarr(item.getDestFilePath()));
+                tdarrClient.deleteFile(item.getDestFilePath());
             } catch (Exception e) {
                 log.warn("Tdarr eviction failed for item {}: {}", itemId, e.getMessage());
             }
@@ -182,7 +180,7 @@ public class DownloadService {
         queueRepo.save(item);
 
         try {
-            Path source = Path.of(pathMapping.translate(item.getSourceFilePath()));
+            Path source = Path.of(item.getSourceFilePath());
             Path dest = Path.of(item.getDestFilePath());
             if (!Files.exists(source)) {
                 throw new IOException("Source file not found: " + source);

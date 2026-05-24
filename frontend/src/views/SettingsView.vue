@@ -29,37 +29,6 @@
     </section>
 
     <section class="card-section">
-      <h3>Path Mapping</h3>
-      <div class="field">
-        <label>Movies — Plex path prefix</label>
-        <input name="plexMoviesPrefix" v-model="form.plexPathPrefixMoviesPlex" type="text" placeholder="/movies" />
-      </div>
-      <div class="field">
-        <label>Movies — App path prefix</label>
-        <input name="appMoviesPrefix" v-model="form.plexPathPrefixMoviesApp" type="text" placeholder="/movies" />
-      </div>
-      <div class="field">
-        <label>TV — Plex path prefix</label>
-        <input name="plexTvPrefix" v-model="form.plexPathPrefixTvPlex" type="text" placeholder="/tv" />
-      </div>
-      <div class="field">
-        <label>TV — App path prefix</label>
-        <input name="appTvPrefix" v-model="form.plexPathPrefixTvApp" type="text" placeholder="/tvshows" />
-      </div>
-      <div class="field">
-        <label>Tdarr conversion prefix</label>
-        <input name="tdarrConversionPrefix" v-model="form.tdarrConversionPrefix" type="text" placeholder="/media/plex-download" />
-      </div>
-      <div class="field">
-        <label>Conversion directory</label>
-        <input name="conversionDir" v-model="form.plexConversionDir" type="text" readonly class="readonly" />
-      </div>
-      <button class="btn-save" @click="save" :disabled="saving">
-        {{ saving ? 'Saving…' : 'Save' }}
-      </button>
-    </section>
-
-    <section class="card-section">
       <h3>Library Sync</h3>
       <div class="field">
         <label>Sync library every</label>
@@ -168,29 +137,17 @@ const loadingLibraries    = ref(false)
 const libraryError        = ref(null)
 
 const form = reactive({
-  plexUrl:                    '',
-  plexPathPrefixMoviesPlex:   '',
-  plexPathPrefixMoviesApp:    '',
-  plexPathPrefixTvPlex:       '',
-  plexPathPrefixTvApp:        '',
-  tdarrConversionPrefix:      '',
-  plexConversionDir:          '',
-  syncCron:                   '',
-  tdarrUrl:                   '',
-  tdarrSyncCron:              ''
+  plexUrl:      '',
+  syncCron:     '',
+  tdarrUrl:     '',
+  tdarrSyncCron: ''
 })
 
 onMounted(async () => {
   try {
     const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
-    form.plexUrl                  = s['plex.server.url']                  ?? ''
-    form.plexPathPrefixMoviesPlex = s['plex.path.prefix.movies.plex']     ?? ''
-    form.plexPathPrefixMoviesApp  = s['plex.path.prefix.movies.app']      ?? ''
-    form.plexPathPrefixTvPlex     = s['plex.path.prefix.tv.plex']         ?? ''
-    form.plexPathPrefixTvApp      = s['plex.path.prefix.tv.app']          ?? ''
-    form.tdarrConversionPrefix    = s['tdarr.path.prefix.conversion']     ?? ''
-    form.plexConversionDir        = s['plex.conversion.dir']              ?? ''
-    form.syncCron           = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
+    form.plexUrl      = s['plex.server.url']  ?? ''
+    form.syncCron     = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
     form.tdarrUrl           = s['tdarr.server.url']       ?? ''
     form.tdarrSyncCron      = matchCron(s['tdarr.sync.cron'],   TDARR_OPTIONS)
     const storedLibs = s['plex.sync.libraries'] ?? ''
@@ -209,16 +166,11 @@ async function save() {
   saving.value = true
   saveOk.value = false
   const payload = {
-    'plex.server.url':                  form.plexUrl,
-    'plex.path.prefix.movies.plex':     form.plexPathPrefixMoviesPlex,
-    'plex.path.prefix.movies.app':      form.plexPathPrefixMoviesApp,
-    'plex.path.prefix.tv.plex':         form.plexPathPrefixTvPlex,
-    'plex.path.prefix.tv.app':          form.plexPathPrefixTvApp,
-    'tdarr.path.prefix.conversion':     form.tdarrConversionPrefix,
-    'plex.sync.cron':                   form.syncCron,
-    'plex.sync.libraries':              selectedLibraryKeys.value.join(','),
-    'tdarr.server.url':                 form.tdarrUrl,
-    'tdarr.sync.cron':                  form.tdarrSyncCron
+    'plex.server.url':       form.plexUrl,
+    'plex.sync.cron':        form.syncCron,
+    'plex.sync.libraries':   selectedLibraryKeys.value.join(','),
+    'tdarr.server.url':      form.tdarrUrl,
+    'tdarr.sync.cron':       form.tdarrSyncCron
   }
   try {
     await putSettings(payload)

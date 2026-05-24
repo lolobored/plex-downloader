@@ -30,17 +30,11 @@ public class AdminController {
     @GetMapping("/settings")
     public Map<String, String> getSettings() {
         Map<String, String> result = new LinkedHashMap<>();
-        result.put("plex.server.url",                    settingsService.get("plex.server.url").orElse(""));
-        result.put("plex.path.prefix.movies.plex",       settingsService.get("plex.path.prefix.movies.plex").orElse(""));
-        result.put("plex.path.prefix.movies.app",        settingsService.get("plex.path.prefix.movies.app").orElse(""));
-        result.put("plex.path.prefix.tv.plex",           settingsService.get("plex.path.prefix.tv.plex").orElse(""));
-        result.put("plex.path.prefix.tv.app",            settingsService.get("plex.path.prefix.tv.app").orElse(""));
-        result.put("plex.conversion.dir",                settingsService.get("plex.conversion.dir").orElse(""));
-        result.put("plex.sync.cron",                     settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
-        result.put("plex.sync.libraries",                settingsService.get("plex.sync.libraries").orElse(""));
-        result.put("tdarr.server.url",                   settingsService.get("tdarr.server.url").orElse(""));
-        result.put("tdarr.path.prefix.conversion",       settingsService.get("tdarr.path.prefix.conversion").orElse(""));
-        result.put("tdarr.sync.cron",                    settingsService.get("tdarr.sync.cron").orElse("0 */30 * * * *"));
+        result.put("plex.server.url",     settingsService.get("plex.server.url").orElse(""));
+        result.put("plex.sync.cron",      settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
+        result.put("plex.sync.libraries", settingsService.get("plex.sync.libraries").orElse(""));
+        result.put("tdarr.server.url",    settingsService.get("tdarr.server.url").orElse(""));
+        result.put("tdarr.sync.cron",     settingsService.get("tdarr.sync.cron").orElse("0 */30 * * * *"));
         return result;
     }
 

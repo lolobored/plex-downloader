@@ -23,7 +23,6 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
     private final TdarrClient tdarrClient;
     private final DownloadQueueRepository queueRepo;
     private final SettingsService settings;
-    private final PathMappingService pathMapping;
 
     @Override
     public void configureTasks(ScheduledTaskRegistrar registrar) {
@@ -44,8 +43,7 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         log.info("Tdarr sync: checking {} items", items.size());
         for (DownloadQueueItem item : items) {
             try {
-                String tdarrPath = pathMapping.appToTdarr(item.getDestFilePath());
-                Optional<TdarrClient.TdarrFileStatus> statusOpt = tdarrClient.getFileStatus(tdarrPath);
+                Optional<TdarrClient.TdarrFileStatus> statusOpt = tdarrClient.getFileStatus(item.getDestFilePath());
                 if (statusOpt.isEmpty()) {
                     log.warn("Tdarr unreachable, skipping item {}", item.getId());
                     continue;
@@ -55,7 +53,7 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
                 item.setTdarrError(ts.errorMessage());
                 if (ts.status() == DownloadQueueItem.TdarrStatus.TRANSCODED
                         && ts.outputFilePath() != null) {
-                    item.setOutputFilePath(pathMapping.tdarrToApp(ts.outputFilePath()));
+                    item.setOutputFilePath(ts.outputFilePath());
                 }
                 queueRepo.save(item);
                 log.info("Tdarr status updated: item={} status={}", item.getId(), ts.status());
