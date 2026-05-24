@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://db:5432/plexdownloader
+    url: jdbc:postgresql://localhost:5432/plexdownloader
     username: plexdl
     password: postgres
   jpa:

@@ -23,7 +23,7 @@ su-exec postgres psql -U postgres <<-EOSQL
     DO \$\$
     BEGIN
         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'plexdl') THEN
-            CREATE USER plexdl WITH PASSWORD '${POSTGRES_PASSWORD}';
+            CREATE USER plexdl WITH PASSWORD 'postgres';
         END IF;
     END
     \$\$;
