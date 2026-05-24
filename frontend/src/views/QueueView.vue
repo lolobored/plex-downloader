@@ -33,8 +33,16 @@
         <div class="item-info">
           <span class="type">{{ item.mediaType }} #{{ item.mediaId }}</span>
           <span class="sub">{{ formatDate(item.completedAt) }}</span>
+          <span v-if="item.status === 'ERROR'" class="error-msg">{{ item.errorMessage }}</span>
         </div>
-        <span v-if="item.status === 'ERROR'" class="error-msg">{{ item.errorMessage }}</span>
+        <template v-if="item.status === 'DONE'">
+          <span v-if="item.tdarrStatus === 'NONE'"        class="tdarr-badge none">Queued in Tdarr</span>
+          <span v-else-if="item.tdarrStatus === 'PROCESSING'"  class="tdarr-badge processing">Transcoding…</span>
+          <span v-else-if="item.tdarrStatus === 'TRANSCODED'"  class="tdarr-badge transcoded">Transcoded ✓</span>
+          <span v-else-if="item.tdarrStatus === 'TDARR_ERROR'" class="tdarr-badge tdarr-error">
+            Tdarr error<span v-if="item.tdarrError"> — {{ item.tdarrError }}</span>
+          </span>
+        </template>
       </div>
     </section>
   </div>
@@ -81,4 +89,11 @@ h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform
 .type { font-weight: 500; }
 .sub  { font-size: .8rem; color: var(--text-muted); }
 .error-msg { font-size: .8rem; color: var(--red); }
+.tdarr-badge { font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+               white-space: nowrap; }
+.tdarr-badge.none       { background: var(--surface); color: var(--text-muted);
+                           border: 1px solid var(--border); }
+.tdarr-badge.processing { background: rgba(52,152,219,.15); color: var(--accent-blue); }
+.tdarr-badge.transcoded { background: rgba(39,174,96,.15); color: var(--green); }
+.tdarr-badge.tdarr-error { background: rgba(231,76,60,.15); color: var(--red); }
 </style>

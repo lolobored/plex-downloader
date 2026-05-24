@@ -40,4 +40,41 @@ describe('QueueView', () => {
     const { store } = factory()
     expect(store.fetchQueue).toHaveBeenCalled()
   })
+
+  it('shows NONE tdarr badge on DONE item', () => {
+    const { wrapper } = factory([
+      { id: 10, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'NONE', tdarrError: null,
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.text()).toContain('Queued in Tdarr')
+  })
+
+  it('shows PROCESSING tdarr badge on DONE item', () => {
+    const { wrapper } = factory([
+      { id: 11, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'PROCESSING', tdarrError: null,
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.text()).toContain('Transcoding…')
+  })
+
+  it('shows TRANSCODED tdarr badge on DONE item', () => {
+    const { wrapper } = factory([
+      { id: 12, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'TRANSCODED', tdarrError: null,
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.text()).toContain('Transcoded ✓')
+  })
+
+  it('shows TDARR_ERROR badge with error message', () => {
+    const { wrapper } = factory([
+      { id: 13, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec not supported',
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.text()).toContain('Tdarr error')
+    expect(wrapper.text()).toContain('codec not supported')
+  })
 })

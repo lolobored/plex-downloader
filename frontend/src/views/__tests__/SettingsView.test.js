@@ -50,4 +50,25 @@ describe('SettingsView', () => {
     await w.find('[data-testid="sync-btn"]').trigger('click')
     expect(triggerSync).toHaveBeenCalled()
   })
+
+  it('renders tdarr URL field', async () => {
+    getSettings.mockResolvedValue({
+      'plex.server.url':        'http://localhost:32400',
+      'plex.path.prefix.plex':  '/data/plex',
+      'plex.path.prefix.app':   '/movies',
+      'plex.poster.dir':        '/posters',
+      'plex.conversion.dir':    '/conversion',
+      'plex.sync.cron':         '0 0 */6 * * *',
+      'watched.sync.cron':      '0 */15 * * * *',
+      'tdarr.server.url':       'http://tdarr:8265',
+      'tdarr.sync.cron':        '0 */30 * * * *'
+    })
+    getSyncStatus.mockResolvedValue({ state: 'IDLE', lastSyncAt: null, itemsSynced: 0, error: null })
+    const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { auth: { role: 'ADMIN' } } })
+    const w = mount(SettingsView, { global: { plugins: [pinia] } })
+    await flushPromises()
+    const input = w.find('input[name="tdarrUrl"]')
+    expect(input.exists()).toBe(true)
+    expect(input.element.value).toBe('http://tdarr:8265')
+  })
 })

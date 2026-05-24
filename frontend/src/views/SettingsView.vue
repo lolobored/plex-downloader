@@ -67,6 +67,19 @@
         </button>
       </div>
     </section>
+
+    <section class="card-section">
+      <h3>Tdarr</h3>
+      <div class="field">
+        <label>Tdarr server URL</label>
+        <input name="tdarrUrl" v-model="form.tdarrUrl" type="url" placeholder="http://192.168.1.10:8265" />
+      </div>
+      <div class="field">
+        <label>Tdarr sync cron</label>
+        <input name="tdarrSyncCron" v-model="form.tdarrSyncCron" type="text" placeholder="0 */30 * * * *" />
+      </div>
+      <button class="btn-save" @click="save" :disabled="saving">Save</button>
+    </section>
   </div>
 </template>
 
@@ -91,7 +104,9 @@ const form = reactive({
   plexPosterDir:      '',
   plexConversionDir:  '',
   syncCron:           '',
-  watchedSyncCron:    ''
+  watchedSyncCron:    '',
+  tdarrUrl:           '',
+  tdarrSyncCron:      ''
 })
 
 onMounted(async () => {
@@ -104,6 +119,8 @@ onMounted(async () => {
   form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
   form.syncCron           = s['plex.sync.cron']         ?? ''
   form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
+  form.tdarrUrl           = s['tdarr.server.url']       ?? ''
+  form.tdarrSyncCron      = s['tdarr.sync.cron']        ?? ''
   syncStatus.value = ss
 })
 
@@ -115,12 +132,14 @@ async function save() {
     'plex.path.prefix.plex':  form.plexPathPrefixPlex,
     'plex.path.prefix.app':   form.plexPathPrefixApp,
     'plex.sync.cron':         form.syncCron,
-    'watched.sync.cron':      form.watchedSyncCron
+    'watched.sync.cron':      form.watchedSyncCron,
+    'tdarr.server.url':       form.tdarrUrl,
+    'tdarr.sync.cron':        form.tdarrSyncCron
   }
   if (form.plexToken) payload['plex.server.token'] = form.plexToken
   try {
     await putSettings(payload)
-    form.plexToken = ''  // clear after save — don't retain in memory
+    form.plexToken = ''
     saveOk.value = true
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
   } finally {
