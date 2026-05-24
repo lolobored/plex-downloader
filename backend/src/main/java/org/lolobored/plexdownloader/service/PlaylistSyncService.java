@@ -150,7 +150,8 @@ public class PlaylistSyncService {
             if (destPath != null) {
                 try { Files.deleteIfExists(Path.of(destPath)); }
                 catch (IOException e) { log.warn("Could not delete file {}: {}", destPath, e.getMessage()); }
-                tdarrClient.deleteFile(destPath);
+                try { tdarrClient.deleteFile(destPath); }
+                catch (Exception e) { log.warn("Tdarr deleteFile failed for {}: {}", destPath, e.getMessage()); }
             }
         });
     }
