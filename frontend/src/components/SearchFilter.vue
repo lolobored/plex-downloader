@@ -7,7 +7,7 @@
       @input="emit('update:search', localSearch)"
       class="search-input"
     />
-    <select v-model="localYear" @change="emit('update:year', localYear || null)" class="year-select">
+    <select v-model="localYear" @change="emit('update:year', localYear ? Number(localYear) : null)" class="year-select">
       <option value="">Any year</option>
       <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
     </select>

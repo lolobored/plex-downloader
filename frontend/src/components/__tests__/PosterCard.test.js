@@ -26,4 +26,10 @@ describe('PosterCard', () => {
     })
     expect(w.find('.test-badge').exists()).toBe(true)
   })
+
+  it('emits click when card clicked', async () => {
+    const w = mount(PosterCard, { props: { title: 'Test', plexId: 'x' } })
+    await w.find('.poster-card').trigger('click')
+    expect(w.emitted('click')).toBeTruthy()
+  })
 })
