@@ -27,6 +27,10 @@ public class TdarrClient {
         String errorMessage,
         String outputFilePath) {}
 
+    /** Result of a connectivity test. {@code ok=true} means HTTP response received. */
+    public record PingResult(boolean ok, String detail) {}
+
+
     // ---------- internal helpers ----------
 
     private String apiKey() {
@@ -62,7 +66,7 @@ public class TdarrClient {
                 ? response.getOutputFilePaths().get(0) : null;
             return Optional.of(new TdarrFileStatus(status, error, outputPath));
         } catch (RestClientException e) {
-            log.warn("Tdarr API error for {}: {}", absoluteFilePath, e.getMessage());
+            log.error("Tdarr API error for {}: {}", absoluteFilePath, e.getMessage());
             return Optional.empty();
         }
     }
@@ -82,21 +86,32 @@ public class TdarrClient {
     }
 
     /**
-     * Returns true if the Tdarr server at {@code url} responds to its status endpoint.
+     * Tests connectivity to the Tdarr server.
+     * Any HTTP response (including 4xx/5xx) → ok=true (server reachable).
+     * Connection failure (refused, DNS, timeout) → ok=false.
      * {@code apiKey} overrides the stored setting (pass null to use stored value).
      */
-    public boolean ping(String url, String apiKey) {
-        if (url == null || url.isBlank()) return false;
+    public PingResult ping(String url, String apiKey) {
+        if (url == null || url.isBlank()) return new PingResult(false, "URL is empty");
         String key = (apiKey != null && !apiKey.isBlank()) ? apiKey : this.apiKey();
         try {
             RestClient.RequestHeadersSpec<?> req = RestClient.create().get()
                 .uri(url.stripTrailing() + "/api/v2/status");
             if (!key.isBlank()) req = req.header("x-api-key", key);
             req.retrieve().toBodilessEntity();
-            return true;
+            return new PingResult(true, "Connected");
+        } catch (org.springframework.web.client.RestClientResponseException e) {
+            // Got HTTP response — server IS reachable (401 = need API key, etc.)
+            int code = e.getStatusCode().value();
+            String detail = code == 401 ? "Connected (401 — check API key)"
+                          : code == 403 ? "Connected (403 — forbidden)"
+                          : "Connected (HTTP " + code + ")";
+            log.debug("Tdarr ping HTTP {} at {}", code, url);
+            return new PingResult(true, detail);
         } catch (RestClientException e) {
-            log.debug("Tdarr ping failed for {}: {}", url, e.getMessage());
-            return false;
+            // Connection failure — host unreachable, refused, timeout, DNS failure
+            log.warn("Tdarr ping connection failed for {}: {}", url, e.getMessage());
+            return new PingResult(false, "Connection failed: " + e.getMessage());
         }
     }
 
@@ -124,7 +139,7 @@ public class TdarrClient {
         try {
             callDelete(baseUrl, filePath);
         } catch (RestClientException e) {
-            log.warn("Tdarr deleteFile failed for {}: {}", filePath, e.getMessage());
+            log.error("Tdarr deleteFile failed for {}: {}", filePath, e.getMessage());
         }
     }
 

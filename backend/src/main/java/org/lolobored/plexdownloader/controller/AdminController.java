@@ -54,9 +54,9 @@ public class AdminController {
                                          @RequestParam(required = false) String apiKey) {
         String target = (url != null && !url.isBlank()) ? url
             : settingsService.get("tdarr.server.url").orElse("");
-        boolean ok = tdarrClient.ping(target, apiKey);
-        return ok ? Map.of("ok", true)
-                  : Map.of("ok", false, "error", "Could not reach Tdarr server at " + target);
+        TdarrClient.PingResult result = tdarrClient.ping(target, apiKey);
+        return result.ok() ? Map.of("ok", true, "detail", result.detail())
+                           : Map.of("ok", false, "error", result.detail());
     }
 
     @PutMapping("/settings")

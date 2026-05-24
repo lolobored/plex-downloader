@@ -3,6 +3,7 @@ package org.lolobored.plexdownloader.controller;
 import tools.jackson.databind.ObjectMapper;
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
 import org.lolobored.plexdownloader.client.TdarrClient;
+import org.lolobored.plexdownloader.client.TdarrClient.PingResult;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
@@ -164,7 +165,8 @@ class AdminControllerTest {
 
     @Test
     void getTdarrTestReturnsOkWhenPingSucceeds() throws Exception {
-        when(tdarrClient.ping(eq("http://tdarr:8265"), any())).thenReturn(true);
+        when(tdarrClient.ping(eq("http://tdarr:8265"), any()))
+            .thenReturn(new TdarrClient.PingResult(true, "Connected"));
 
         mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
             .andExpect(status().isOk())
@@ -173,7 +175,8 @@ class AdminControllerTest {
 
     @Test
     void getTdarrTestReturnsNotOkWhenPingFails() throws Exception {
-        when(tdarrClient.ping(eq("http://tdarr:8265"), any())).thenReturn(false);
+        when(tdarrClient.ping(eq("http://tdarr:8265"), any()))
+            .thenReturn(new TdarrClient.PingResult(false, "Connection failed: refused"));
 
         mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
             .andExpect(status().isOk())

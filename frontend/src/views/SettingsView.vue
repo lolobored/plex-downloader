@@ -84,7 +84,7 @@
             {{ testingTdarr ? 'Testing…' : '↻ Test' }}
           </button>
         </div>
-        <p v-if="tdarrTestOk === true"  class="ok tdarr-status">✓ Connected</p>
+        <p v-if="tdarrTestOk === true"  class="ok tdarr-status">✓ {{ tdarrTestError || 'Connected' }}</p>
         <p v-if="tdarrTestOk === false" class="error-inline tdarr-status">✗ {{ tdarrTestError }}</p>
       </div>
       <div class="field">
@@ -207,7 +207,12 @@ async function testTdarrConnection() {
   try {
     const result = await testTdarr(form.tdarrUrl, form.tdarrApiKey)
     tdarrTestOk.value = result.ok
-    if (!result.ok) tdarrTestError.value = result.error ?? 'Connection failed'
+    if (result.ok) {
+      // show detail (e.g. "Connected (401 — check API key)")
+      if (result.detail && result.detail !== 'Connected') tdarrTestError.value = result.detail
+    } else {
+      tdarrTestError.value = result.error ?? 'Connection failed'
+    }
   } catch {
     tdarrTestOk.value = false
     tdarrTestError.value = 'Request failed'
