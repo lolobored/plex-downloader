@@ -12,6 +12,8 @@
           <span class="type">{{ item.mediaType }} #{{ item.mediaId }}</span>
           <span class="sub">Copying…</span>
         </div>
+        <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
+          :disabled="true" title="Wait for copy to finish">✕</button>
       </div>
     </section>
 
@@ -23,6 +25,9 @@
           <span class="type">{{ item.mediaType }} #{{ item.mediaId }}</span>
           <span class="sub">Queued {{ formatDate(item.requestedAt) }}</span>
         </div>
+        <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
+          :disabled="removing.has(item.id)" title="Remove"
+          @click="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
       </div>
     </section>
 
@@ -43,16 +48,33 @@
             Tdarr error<span v-if="item.tdarrError"> — {{ item.tdarrError }}</span>
           </span>
         </template>
+        <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
+          :disabled="removing.has(item.id)" title="Remove"
+          @click="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDownloadStore } from '@/stores/download.js'
+import { removeQueueItem } from '@/api/download.js'
 
 const dlStore = useDownloadStore()
+const removing = ref(new Set())
+
+async function remove(id) {
+  removing.value = new Set([...removing.value, id])
+  try {
+    await removeQueueItem(id)
+    await dlStore.fetchQueue()
+  } finally {
+    const next = new Set(removing.value)
+    next.delete(id)
+    removing.value = next
+  }
+}
 
 const inProgress = computed(() => dlStore.queueItems.filter(i => i.status === 'IN_PROGRESS'))
 const pending    = computed(() => dlStore.queueItems.filter(i => i.status === 'PENDING'))
@@ -100,4 +122,8 @@ h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform
 .tdarr-badge.processing { background: rgba(52,152,219,.15); color: var(--accent-blue); }
 .tdarr-badge.transcoded { background: rgba(39,174,96,.15); color: var(--green); }
 .tdarr-badge.tdarr-error { background: rgba(231,76,60,.15); color: var(--red); }
+.btn-remove { background: none; border: none; color: var(--text-muted); cursor: pointer;
+              font-size: 1rem; padding: 4px 8px; border-radius: 4px; margin-left: auto; }
+.btn-remove:hover:not(:disabled) { color: var(--red); background: rgba(231,76,60,.1); }
+.btn-remove:disabled { opacity: 0.3; cursor: not-allowed; }
 </style>

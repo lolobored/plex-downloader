@@ -20,15 +20,17 @@ beforeEach(() => {
 
 function fullSettings(overrides = {}) {
   return {
-    'plex.server.url':       'http://localhost:32400',
-    'plex.path.prefix.plex': '/data/plex',
-    'plex.path.prefix.app':  '/movies',
-    'plex.conversion.dir':   '/conversion',
-    'plex.sync.cron':        '0 0 */6 * * *',
-    'plex.sync.libraries':   '1',
-    'watched.sync.cron':     '0 */15 * * * *',
-    'tdarr.server.url':      '',
-    'tdarr.sync.cron':       '',
+    'plex.server.url':                  'http://localhost:32400',
+    'plex.path.prefix.movies.plex':     '/movies',
+    'plex.path.prefix.movies.app':      '/movies',
+    'plex.path.prefix.tv.plex':         '/tv',
+    'plex.path.prefix.tv.app':          '/tvshows',
+    'tdarr.path.prefix.conversion':     '/media/plex-download',
+    'plex.conversion.dir':              '/conversion',
+    'plex.sync.cron':                   '0 0 */6 * * *',
+    'plex.sync.libraries':              '1',
+    'tdarr.server.url':                 '',
+    'tdarr.sync.cron':                  '',
     ...overrides
   }
 }

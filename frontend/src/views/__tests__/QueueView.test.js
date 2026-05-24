@@ -3,6 +3,13 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { useDownloadStore } from '../../stores/download.js'
 import QueueView from '../QueueView.vue'
+import * as downloadApi from '../../api/download.js'
+
+vi.mock('../../api/download.js', () => ({
+  getQueue: vi.fn().mockResolvedValue([]),
+  enqueue: vi.fn().mockResolvedValue({}),
+  removeQueueItem: vi.fn().mockResolvedValue(undefined)
+}))
 
 describe('QueueView', () => {
   function factory(items = []) {
@@ -76,5 +83,35 @@ describe('QueueView', () => {
     ])
     expect(wrapper.text()).toContain('Tdarr error')
     expect(wrapper.text()).toContain('codec not supported')
+  })
+
+  it('shows remove button on each item', () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'NONE', tdarrError: null,
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.find('[data-testid="remove-btn-1"]').exists()).toBe(true)
+  })
+
+  it('remove button is disabled when IN_PROGRESS', () => {
+    const { wrapper } = factory([
+      { id: 2, mediaType: 'MOVIE', mediaId: 5, status: 'IN_PROGRESS',
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: null }
+    ])
+    const btn = wrapper.find('[data-testid="remove-btn-2"]')
+    expect(btn.element.disabled).toBe(true)
+  })
+
+  it('calls removeQueueItem and refreshes queue on click', async () => {
+    const { wrapper, store } = factory([
+      { id: 3, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'TRANSCODED', tdarrError: null,
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    await wrapper.find('[data-testid="remove-btn-3"]').trigger('click')
+    await flushPromises()
+    expect(downloadApi.removeQueueItem).toHaveBeenCalledWith(3)
+    expect(store.fetchQueue).toHaveBeenCalled()
   })
 })

@@ -10,3 +10,7 @@ export async function getQueue() {
   const { data } = await http.get('/api/download/queue')
   return data  // DownloadQueueItem[]
 }
+
+export async function removeQueueItem(id) {
+  await http.delete(`/api/download/${id}`)
+}
