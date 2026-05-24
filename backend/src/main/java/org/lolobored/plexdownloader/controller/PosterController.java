@@ -23,7 +23,7 @@ public class PosterController {
 
     @GetMapping("/{ratingKey}.jpg")
     public ResponseEntity<byte[]> getPoster(@PathVariable String ratingKey) {
-        Path posterDir = Path.of(settings.getRequired("plex.poster.dir")).normalize();
+        Path posterDir = Path.of(settings.get("plex.poster.dir").filter(s -> !s.isBlank()).orElse("/posters")).normalize();
         Path poster = posterDir.resolve(ratingKey + ".jpg").normalize();
 
         if (!poster.startsWith(posterDir)) {

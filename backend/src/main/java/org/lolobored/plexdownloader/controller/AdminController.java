@@ -33,7 +33,6 @@ public class AdminController {
         result.put("plex.server.url",         settingsService.get("plex.server.url").orElse(""));
         result.put("plex.path.prefix.plex",   settingsService.get("plex.path.prefix.plex").orElse(""));
         result.put("plex.path.prefix.app",    settingsService.get("plex.path.prefix.app").orElse(""));
-        result.put("plex.poster.dir",         settingsService.get("plex.poster.dir").orElse(""));
         result.put("plex.conversion.dir",     settingsService.get("plex.conversion.dir").orElse(""));
         result.put("plex.sync.cron",          settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
         result.put("plex.sync.libraries",     settingsService.get("plex.sync.libraries").orElse(""));

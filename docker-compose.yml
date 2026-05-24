@@ -22,6 +22,7 @@ services:
       - ${MOVIES_PATH:-./dev-data/movies}:/movies:ro
       - ${TVSHOWS_PATH:-./dev-data/tvshows}:/tvshows:ro
       - ${CONVERSION_PATH:-./dev-data/conversion}:/conversion:rw
+      - ./volumes/posters:/posters:rw
     extra_hosts:
       - "lolobored.local:192.168.4.100"
     depends_on:

@@ -18,7 +18,7 @@ public class PosterStorageService {
     private final SettingsService settings;
 
     public void downloadIfNeeded(String ratingKey, String thumbPath, Long plexUpdatedAtSeconds) {
-        Path posterDir = Path.of(settings.getRequired("plex.poster.dir"));
+        Path posterDir = Path.of(settings.get("plex.poster.dir").filter(s -> !s.isBlank()).orElse("/posters"));
         Path dest = posterDir.resolve(ratingKey + ".jpg");
 
         if (Files.exists(dest) && plexUpdatedAtSeconds != null) {

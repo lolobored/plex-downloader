@@ -23,7 +23,6 @@ function fullSettings(overrides = {}) {
     'plex.server.url':       'http://localhost:32400',
     'plex.path.prefix.plex': '/data/plex',
     'plex.path.prefix.app':  '/movies',
-    'plex.poster.dir':       '/posters',
     'plex.conversion.dir':   '/conversion',
     'plex.sync.cron':        '0 0 */6 * * *',
     'plex.sync.libraries':   '1',

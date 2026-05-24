@@ -39,10 +39,6 @@
         <input name="appPrefix" v-model="form.plexPathPrefixApp" type="text" />
       </div>
       <div class="field">
-        <label>Poster directory</label>
-        <input name="posterDir" v-model="form.plexPosterDir" type="text" readonly class="readonly" />
-      </div>
-      <div class="field">
         <label>Conversion directory</label>
         <input name="conversionDir" v-model="form.plexConversionDir" type="text" readonly class="readonly" />
       </div>
@@ -114,7 +110,6 @@ const form = reactive({
   plexUrl:            '',
   plexPathPrefixPlex: '',
   plexPathPrefixApp:  '',
-  plexPosterDir:      '',
   plexConversionDir:  '',
   syncCron:           '',
   watchedSyncCron:    '',
@@ -128,7 +123,6 @@ onMounted(async () => {
     form.plexUrl            = s['plex.server.url']        ?? ''
     form.plexPathPrefixPlex = s['plex.path.prefix.plex']  ?? ''
     form.plexPathPrefixApp  = s['plex.path.prefix.app']   ?? ''
-    form.plexPosterDir      = s['plex.poster.dir']        ?? ''
     form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
     form.syncCron           = s['plex.sync.cron']         ?? ''
     form.watchedSyncCron    = s['watched.sync.cron']      ?? ''
