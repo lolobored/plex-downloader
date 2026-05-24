@@ -45,11 +45,11 @@ public class TdarrClient {
     }
 
     protected TdarrFileResponse fetchStatus(String baseUrl, String filePath) {
-        Map<String, Object> body = Map.of("data", Map.of(
+        Map<String, Object> body = Map.of(
             "collection", "FileJSONDB",
             "mode",       "getByID",
             "docID",      filePath
-        ));
+        );
         return RestClient.create().post()
             .uri(baseUrl + "/api/v2/cruddb")
             .contentType(MediaType.APPLICATION_JSON)

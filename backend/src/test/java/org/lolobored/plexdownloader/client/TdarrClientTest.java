@@ -109,4 +109,15 @@ class TdarrClientTest {
         assertThat(client.getFileStatus("/file.mkv").get().status())
             .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
     }
+
+    @Test
+    void getFileStatus_returnsNone_whenStatusBlank() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setTdarrStatus("  ");
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        assertThat(client.getFileStatus("/file.mkv").get().status())
+            .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
+    }
 }
