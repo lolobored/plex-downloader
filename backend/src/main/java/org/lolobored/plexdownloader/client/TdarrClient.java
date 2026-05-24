@@ -66,7 +66,7 @@ public class TdarrClient {
             case "Queued", "Processing" -> DownloadQueueItem.TdarrStatus.PROCESSING;
             case "Done transcoding", "No action needed" -> DownloadQueueItem.TdarrStatus.TRANSCODED;
             case "Transcode error", "Health error" -> DownloadQueueItem.TdarrStatus.TDARR_ERROR;
-            default -> DownloadQueueItem.TdarrStatus.PROCESSING;
+            default -> DownloadQueueItem.TdarrStatus.NONE;
         };
     }
 
