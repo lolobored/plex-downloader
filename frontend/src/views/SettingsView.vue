@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSettings, putSettings, getSyncStatus, triggerSync } from '@/api/admin.js'
 
@@ -76,6 +76,8 @@ const saving     = ref(false)
 const saveOk     = ref(false)
 const syncing    = ref(false)
 const syncStatus = ref(null)
+let saveOkTimer = null
+onUnmounted(() => clearTimeout(saveOkTimer))
 
 const form = reactive({
   plexUrl:            '',
@@ -111,8 +113,9 @@ async function save() {
   if (form.plexToken) payload['plex.server.token'] = form.plexToken
   try {
     await putSettings(payload)
+    form.plexToken = ''  // clear after save — don't retain in memory
     saveOk.value = true
-    setTimeout(() => { saveOk.value = false }, 2000)
+    saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
   } finally {
     saving.value = false
   }
