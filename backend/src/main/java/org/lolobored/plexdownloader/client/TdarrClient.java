@@ -8,10 +8,12 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.net.http.HttpClient;
 import java.util.Map;
 import java.util.Optional;
 
@@ -21,6 +23,14 @@ import java.util.Optional;
 public class TdarrClient {
 
     private final SettingsService settings;
+
+    /** HTTP/1.1-only client — Tdarr does not support HTTP/2. */
+    private static final RestClient HTTP_CLIENT = RestClient.builder()
+        .requestFactory(new JdkClientHttpRequestFactory(
+            HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build()))
+        .build();
 
     public record TdarrFileStatus(
         DownloadQueueItem.TdarrStatus status,
@@ -77,7 +87,7 @@ public class TdarrClient {
             "mode",       "getByID",
             "docID",      filePath
         );
-        return withAuth(RestClient.create().post()
+        return withAuth(HTTP_CLIENT.post()
             .uri(baseUrl + "/api/v2/cruddb")
             .contentType(MediaType.APPLICATION_JSON)
             .body(body))
@@ -95,7 +105,7 @@ public class TdarrClient {
         if (url == null || url.isBlank()) return new PingResult(false, "URL is empty");
         String key = (apiKey != null && !apiKey.isBlank()) ? apiKey : this.apiKey();
         try {
-            RestClient.RequestHeadersSpec<?> req = RestClient.create().get()
+            RestClient.RequestHeadersSpec<?> req = HTTP_CLIENT.get()
                 .uri(url.stripTrailing() + "/api/v2/status");
             if (!key.isBlank()) req = req.header("x-api-key", key);
             req.retrieve().toBodilessEntity();
@@ -122,7 +132,7 @@ public class TdarrClient {
             "mode",       "deleteOne",
             "docID",      filePath
         );
-        withAuth(RestClient.create().post()
+        withAuth(HTTP_CLIENT.post()
             .uri(baseUrl + "/api/v2/cruddb")
             .contentType(MediaType.APPLICATION_JSON)
             .body(body))
