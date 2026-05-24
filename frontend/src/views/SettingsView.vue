@@ -69,10 +69,14 @@
         </span>
         <span v-if="syncStatus.error" class="sync-error">{{ syncStatus.error }}</span>
       </div>
-      <div v-if="syncing" class="sync-progress">
-        <div class="progress-bar"><div class="progress-fill"></div></div>
-        <span v-if="syncStatus?.itemsSynced" class="progress-label">
-          Synced {{ syncStatus.itemsSynced }} items…
+      <div v-if="syncing || syncStatus?.state === 'RUNNING'" class="sync-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" :style="progressStyle"></div>
+        </div>
+        <span class="progress-label">
+          {{ syncStatus?.itemsSynced ?? 0 }}
+          <template v-if="syncStatus?.totalItems"> / {{ syncStatus.totalItems }}</template>
+          items synced…
         </span>
       </div>
       <div class="sync-actions">
@@ -101,7 +105,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries } from '@/api/admin.js'
 
@@ -140,6 +144,13 @@ let saveOkTimer = null
 let destroyed = false
 onUnmounted(() => { clearTimeout(saveOkTimer); destroyed = true })
 
+const progressStyle = computed(() => {
+  const s = syncStatus.value
+  if (!s || !s.totalItems) return { width: '0%' }
+  const pct = Math.min(100, Math.round((s.itemsSynced / s.totalItems) * 100))
+  return { width: pct + '%' }
+})
+
 const availableLibraries  = ref([])
 const selectedLibraryKeys = ref([])
 const loadingLibraries    = ref(false)
@@ -170,6 +181,8 @@ onMounted(async () => {
     const storedLibs = s['plex.sync.libraries'] ?? ''
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
     syncStatus.value = ss
+    // Resume progress bar if sync was already running when page loaded
+    if (ss.state === 'RUNNING') resumePolling()
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
@@ -212,11 +225,9 @@ async function loadLibraries() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
-async function sync() {
+async function resumePolling() {
   syncing.value = true
   try {
-    await triggerSync()
-    await sleep(600)          // give backend a moment to flip to RUNNING
     while (!destroyed) {
       const s = await getSyncStatus()
       if (destroyed) break
@@ -225,6 +236,17 @@ async function sync() {
       await sleep(1500)
     }
   } finally {
+    if (!destroyed) syncing.value = false
+  }
+}
+
+async function sync() {
+  syncing.value = true
+  try {
+    await triggerSync()
+    await sleep(600)   // give backend a moment to flip to RUNNING
+    await resumePolling()
+  } catch (e) {
     if (!destroyed) syncing.value = false
   }
 }
@@ -257,17 +279,15 @@ input.readonly { opacity: 0.6; cursor: default; }
 .last-sync  { font-size: .85rem; color: var(--text-muted); }
 .sync-error { font-size: .85rem; color: var(--red); }
 .sync-progress { margin: 10px 0 4px; }
-.progress-bar { height: 4px; border-radius: 2px; background: var(--surface2); overflow: hidden; }
+.progress-bar { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; }
 .progress-fill {
-  height: 100%; width: 40%; border-radius: 2px;
+  height: 100%;
+  border-radius: 3px;
   background: var(--accent-blue);
-  animation: slide 1.4s ease-in-out infinite;
+  transition: width .6s ease;
+  min-width: 2px;
 }
-@keyframes slide {
-  0%   { transform: translateX(-200%); }
-  100% { transform: translateX(400%); }
-}
-.progress-label { font-size: .8rem; color: var(--text-muted); display: block; margin-top: 4px; }
+.progress-label { font-size: .8rem; color: var(--text-muted); display: block; margin-top: 5px; }
 .sync-actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
 .btn-sync { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
             border-radius: 6px; padding: 8px 16px; }

@@ -44,11 +44,12 @@ public class LibrarySyncService {
 
     private final AtomicReference<SyncState> state = new AtomicReference<>(SyncState.IDLE);
     private final AtomicInteger itemsSynced = new AtomicInteger(0);
+    private final AtomicInteger totalItems  = new AtomicInteger(0);
     private volatile Instant lastSyncAt;
     private volatile String lastError;
 
     public SyncStatusResponse status() {
-        return new SyncStatusResponse(state.get().name(), lastSyncAt, itemsSynced.get(), lastError);
+        return new SyncStatusResponse(state.get().name(), lastSyncAt, itemsSynced.get(), totalItems.get(), lastError);
     }
 
     public boolean isRunning() {
@@ -62,6 +63,7 @@ public class LibrarySyncService {
             return;
         }
         itemsSynced.set(0);
+        totalItems.set(0);
         lastError = null;
 
         try {
@@ -77,6 +79,13 @@ public class LibrarySyncService {
                 .filter(l -> "movie".equals(l.getType()) || "show".equals(l.getType()))
                 .filter(l -> selectedKeys.isEmpty() || selectedKeys.contains(l.getKey()))
                 .toList();
+
+            // Pre-flight: count total items across all libraries for progress tracking
+            int total = libraries.stream()
+                .mapToInt(lib -> plexClient.getLibraryContents(lib.getKey(), 0).totalSize())
+                .sum();
+            totalItems.set(total);
+            log.info("Sync starting: {} total items across {} libraries", total, libraries.size());
 
             for (PlexLibrary lib : libraries) {
                 if ("movie".equals(lib.getType())) {
