@@ -1,0 +1,19 @@
+# Environment — contains secrets, never commit
+.env
+
+# Dev data dirs — local media stubs
+dev-data/
+
+# Build outputs
+backend/build/
+backend/.gradle/
+frontend/dist/
+frontend/node_modules/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store

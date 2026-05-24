@@ -2,34 +2,49 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "80:80"
+      - "3615:80"
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   backend:
     build: ./backend
     ports:
-      - "8080:8080"
+      - "3616:8080"
+    restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/plexdownloader
       SPRING_DATASOURCE_USERNAME: plexdl
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
     volumes:
-      - ${MOVIES_PATH}:/movies:ro
-      - ${TVSHOWS_PATH}:/tvshows:ro
-      - ${CONVERSION_PATH}:/conversion:rw
+      - ${MOVIES_PATH:-./dev-data/movies}:/movies:ro
+      - ${TVSHOWS_PATH:-./dev-data/tvshows}:/tvshows:ro
+      - ${CONVERSION_PATH:-./dev-data/conversion}:/conversion:rw
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: plexdownloader
       POSTGRES_USER: plexdl
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./volumes/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plexdl -d plexdownloader"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
-  postgres_data:
