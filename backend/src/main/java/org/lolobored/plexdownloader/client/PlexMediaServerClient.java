@@ -32,7 +32,13 @@ public class PlexMediaServerClient {
     private final UserRepository userRepository;
 
     private RestClient buildClient() {
-        String baseUrl = settings.getRequired("plex.server.url");
+        return buildClient(null);
+    }
+
+    private RestClient buildClient(String baseUrlOverride) {
+        String baseUrl = (baseUrlOverride != null && !baseUrlOverride.isBlank())
+            ? baseUrlOverride
+            : settings.getRequired("plex.server.url");
         String token = userRepository.findById(1L)
             .map(u -> u.getPlexToken())
             .filter(t -> t != null && !t.isBlank())
@@ -48,7 +54,11 @@ public class PlexMediaServerClient {
     }
 
     public List<PlexLibrary> getLibraries() {
-        PlexLibrariesResponse resp = buildClient().get()
+        return getLibraries(null);
+    }
+
+    public List<PlexLibrary> getLibraries(String baseUrlOverride) {
+        PlexLibrariesResponse resp = buildClient(baseUrlOverride).get()
             .uri("/library/sections")
             .retrieve()
             .body(PlexLibrariesResponse.class);

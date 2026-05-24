@@ -43,8 +43,11 @@ public class AdminController {
     }
 
     @GetMapping("/plex/libraries")
-    public List<PlexLibrary> getPlexLibraries() {
-        return plexClient.getLibraries();
+    public List<PlexLibrary> getPlexLibraries(
+            @RequestParam(required = false) String url) {
+        return url != null && !url.isBlank()
+            ? plexClient.getLibraries(url)
+            : plexClient.getLibraries();
     }
 
     @PutMapping("/settings")

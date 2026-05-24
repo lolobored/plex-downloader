@@ -163,7 +163,7 @@ async function loadLibraries() {
   loadingLibraries.value = true
   libraryError.value = null
   try {
-    availableLibraries.value = await getPlexLibraries()
+    availableLibraries.value = await getPlexLibraries(form.plexUrl)
   } catch {
     libraryError.value = 'Could not load libraries. Check server URL and ensure you are logged in.'
   } finally {

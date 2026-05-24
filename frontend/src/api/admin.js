@@ -18,7 +18,8 @@ export async function triggerSync() {
   await http.post('/api/admin/sync')
 }
 
-export async function getPlexLibraries() {
-  const { data } = await http.get('/api/admin/plex/libraries')
+export async function getPlexLibraries(url) {
+  const params = url ? { url } : {}
+  const { data } = await http.get('/api/admin/plex/libraries', { params })
   return data  // [{ key, title, type, agent }, ...]
 }
