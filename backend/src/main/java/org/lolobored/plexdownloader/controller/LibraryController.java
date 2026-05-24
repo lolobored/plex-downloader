@@ -25,7 +25,7 @@ public class LibraryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("title"));
-        return movieRepo.search(search, year, pageable).map(MovieResponse::from);
+        return movieRepo.search(search != null ? search : "", year, pageable).map(MovieResponse::from);
     }
 
     @GetMapping("/api/movies/{id}")
@@ -42,7 +42,7 @@ public class LibraryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("title"));
-        return showRepo.search(search, year, pageable).map(TvShowResponse::from);
+        return showRepo.search(search != null ? search : "", year, pageable).map(TvShowResponse::from);
     }
 
     @GetMapping("/api/tv/{showId}")

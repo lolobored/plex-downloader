@@ -10,7 +10,7 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
     Optional<Movie> findByPlexId(String plexId);
 
     @Query("SELECT m FROM Movie m WHERE " +
-           "(:search IS NULL OR LOWER(m.title) LIKE LOWER(CONCAT('%',:search,'%'))) AND " +
+           "(:search = '' OR LOWER(m.title) LIKE LOWER(CONCAT('%',:search,'%'))) AND " +
            "(:year IS NULL OR m.year = :year)")
     Page<Movie> search(@Param("search") String search,
                        @Param("year") Integer year,

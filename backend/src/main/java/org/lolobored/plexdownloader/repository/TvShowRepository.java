@@ -10,7 +10,7 @@ public interface TvShowRepository extends JpaRepository<TvShow, Long> {
     Optional<TvShow> findByPlexId(String plexId);
 
     @Query("SELECT t FROM TvShow t WHERE " +
-           "(:search IS NULL OR LOWER(t.title) LIKE LOWER(CONCAT('%',:search,'%'))) AND " +
+           "(:search = '' OR LOWER(t.title) LIKE LOWER(CONCAT('%',:search,'%'))) AND " +
            "(:year IS NULL OR t.year = :year)")
     Page<TvShow> search(@Param("search") String search,
                         @Param("year") Integer year,
