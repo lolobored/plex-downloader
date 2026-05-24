@@ -179,7 +179,7 @@ public class DownloadService {
         queueRepo.delete(item);
     }
 
-    @Async
+    @Async("downloadExecutor")
     public void executeCopyAsync(Long itemId) {
         DownloadQueueItem item = queueRepo.findById(itemId).orElse(null);
         if (item == null) return;
