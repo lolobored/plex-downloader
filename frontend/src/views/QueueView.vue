@@ -47,6 +47,13 @@
           <span v-else-if="item.tdarrStatus === 'TDARR_ERROR'" class="tdarr-badge tdarr-error">
             Tdarr error<span v-if="item.tdarrError"> — {{ item.tdarrError }}</span>
           </span>
+          <button :data-testid="'tdarr-refresh-btn-' + item.id"
+                  class="btn-tdarr-refresh"
+                  :disabled="refreshing.has(item.id)"
+                  :title="refreshing.has(item.id) ? 'Refreshing…' : 'Check Tdarr status'"
+                  @click="refreshTdarr(item.id)">
+            {{ refreshing.has(item.id) ? '…' : '↻' }}
+          </button>
         </template>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
           :disabled="removing.has(item.id)" title="Remove"
@@ -59,10 +66,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDownloadStore } from '@/stores/download.js'
-import { removeQueueItem } from '@/api/download.js'
+import { removeQueueItem, refreshTdarrStatus } from '@/api/download.js'
 
 const dlStore = useDownloadStore()
-const removing = ref(new Set())
+const removing    = ref(new Set())
+const refreshing  = ref(new Set())
 
 async function remove(id) {
   removing.value = new Set([...removing.value, id])
@@ -73,6 +81,18 @@ async function remove(id) {
     const next = new Set(removing.value)
     next.delete(id)
     removing.value = next
+  }
+}
+
+async function refreshTdarr(id) {
+  refreshing.value = new Set([...refreshing.value, id])
+  try {
+    await refreshTdarrStatus(id)
+    await dlStore.fetchQueue()
+  } finally {
+    const next = new Set(refreshing.value)
+    next.delete(id)
+    refreshing.value = next
   }
 }
 
@@ -126,4 +146,8 @@ h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform
               font-size: 1rem; padding: 4px 8px; border-radius: 4px; margin-left: auto; }
 .btn-remove:hover:not(:disabled) { color: var(--red); background: rgba(231,76,60,.1); }
 .btn-remove:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-tdarr-refresh { background: none; border: none; color: var(--text-muted); cursor: pointer;
+                     font-size: .85rem; padding: 2px 6px; border-radius: 4px; }
+.btn-tdarr-refresh:hover:not(:disabled) { color: var(--accent-blue); background: rgba(52,152,219,.1); }
+.btn-tdarr-refresh:disabled { opacity: 0.3; cursor: not-allowed; }
 </style>

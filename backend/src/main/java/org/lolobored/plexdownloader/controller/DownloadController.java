@@ -7,6 +7,7 @@ import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.service.DownloadService;
 import org.lolobored.plexdownloader.service.SubscriptionService;
+import org.lolobored.plexdownloader.service.TdarrSyncScheduler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +23,7 @@ public class DownloadController {
 
     private final DownloadService downloadService;
     private final SubscriptionService subscriptionService;
+    private final TdarrSyncScheduler tdarrSync;
 
     @PostMapping
     public DownloadResponse download(@RequestBody DownloadRequest req,
@@ -59,5 +61,10 @@ public class DownloadController {
     public void cancel(@PathVariable Long id,
                        @AuthenticationPrincipal User user) {
         downloadService.cancel(id, user);
+    }
+
+    @PostMapping("/{id}/tdarr-refresh")
+    public DownloadQueueItem refreshTdarrStatus(@PathVariable Long id) {
+        return tdarrSync.syncOne(id);
     }
 }
