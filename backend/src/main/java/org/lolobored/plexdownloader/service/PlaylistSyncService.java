@@ -8,7 +8,10 @@ import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,6 +35,10 @@ public class PlaylistSyncService {
     private final DownloadService downloadService;
     private final TdarrClient tdarrClient;
 
+    @Autowired
+    @Lazy
+    private PlaylistSyncService self;
+
     public void syncAll() {
         List<PlexPlaylist> plexPlaylists;
         try {
@@ -40,16 +47,18 @@ public class PlaylistSyncService {
             log.warn("Failed to fetch playlists from Plex: {}", e.getMessage());
             return;
         }
+        PlaylistSyncService proxy = self != null ? self : this;
         for (PlexPlaylist pp : plexPlaylists) {
             try {
-                syncPlaylist(pp);
+                proxy.syncPlaylist(pp);
             } catch (Exception e) {
                 log.warn("Failed to sync playlist {}: {}", pp.getRatingKey(), e.getMessage());
             }
         }
     }
 
-    private void syncPlaylist(PlexPlaylist pp) {
+    @Transactional
+    void syncPlaylist(PlexPlaylist pp) {
         // Upsert Playlist row
         Playlist local = playlistRepo.findByPlexId(pp.getRatingKey()).orElseGet(Playlist::new);
         local.setPlexId(pp.getRatingKey());
@@ -85,10 +94,15 @@ public class PlaylistSyncService {
         for (String plexId : added) {
             PlexItem pi = fetchedByKey.get(plexId);
             if (pi == null) continue;
+            String mediaType = mapMediaType(pi.getType());
+            if (mediaType == null) {
+                log.debug("Skipping playlist item {} with unknown type {}", pi.getRatingKey(), pi.getType());
+                continue;
+            }
             PlaylistItem item = new PlaylistItem();
             item.setPlaylistId(local.getId());
             item.setPlexId(pi.getRatingKey());
-            item.setMediaType(mapMediaType(pi.getType()));
+            item.setMediaType(mediaType);
             item.setOrdinal(ordinalBase + ordinalOffset++);
             itemRepo.save(item);
         }
@@ -101,7 +115,10 @@ public class PlaylistSyncService {
             User user = sub.getUser();
             for (String plexId : added) {
                 PlexItem pi = fetchedByKey.get(plexId);
-                if (pi != null) enqueueItem(user, pi.getRatingKey(), mapMediaType(pi.getType()));
+                if (pi != null) {
+                    String mt = mapMediaType(pi.getType());
+                    if (mt != null) enqueueItem(user, pi.getRatingKey(), mt);
+                }
             }
             for (String plexId : removed) {
                 PlaylistItem pi = oldByPlexId.get(plexId);
@@ -163,6 +180,8 @@ public class PlaylistSyncService {
     }
 
     private String mapMediaType(String plexType) {
-        return "movie".equals(plexType) ? "MOVIE" : "EPISODE";
+        if ("movie".equals(plexType)) return "MOVIE";
+        if ("episode".equals(plexType)) return "EPISODE";
+        return null;
     }
 }
