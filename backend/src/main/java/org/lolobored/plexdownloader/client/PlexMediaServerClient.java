@@ -3,6 +3,7 @@ package org.lolobored.plexdownloader.client;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.lolobored.plexdownloader.client.dto.PlexItem;
+import org.lolobored.plexdownloader.client.dto.PlexPlaylist;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.client.dto.PlexLibraryPage;
 import org.lolobored.plexdownloader.repository.UserRepository;
@@ -105,6 +106,36 @@ public class PlexMediaServerClient {
         return items != null ? items : List.of();
     }
 
+    /**
+     * Returns all Plex playlists of type "video".
+     * Returns empty list if Plex is unreachable or has no playlists.
+     */
+    public List<PlexPlaylist> getPlaylists() {
+        PlexPlaylistsResponse resp = buildClient().get()
+            .uri("/playlists/all")
+            .retrieve()
+            .body(PlexPlaylistsResponse.class);
+        if (resp == null || resp.getMediaContainer() == null) return List.of();
+        List<PlexPlaylist> items = resp.getMediaContainer().getMetadata();
+        if (items == null) return List.of();
+        return items.stream()
+            .filter(p -> "video".equals(p.getPlaylistType()))
+            .toList();
+    }
+
+    /**
+     * Returns items inside a Plex playlist. Each item is a movie or episode PlexItem.
+     */
+    public List<PlexItem> getPlaylistItems(String ratingKey) {
+        PlexLibraryContentsResponse resp = buildClient().get()
+            .uri("/playlists/{key}/items", ratingKey)
+            .retrieve()
+            .body(PlexLibraryContentsResponse.class);
+        if (resp == null || resp.getMediaContainer() == null) return List.of();
+        List<PlexItem> items = resp.getMediaContainer().getMetadata();
+        return items != null ? items : List.of();
+    }
+
     public void downloadThumb(String thumbPath, Path destination) {
         byte[] bytes = buildClient().get()
             .uri(thumbPath)
@@ -145,6 +176,18 @@ public class PlexMediaServerClient {
             private int totalSize;
             @JsonProperty("Metadata")
             private List<PlexItem> metadata;
+        }
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class PlexPlaylistsResponse {
+        @JsonProperty("MediaContainer")
+        private Container mediaContainer;
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        static class Container {
+            @JsonProperty("Metadata")
+            private List<PlexPlaylist> metadata;
         }
     }
 }
