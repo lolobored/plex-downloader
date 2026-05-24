@@ -1,6 +1,8 @@
 package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.model.*;
+import org.lolobored.plexdownloader.model.Season;
+import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -91,5 +93,96 @@ class DownloadServiceTest {
     void downloadQueueItem_hasDefaultTdarrStatusNone() {
         DownloadQueueItem item = new DownloadQueueItem();
         assertThat(item.getTdarrStatus()).isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
+    }
+
+    @Test
+    void enqueueMovie_buildsStructuredPath() {
+        Movie movie = new Movie();
+        movie.setId(1L);
+        movie.setTitle("The Dark Knight");
+        movie.setFilePath("/plex/movies/dark.mkv");
+
+        User user = new User();
+        user.setId(1L);
+
+        when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(settings.getRequired("plex.conversion.dir")).thenReturn("/conv");
+        when(pathMapping.translate("/plex/movies/dark.mkv")).thenReturn("/mnt/movies/dark.mkv");
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        when(queueRepo.save(any())).thenAnswer(inv -> {
+            DownloadQueueItem i = inv.getArgument(0);
+            i.setId(2L);
+            return i;
+        });
+
+        service.enqueueMovie(1L, user);
+
+        verify(queueRepo).save(argThat(item ->
+            item.getDestFilePath() != null &&
+            item.getDestFilePath().replace('\\', '/').contains("movies/the_dark_knight/dark.mkv")
+        ));
+    }
+
+    @Test
+    void enqueueEpisode_buildsStructuredPath() {
+        TvShow show = new TvShow();
+        show.setId(100L);
+        show.setTitle("Breaking Bad");
+
+        Season season = new Season();
+        season.setId(10L);
+        season.setSeasonNumber(1);
+        season.setShow(show);
+
+        Episode ep = new Episode();
+        ep.setId(1L);
+        ep.setFilePath("/plex/tvshows/bb/s01e01.mkv");
+        ep.setSeason(season);
+
+        User user = new User();
+        user.setId(1L);
+
+        when(episodeRepo.findById(1L)).thenReturn(Optional.of(ep));
+        when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
+        when(showRepo.findById(100L)).thenReturn(Optional.of(show));
+        when(settings.getRequired("plex.conversion.dir")).thenReturn("/conv");
+        when(pathMapping.translate("/plex/tvshows/bb/s01e01.mkv")).thenReturn("/mnt/tvshows/bb/s01e01.mkv");
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        when(queueRepo.save(any())).thenAnswer(inv -> {
+            DownloadQueueItem i = inv.getArgument(0);
+            i.setId(3L);
+            return i;
+        });
+
+        service.enqueueEpisode(1L, user);
+
+        verify(queueRepo).save(argThat(item ->
+            item.getDestFilePath() != null &&
+            item.getDestFilePath().replace('\\', '/').contains("tvshows/breaking_bad/Season 01/s01e01.mkv")
+        ));
+    }
+
+    @Test
+    void executeCopyAsync_atomicRename_cleansUpTempFile() throws Exception {
+        Path sourceFile = tempDir.resolve("source.mkv");
+        Files.writeString(sourceFile, "video-content");
+        Path destDir = tempDir.resolve("dest");
+        Path destFile = destDir.resolve("output.mkv");
+
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(5L);
+        item.setSourceFilePath("/plex/source.mkv");
+        item.setDestFilePath(destFile.toString());
+        item.setStatus(DownloadQueueItem.Status.PENDING);
+
+        when(queueRepo.findById(5L)).thenReturn(Optional.of(item));
+        when(pathMapping.translate("/plex/source.mkv")).thenReturn(sourceFile.toString());
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.executeCopyAsync(5L);
+
+        assertThat(destFile).exists();
+        assertThat(destDir.resolve("output.mkv.tmp")).doesNotExist();
+        assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
     }
 }

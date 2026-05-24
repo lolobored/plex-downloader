@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -40,8 +41,9 @@ public class DownloadService {
     public List<Long> enqueueMovie(Long movieId, User user) {
         Movie movie = movieRepo.findById(movieId)
             .orElseThrow(() -> new IllegalArgumentException("Movie not found: " + movieId));
+        String subDir = "movies/" + slugify(movie.getTitle());
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.MOVIE,
-            movieId, movie.getFilePath());
+            movieId, movie.getFilePath(), subDir);
         item = queueRepo.save(item);
         self.executeCopyAsync(item.getId());
         return List.of(item.getId());
@@ -50,20 +52,32 @@ public class DownloadService {
     public List<Long> enqueueEpisode(Long episodeId, User user) {
         Episode ep = episodeRepo.findById(episodeId)
             .orElseThrow(() -> new IllegalArgumentException("Episode not found: " + episodeId));
+        Season season = seasonRepo.findById(ep.getSeason().getId())
+            .orElseThrow(() -> new IllegalArgumentException("Season not found for episode: " + episodeId));
+        TvShow show = showRepo.findById(season.getShow().getId())
+            .orElseThrow(() -> new IllegalArgumentException("Show not found for episode: " + episodeId));
+        String subDir = "tvshows/" + slugify(show.getTitle()) +
+                        "/Season " + String.format("%02d", season.getSeasonNumber());
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
-            episodeId, ep.getFilePath());
+            episodeId, ep.getFilePath(), subDir);
         item = queueRepo.save(item);
         self.executeCopyAsync(item.getId());
         return List.of(item.getId());
     }
 
     public List<Long> enqueueSeason(Long seasonId, User user) {
+        Season season = seasonRepo.findById(seasonId)
+            .orElseThrow(() -> new IllegalArgumentException("Season not found: " + seasonId));
+        TvShow show = showRepo.findById(season.getShow().getId())
+            .orElseThrow(() -> new IllegalArgumentException("Show not found for season: " + seasonId));
         List<Episode> episodes = episodeRepo.findBySeasonIdOrderByEpisodeNumber(seasonId);
-        if (episodes.isEmpty()) throw new IllegalArgumentException("Season not found or empty: " + seasonId);
+        if (episodes.isEmpty()) throw new IllegalArgumentException("Season has no episodes: " + seasonId);
+        String subDir = "tvshows/" + slugify(show.getTitle()) +
+                        "/Season " + String.format("%02d", season.getSeasonNumber());
         List<Long> ids = new ArrayList<>();
         for (Episode ep : episodes) {
             DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
-                ep.getId(), ep.getFilePath());
+                ep.getId(), ep.getFilePath(), subDir);
             item = queueRepo.save(item);
             self.executeCopyAsync(item.getId());
             ids.add(item.getId());
@@ -85,12 +99,20 @@ public class DownloadService {
         return queueRepo.findAllByOrderByQueuePositionAsc();
     }
 
+    static String slugify(String title) {
+        if (title == null) return "unknown";
+        return title.toLowerCase()
+                    .replaceAll("[^a-z0-9\\s]", "")
+                    .trim()
+                    .replaceAll("\\s+", "_");
+    }
+
     private DownloadQueueItem buildItem(User user, DownloadQueueItem.MediaType type,
-                                        Long mediaId, String plexFilePath) {
+                                        Long mediaId, String plexFilePath, String subDir) {
         String appPath = pathMapping.translate(plexFilePath);
         String conversionDir = settings.getRequired("plex.conversion.dir");
         String filename = Path.of(appPath).getFileName().toString();
-        String destPath = Path.of(conversionDir, filename).toString();
+        String destPath = Path.of(conversionDir, subDir, filename).toString();
 
         int nextPos = queueRepo.findMaxQueuePosition().orElse(0) + 1;
 
@@ -120,8 +142,12 @@ public class DownloadService {
                 throw new IOException("Source file not found: " + source);
             }
             Files.createDirectories(dest.getParent());
-            if (!Files.exists(dest) || Files.size(dest) != Files.size(source)) {
-                Files.copy(source, dest, StandardCopyOption.REPLACE_EXISTING);
+            Path temp = Path.of(item.getDestFilePath() + ".tmp");
+            Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(temp, dest, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
             }
             item.setStatus(DownloadQueueItem.Status.DONE);
             item.setCompletedAt(Instant.now());
