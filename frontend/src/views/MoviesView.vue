@@ -119,6 +119,12 @@ async function loadMore() {
   } finally {
     loading.value = false
   }
+  // IntersectionObserver won't re-fire if sentinel never left the viewport.
+  // Check manually: if sentinel is still on-screen and there are more pages, keep loading.
+  if (hasMore.value && sentinel.value) {
+    const rect = sentinel.value.getBoundingClientRect()
+    if (rect.top < window.innerHeight + 400) loadMore()
+  }
 }
 
 function reset() {
