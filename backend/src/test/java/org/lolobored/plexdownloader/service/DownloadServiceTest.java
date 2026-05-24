@@ -59,7 +59,7 @@ class DownloadServiceTest {
         Movie movie = new Movie();
         movie.setId(1L);
         movie.setPlexId("12345");
-        movie.setFilePath("/plex/movies/movie.mkv");
+        movie.setFilePath("/plex/movies/Some Movie (2024)/movie.mkv");
 
         User user = new User();
         user.setId(1L);
@@ -78,7 +78,7 @@ class DownloadServiceTest {
         verify(queueRepo).save(argThat(item ->
             item.getMediaType() == DownloadQueueItem.MediaType.MOVIE
             && item.getStatus() == DownloadQueueItem.Status.PENDING
-            && "/plex/movies/movie.mkv".equals(item.getSourceFilePath())
+            && "/plex/movies/Some Movie (2024)/movie.mkv".equals(item.getSourceFilePath())
         ));
     }
 
@@ -105,7 +105,7 @@ class DownloadServiceTest {
         Movie movie = new Movie();
         movie.setId(1L);
         movie.setTitle("The Dark Knight");
-        movie.setFilePath("/plex/movies/dark.mkv");
+        movie.setFilePath("/plex/movies/The Dark Knight (2008)/dark.mkv");
 
         User user = new User();
         user.setId(1L);
@@ -123,7 +123,7 @@ class DownloadServiceTest {
 
         verify(queueRepo).save(argThat(item ->
             item.getDestFilePath() != null &&
-            item.getDestFilePath().replace('\\', '/').contains("/in-flight/movies/the_dark_knight/dark.mkv")
+            item.getDestFilePath().replace('\\', '/').contains("/in-flight/movies/The Dark Knight (2008)/dark.mkv")
         ));
     }
 
@@ -140,7 +140,7 @@ class DownloadServiceTest {
 
         Episode ep = new Episode();
         ep.setId(1L);
-        ep.setFilePath("/plex/tvshows/bb/s01e01.mkv");
+        ep.setFilePath("/plex/tvshows/Breaking Bad/Season 01/s01e01.mkv");
         ep.setSeason(season);
 
         User user = new User();
@@ -161,7 +161,7 @@ class DownloadServiceTest {
 
         verify(queueRepo).save(argThat(item ->
             item.getDestFilePath() != null &&
-            item.getDestFilePath().replace('\\', '/').contains("/in-flight/tvshows/breaking_bad/Season 01/s01e01.mkv")
+            item.getDestFilePath().replace('\\', '/').contains("/in-flight/tvshows/Breaking Bad/Season 01/s01e01.mkv")
         ));
     }
 
@@ -170,7 +170,7 @@ class DownloadServiceTest {
         Movie movie = new Movie();
         movie.setId(1L);
         movie.setTitle("Inception");
-        movie.setFilePath("/movies/inception.mkv");
+        movie.setFilePath("/movies/Inception (2010)/inception.mkv");
 
         User user = new User();
         user.setId(1L);

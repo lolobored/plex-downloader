@@ -45,7 +45,7 @@ public class DownloadService {
     public List<Long> enqueueMovie(Long movieId, User user) {
         Movie movie = movieRepo.findById(movieId)
             .orElseThrow(() -> new IllegalArgumentException("Movie not found: " + movieId));
-        String subDir = "movies/" + slugify(movie.getTitle());
+        String subDir = "movies/" + Path.of(movie.getFilePath()).getParent().getFileName().toString();
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.MOVIE,
             movieId, movie.getFilePath(), subDir);
         item = queueRepo.save(item);
@@ -60,8 +60,8 @@ public class DownloadService {
             .orElseThrow(() -> new IllegalArgumentException("Season not found for episode: " + episodeId));
         TvShow show = showRepo.findById(season.getShow().getId())
             .orElseThrow(() -> new IllegalArgumentException("Show not found for episode: " + episodeId));
-        String subDir = "tvshows/" + slugify(show.getTitle()) +
-                        "/Season " + String.format("%02d", season.getSeasonNumber());
+        String subDir = "tvshows/" + Path.of(ep.getFilePath()).getParent().getParent().getFileName().toString()
+                        + "/" + Path.of(ep.getFilePath()).getParent().getFileName().toString();
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
             episodeId, ep.getFilePath(), subDir);
         item = queueRepo.save(item);
@@ -76,10 +76,10 @@ public class DownloadService {
             .orElseThrow(() -> new IllegalArgumentException("Show not found for season: " + seasonId));
         List<Episode> episodes = episodeRepo.findBySeasonIdOrderByEpisodeNumber(seasonId);
         if (episodes.isEmpty()) throw new IllegalArgumentException("Season has no episodes: " + seasonId);
-        String subDir = "tvshows/" + slugify(show.getTitle()) +
-                        "/Season " + String.format("%02d", season.getSeasonNumber());
         List<Long> ids = new ArrayList<>();
         for (Episode ep : episodes) {
+            String subDir = "tvshows/" + Path.of(ep.getFilePath()).getParent().getParent().getFileName().toString()
+                            + "/" + Path.of(ep.getFilePath()).getParent().getFileName().toString();
             DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
                 ep.getId(), ep.getFilePath(), subDir);
             item = queueRepo.save(item);
