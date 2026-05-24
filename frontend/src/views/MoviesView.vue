@@ -11,13 +11,14 @@
         <div v-if="!allMovies.length && loading" class="loading">Loading…</div>
         <div v-else-if="!allMovies.length && !loading" class="empty">No movies found.</div>
 
-        <template v-for="group in groupedMovies" :key="group.letter">
-          <h3
-            :id="'letter-' + group.letter"
-            class="letter-header"
-            :ref="el => { if (el) sectionRefs[group.letter] = el; else delete sectionRefs[group.letter] }"
-          >{{ group.letter }}</h3>
-          <div class="grid">
+        <div class="grid">
+          <template v-for="group in groupedMovies" :key="group.letter">
+            <!-- Zero-height anchor for sidebar navigation -->
+            <div
+              :id="'letter-' + group.letter"
+              class="letter-anchor"
+              :ref="el => { if (el) sectionRefs[group.letter] = el; else delete sectionRefs[group.letter] }"
+            />
             <PosterCard
               v-for="m in group.movies"
               :key="m.id"
@@ -31,8 +32,8 @@
                 <DownloadButton type="MOVIE" :mediaId="m.id" small />
               </template>
             </PosterCard>
-          </div>
-        </template>
+          </template>
+        </div>
 
         <div ref="sentinel" class="sentinel" />
         <div v-if="loading && allMovies.length" class="loading-more">Loading more…</div>
@@ -191,22 +192,17 @@ h2 { font-size: 1.5rem; font-weight: 600; }
 
 .movie-list { flex: 1; min-width: 0; }
 
-.letter-header {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--accent);
-  margin: 28px 0 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+.letter-anchor {
+  grid-column: 1 / -1;
+  height: 0;
+  overflow: hidden;
   scroll-margin-top: 70px;
 }
-.letter-header:first-child { margin-top: 0; }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 16px;
-  margin-bottom: 8px;
 }
 
 .loading, .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
