@@ -35,4 +35,17 @@ describe('DownloadButton', () => {
     const w = factory({ status: 'IN_PROGRESS' })
     expect(w.text()).toContain('⏳')
   })
+
+  it('calls store.enqueue when clicked in idle state', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.statusFor = vi.fn().mockReturnValue(null)
+    store.enqueue   = vi.fn()
+    const w = mount(DownloadButton, {
+      props: { type: 'MOVIE', mediaId: 5 },
+      global: { plugins: [pinia] }
+    })
+    await w.find('button').trigger('click')
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 5)
+  })
 })

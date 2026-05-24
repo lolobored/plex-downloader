@@ -46,7 +46,11 @@ const label = computed(() => {
 
 async function handleClick() {
   if (!status.value) {
-    await dlStore.enqueue(props.type, props.mediaId)
+    try {
+      await dlStore.enqueue(props.type, props.mediaId)
+    } catch (e) {
+      console.error('Enqueue failed', e)
+    }
   }
 }
 </script>
