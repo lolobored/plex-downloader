@@ -4,6 +4,7 @@
 
     <div class="links">
       <RouterLink to="/movies">Movies</RouterLink>
+      <RouterLink to="/playlists">Playlists</RouterLink>
       <RouterLink to="/tv">TV Shows</RouterLink>
       <RouterLink to="/queue" class="queue-link">
         Queue
