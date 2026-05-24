@@ -2,7 +2,6 @@ package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.dto.*;
 import org.lolobored.plexdownloader.model.User;
-import org.lolobored.plexdownloader.repository.ShowSubscriptionRepository;
 import org.lolobored.plexdownloader.service.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
@@ -19,7 +18,6 @@ public class SubscriptionController {
 
     private final SubscriptionService subscriptionService;
     private final WatchedSyncService watchedSyncService;
-    private final ShowSubscriptionRepository showSubscriptionRepository;
 
     @GetMapping
     public List<SubscriptionResponse> getSubscriptions(@AuthenticationPrincipal User user) {
@@ -29,15 +27,14 @@ public class SubscriptionController {
     @PostMapping
     public SubscriptionResponse subscribe(@RequestBody SubscriptionRequest req,
                                            @AuthenticationPrincipal User user) {
-        if (!List.of(5, 10, 15, 20).contains(req.targetCount())) {
+        if (req.targetCount() == null || !List.of(5, 10, 15, 20).contains(req.targetCount())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "targetCount must be 5, 10, 15, or 20");
         }
         SubscriptionResponse resp = subscriptionService.upsert(
             user.getId(), req.showId(), req.targetCount());
         watchedSyncService.syncShow(user.getId(), req.showId());
-        showSubscriptionRepository.findByUserIdAndShowId(user.getId(), req.showId())
-            .ifPresent(subscriptionService::replenish);
+        subscriptionService.replenishIfSubscribed(user.getId(), req.showId());
         return resp;
     }
 
@@ -52,8 +49,7 @@ public class SubscriptionController {
     public WatchedResponse syncNow(@PathVariable Long showId,
                                     @AuthenticationPrincipal User user) {
         watchedSyncService.syncShow(user.getId(), showId);
-        showSubscriptionRepository.findByUserIdAndShowId(user.getId(), showId)
-            .ifPresent(subscriptionService::replenish);
+        subscriptionService.replenishIfSubscribed(user.getId(), showId);
         return new WatchedResponse(watchedSyncService.getWatchedEpisodeIds(user.getId(), showId));
     }
 }

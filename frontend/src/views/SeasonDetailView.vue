@@ -63,6 +63,7 @@ async function load() {
     season.value   = se
     episodes.value = eps
     watchedStore.fetchWatched(Number(showId))
+    watchedStore.fetchSubscriptions()
   } finally {
     loading.value  = false
   }

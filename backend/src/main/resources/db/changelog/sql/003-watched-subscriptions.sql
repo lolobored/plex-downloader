@@ -22,5 +22,4 @@ CREATE TABLE show_subscriptions (
 );
 
 -- changeset plexdownloader:003-watched-sync-cron-setting
-INSERT INTO settings (key, value) VALUES ('watched.sync.cron', '0 */15 * * * *')
-ON CONFLICT (key) DO NOTHING;
+INSERT INTO settings (key, value) VALUES ('watched.sync.cron', '0 */15 * * * *');
