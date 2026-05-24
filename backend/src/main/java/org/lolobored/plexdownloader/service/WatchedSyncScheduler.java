@@ -1,6 +1,7 @@
 package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.repository.ShowSubscriptionRepository;
+import org.lolobored.plexdownloader.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
@@ -18,6 +19,7 @@ public class WatchedSyncScheduler implements SchedulingConfigurer {
     private final WatchedSyncService watchedSyncService;
     private final SubscriptionService subscriptionService;
     private final ShowSubscriptionRepository showSubscriptionRepository;
+    private final UserRepository userRepository;
     private final SettingsService settings;
 
     @Override
@@ -32,7 +34,7 @@ public class WatchedSyncScheduler implements SchedulingConfigurer {
     }
 
     void syncAll() {
-        log.info("Watched sync starting for all subscriptions");
+        log.info("Watched sync starting");
         showSubscriptionRepository.findAllWithUserAndShow().forEach(sub -> {
             try {
                 watchedSyncService.syncShow(sub.getUser().getId(), sub.getShow().getId());
@@ -40,6 +42,13 @@ public class WatchedSyncScheduler implements SchedulingConfigurer {
             } catch (Exception e) {
                 log.error("Watched sync failed for user={} show={}: {}",
                     sub.getUser().getId(), sub.getShow().getId(), e.getMessage());
+            }
+        });
+        userRepository.findAllByPlexTokenIsNotNull().forEach(user -> {
+            try {
+                watchedSyncService.syncMoviesForUser(user.getId());
+            } catch (Exception e) {
+                log.error("Movie watched sync failed for user={}: {}", user.getId(), e.getMessage());
             }
         });
     }

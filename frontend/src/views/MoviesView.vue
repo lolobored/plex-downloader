@@ -24,6 +24,7 @@
               :plexId="m.plexId"
               :title="m.title"
               :subtitle="m.year?.toString()"
+              :watched="m.watched"
               @click="router.push(`/movies/${m.id}`)"
             >
               <template #badge>

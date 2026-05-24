@@ -25,7 +25,9 @@ public class WatchedSyncService {
 
     private final UserRepository userRepo;
     private final UserEpisodeWatchedRepository watchedRepo;
+    private final UserMovieWatchedRepository movieWatchedRepo;
     private final EpisodeRepository episodeRepo;
+    private final MovieRepository movieRepo;
     private final TvShowRepository showRepo;
     private final SettingsService settings;
 
@@ -119,6 +121,100 @@ public class WatchedSyncService {
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PlexEpisodeWatchStatus {
+        private String ratingKey;
+        private Integer viewCount;
+        private Long lastViewedAt;
+    }
+
+    // ── Movie watched sync ────────────────────────────────────────────────────
+
+    @Transactional
+    public void syncMoviesForUser(Long userId) {
+        User user = userRepo.findById(userId).orElse(null);
+        if (user == null || user.getPlexToken() == null || user.getPlexToken().isBlank()) {
+            log.warn("User {} has no Plex token, skipping movie watched sync", userId);
+            return;
+        }
+        String plexUrl = settings.getRequired("plex.server.url");
+        RestClient client = RestClient.builder()
+            .baseUrl(plexUrl)
+            .defaultHeader("X-Plex-Token", user.getPlexToken())
+            .defaultHeader("X-Plex-Client-Identifier", "plex-downloader-app")
+            .defaultHeader("Accept", "application/json")
+            .build();
+
+        // Discover movie library sections
+        LibrarySectionsResponse sections;
+        try {
+            sections = client.get().uri("/library/sections").retrieve().body(LibrarySectionsResponse.class);
+        } catch (RestClientException e) {
+            log.warn("Could not fetch library sections for user {}: {}", userId, e.getMessage());
+            return;
+        }
+        if (sections == null || sections.getMediaContainer() == null
+                || sections.getMediaContainer().getDirectory() == null) return;
+
+        Instant now = Instant.now();
+        for (LibrarySectionsResponse.LibrarySection section : sections.getMediaContainer().getDirectory()) {
+            if (!"movie".equals(section.getType())) continue;
+            MovieLibraryResponse resp;
+            try {
+                resp = client.get()
+                    .uri("/library/sections/{key}/all?type=1", section.getKey())
+                    .retrieve()
+                    .body(MovieLibraryResponse.class);
+            } catch (RestClientException e) {
+                log.warn("Could not fetch movies for user={} section={}: {}", userId, section.getKey(), e.getMessage());
+                continue;
+            }
+            if (resp == null || resp.getMediaContainer() == null
+                    || resp.getMediaContainer().getMetadata() == null) continue;
+
+            for (PlexMovieWatchStatus item : resp.getMediaContainer().getMetadata()) {
+                if (item.getViewCount() == null || item.getViewCount() == 0) continue;
+                movieRepo.findByPlexId(item.getRatingKey()).ifPresent(movie -> {
+                    UserMovieWatched watched = movieWatchedRepo
+                        .findByUserIdAndMovieId(userId, movie.getId())
+                        .orElseGet(() -> { var w = new UserMovieWatched(); w.setUser(user); w.setMovie(movie); return w; });
+                    if (item.getLastViewedAt() != null) {
+                        watched.setWatchedAt(Instant.ofEpochSecond(item.getLastViewedAt()));
+                    }
+                    watched.setSyncedAt(now);
+                    movieWatchedRepo.save(watched);
+                });
+            }
+        }
+        log.info("Movie watched sync complete for user={}", userId);
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class LibrarySectionsResponse {
+        @JsonProperty("MediaContainer") private Container mediaContainer;
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class Container {
+            @JsonProperty("Directory") private List<LibrarySection> directory;
+        }
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class LibrarySection {
+            private String key;
+            private String type;
+        }
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class MovieLibraryResponse {
+        @JsonProperty("MediaContainer") private Container mediaContainer;
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class Container {
+            @JsonProperty("Metadata") private List<PlexMovieWatchStatus> metadata;
+        }
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PlexMovieWatchStatus {
         private String ratingKey;
         private Integer viewCount;
         private Long lastViewedAt;

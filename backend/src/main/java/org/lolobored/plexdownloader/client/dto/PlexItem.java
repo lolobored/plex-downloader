@@ -21,6 +21,8 @@ public class PlexItem {
     private Long duration;
     private Long updatedAt;
     private Integer leafCount;
+    private Integer viewCount;
+    private Long lastViewedAt;
 
     @JsonProperty("Guid")
     private List<PlexGuidRaw> guid;

@@ -14,6 +14,7 @@
         :plexId="s.plexId"
         :title="s.title"
         :subtitle="`${s.totalSeasons} season${s.totalSeasons === 1 ? '' : 's'}`"
+        :watched="s.watched"
         @click="router.push(`/tv/${s.id}`)"
       />
     </div>

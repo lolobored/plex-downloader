@@ -1,13 +1,16 @@
 package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.dto.*;
+import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequiredArgsConstructor
@@ -17,6 +20,10 @@ public class LibraryController {
     private final TvShowRepository showRepo;
     private final SeasonRepository seasonRepo;
     private final EpisodeRepository episodeRepo;
+    private final UserMovieWatchedRepository movieWatchedRepo;
+    private final UserEpisodeWatchedRepository episodeWatchedRepo;
+
+    // ── Movies ────────────────────────────────────────────────────────────────
 
     @GetMapping("/api/movies")
     public Page<MovieResponse> getMovies(
@@ -25,15 +32,27 @@ public class LibraryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("title"));
-        return movieRepo.search(search != null ? search : "", year, pageable).map(MovieResponse::from);
+        var movies = movieRepo.search(search != null ? search : "", year, pageable);
+        User user = currentUser();
+        if (user == null || movies.isEmpty()) return movies.map(MovieResponse::from);
+        List<Long> ids = movies.getContent().stream().map(m -> m.getId()).toList();
+        Set<Long> watched = movieWatchedRepo.findWatchedMovieIds(user.getId(), ids);
+        return movies.map(m -> MovieResponse.from(m, watched.contains(m.getId())));
     }
 
     @GetMapping("/api/movies/{id}")
     public ResponseEntity<MovieResponse> getMovie(@PathVariable Long id) {
+        User user = currentUser();
         return movieRepo.findById(id)
-            .map(m -> ResponseEntity.ok(MovieResponse.from(m)))
+            .map(m -> {
+                boolean watched = user != null
+                    && movieWatchedRepo.findByUserIdAndMovieId(user.getId(), m.getId()).isPresent();
+                return ResponseEntity.ok(MovieResponse.from(m, watched));
+            })
             .orElse(ResponseEntity.notFound().build());
     }
+
+    // ── TV Shows ──────────────────────────────────────────────────────────────
 
     @GetMapping("/api/tv")
     public Page<TvShowResponse> getShows(
@@ -42,29 +61,52 @@ public class LibraryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("title"));
-        return showRepo.search(search != null ? search : "", year, pageable).map(TvShowResponse::from);
+        var shows = showRepo.search(search != null ? search : "", year, pageable);
+        User user = currentUser();
+        if (user == null || shows.isEmpty()) return shows.map(TvShowResponse::from);
+        List<Long> ids = shows.getContent().stream().map(s -> s.getId()).toList();
+        Set<Long> watched = episodeWatchedRepo.findFullyWatchedShowIds(user.getId(), ids);
+        return shows.map(s -> TvShowResponse.from(s, watched.contains(s.getId())));
     }
 
     @GetMapping("/api/tv/{showId}")
     public ResponseEntity<TvShowResponse> getShow(@PathVariable Long showId) {
+        User user = currentUser();
         return showRepo.findById(showId)
-            .map(s -> ResponseEntity.ok(TvShowResponse.from(s)))
+            .map(s -> {
+                boolean watched = user != null
+                    && !episodeWatchedRepo.findFullyWatchedShowIds(user.getId(), List.of(s.getId())).isEmpty();
+                return ResponseEntity.ok(TvShowResponse.from(s, watched));
+            })
             .orElse(ResponseEntity.notFound().build());
     }
 
+    // ── Seasons ───────────────────────────────────────────────────────────────
+
     @GetMapping("/api/tv/{showId}/seasons")
     public List<SeasonResponse> getSeasons(@PathVariable Long showId) {
-        return seasonRepo.findByShowIdOrderBySeasonNumber(showId)
-            .stream().map(SeasonResponse::from).toList();
+        var seasons = seasonRepo.findByShowIdOrderBySeasonNumber(showId);
+        User user = currentUser();
+        if (user == null || seasons.isEmpty()) return seasons.stream().map(SeasonResponse::from).toList();
+        List<Long> ids = seasons.stream().map(s -> s.getId()).toList();
+        Set<Long> watched = episodeWatchedRepo.findFullyWatchedSeasonIds(user.getId(), ids);
+        return seasons.stream().map(s -> SeasonResponse.from(s, watched.contains(s.getId()))).toList();
     }
 
     @GetMapping("/api/tv/{showId}/seasons/{seasonId}")
     public ResponseEntity<SeasonResponse> getSeason(@PathVariable Long showId,
                                                      @PathVariable Long seasonId) {
+        User user = currentUser();
         return seasonRepo.findById(seasonId)
-            .map(s -> ResponseEntity.ok(SeasonResponse.from(s)))
+            .map(s -> {
+                boolean watched = user != null
+                    && !episodeWatchedRepo.findFullyWatchedSeasonIds(user.getId(), List.of(s.getId())).isEmpty();
+                return ResponseEntity.ok(SeasonResponse.from(s, watched));
+            })
             .orElse(ResponseEntity.notFound().build());
     }
+
+    // ── Episodes ──────────────────────────────────────────────────────────────
 
     @GetMapping("/api/tv/{showId}/seasons/{seasonId}/episodes")
     public List<EpisodeResponse> getEpisodes(@PathVariable Long showId,
@@ -80,5 +122,14 @@ public class LibraryController {
         return episodeRepo.findById(episodeId)
             .map(e -> ResponseEntity.ok(EpisodeResponse.from(e)))
             .orElse(ResponseEntity.notFound().build());
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private User currentUser() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        Object p = auth.getPrincipal();
+        return p instanceof User ? (User) p : null;
     }
 }

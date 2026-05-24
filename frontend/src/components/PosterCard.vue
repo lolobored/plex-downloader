@@ -2,6 +2,7 @@
   <div class="poster-card" @click="$emit('click')">
     <div class="img-wrap">
       <img :src="`/api/posters/${plexId}.jpg`" :alt="title" loading="lazy" />
+      <div v-if="watched" class="watched-badge" title="Watched">✓</div>
       <div class="badge-slot"><slot name="badge" /></div>
     </div>
     <div class="info">
@@ -15,7 +16,8 @@
 defineProps({
   plexId:   { type: String, required: true },
   title:    { type: String, required: true },
-  subtitle: { type: String, default: null }
+  subtitle: { type: String, default: null },
+  watched:  { type: Boolean, default: false }
 })
 defineEmits(['click'])
 </script>
@@ -28,6 +30,14 @@ defineEmits(['click'])
 .img-wrap img { width: 100%; height: 100%; object-fit: cover;
                 transition: transform .2s ease; display: block; }
 .badge-slot { position: absolute; top: 6px; right: 6px; }
+.watched-badge {
+  position: absolute; top: 6px; left: 6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--green); color: #fff;
+  font-size: .75rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
 .info  { padding: 6px 2px 0; }
 .title { font-size: .9rem; font-weight: 500; white-space: nowrap;
          overflow: hidden; text-overflow: ellipsis; }

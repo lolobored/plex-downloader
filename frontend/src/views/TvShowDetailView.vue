@@ -24,6 +24,7 @@
           :plexId="s.plexId"
           :title="s.title || `Season ${s.seasonNumber}`"
           :subtitle="`${s.episodeCount} episodes`"
+          :watched="s.watched"
           @click="router.push(`/tv/${show.id}/seasons/${s.id}`)"
         >
           <template #badge>

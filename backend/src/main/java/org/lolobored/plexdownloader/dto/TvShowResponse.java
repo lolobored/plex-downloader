@@ -6,13 +6,16 @@ import java.util.List;
 public record TvShowResponse(
     Long id, String plexId, String title, Integer year, String summary,
     String posterUrl, Float rating, Integer totalSeasons,
-    List<String> genres, List<MovieResponse.ActorDto> actors
+    List<String> genres, List<MovieResponse.ActorDto> actors,
+    boolean watched
 ) {
-    public static TvShowResponse from(TvShow s) {
+    public static TvShowResponse from(TvShow s, boolean watched) {
         List<MovieResponse.ActorDto> actors = s.getActors() == null ? List.of() :
             s.getActors().stream().map(a -> new MovieResponse.ActorDto(a.getId(), a.getName())).toList();
         return new TvShowResponse(s.getId(), s.getPlexId(), s.getTitle(), s.getYear(),
             s.getSummary(), s.getPosterUrl(), s.getRating(), s.getTotalSeasons(),
-            s.getGenres(), actors);
+            s.getGenres(), actors, watched);
     }
+
+    public static TvShowResponse from(TvShow s) { return from(s, false); }
 }
