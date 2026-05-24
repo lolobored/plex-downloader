@@ -3,6 +3,9 @@ set -e
 
 # ── PostgreSQL bootstrap ───────────────────────────────────────────────────────
 
+# Ensure postgres user owns the data directory (important when volume is mounted from host)
+chown -R postgres:postgres "$PGDATA" /run/postgresql
+
 # Initialize data directory on first run
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
     echo "[init] Initializing PostgreSQL database..."
