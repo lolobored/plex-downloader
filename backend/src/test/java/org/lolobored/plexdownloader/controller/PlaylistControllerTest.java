@@ -1,8 +1,6 @@
 package org.lolobored.plexdownloader.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
-import org.lolobored.plexdownloader.config.SecurityConfig;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
 import org.lolobored.plexdownloader.service.PlaylistSyncService;
@@ -13,15 +11,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.lolobored.plexdownloader.service.JwtService;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,27 +31,30 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(PlaylistController.class)
-@Import(SecurityConfig.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("test")
 class PlaylistControllerTest {
 
-    @Autowired MockMvc mockMvc;
-    @MockBean PlaylistRepository playlistRepo;
-    @MockBean PlaylistItemRepository itemRepo;
-    @MockBean PlaylistSubscriptionRepository subRepo;
-    @MockBean MovieRepository movieRepo;
-    @MockBean EpisodeRepository episodeRepo;
-    @MockBean DownloadQueueRepository queueRepo;
-    @MockBean PlaylistSyncService playlistSyncService;
-    @MockBean JwtService jwtService;
-    @MockBean UserRepository userRepository;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    MockMvc mockMvc;
+    @Autowired WebApplicationContext webApplicationContext;
+    @MockitoBean PlaylistRepository playlistRepo;
+    @MockitoBean PlaylistItemRepository itemRepo;
+    @MockitoBean PlaylistSubscriptionRepository subRepo;
+    @MockitoBean MovieRepository movieRepo;
+    @MockitoBean EpisodeRepository episodeRepo;
+    @MockitoBean DownloadQueueRepository queueRepo;
+    @MockitoBean PlaylistSyncService playlistSyncService;
+    @MockitoBean JwtService jwtService;
+    @MockitoBean UserRepository userRepository;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     User user;
 
     @BeforeEach
     void setupAuth() throws Exception {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
+            .apply(SecurityMockMvcConfigurers.springSecurity())
+            .build();
         user = new User();
         user.setId(1L);
         user.setUsername("alice");

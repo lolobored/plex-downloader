@@ -1,7 +1,6 @@
 package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
-import org.lolobored.plexdownloader.config.SecurityConfig;
 import org.lolobored.plexdownloader.dto.JwtResponse;
 import org.lolobored.plexdownloader.dto.PlexPinInitResponse;
 import org.lolobored.plexdownloader.repository.UserRepository;
@@ -14,11 +13,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.util.Optional;
 
@@ -28,19 +29,22 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(AuthController.class)
-@Import(SecurityConfig.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("test")
 class AuthControllerTest {
 
-    @Autowired MockMvc mockMvc;
-    @MockBean AuthService authService;
-    @MockBean JwtService jwtService;
-    @MockBean UserRepository userRepository;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    MockMvc mockMvc;
+    @Autowired WebApplicationContext webApplicationContext;
+    @MockitoBean AuthService authService;
+    @MockitoBean JwtService jwtService;
+    @MockitoBean UserRepository userRepository;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     @BeforeEach
     void setupFilterPassThrough() throws Exception {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
+            .apply(SecurityMockMvcConfigurers.springSecurity())
+            .build();
         doAnswer((InvocationOnMock inv) -> {
             HttpServletRequest req = inv.getArgument(0);
             HttpServletResponse res = inv.getArgument(1);

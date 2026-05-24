@@ -1,7 +1,6 @@
 package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
-import org.lolobored.plexdownloader.config.SecurityConfig;
 import org.lolobored.plexdownloader.model.Movie;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.*;
@@ -13,16 +12,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.domain.*;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,24 +34,27 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(LibraryController.class)
-@Import(SecurityConfig.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("test")
 class LibraryControllerTest {
 
-    @Autowired MockMvc mockMvc;
-    @MockBean MovieRepository movieRepo;
-    @MockBean TvShowRepository showRepo;
-    @MockBean SeasonRepository seasonRepo;
-    @MockBean EpisodeRepository episodeRepo;
-    @MockBean UserMovieWatchedRepository movieWatchedRepo;
-    @MockBean UserEpisodeWatchedRepository episodeWatchedRepo;
-    @MockBean JwtService jwtService;
-    @MockBean UserRepository userRepository;
-    @MockBean JwtAuthFilter jwtAuthFilter;
+    MockMvc mockMvc;
+    @Autowired WebApplicationContext webApplicationContext;
+    @MockitoBean MovieRepository movieRepo;
+    @MockitoBean TvShowRepository showRepo;
+    @MockitoBean SeasonRepository seasonRepo;
+    @MockitoBean EpisodeRepository episodeRepo;
+    @MockitoBean UserMovieWatchedRepository movieWatchedRepo;
+    @MockitoBean UserEpisodeWatchedRepository episodeWatchedRepo;
+    @MockitoBean JwtService jwtService;
+    @MockitoBean UserRepository userRepository;
+    @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     @BeforeEach
     void setupUserAuth() throws Exception {
+        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
+            .apply(SecurityMockMvcConfigurers.springSecurity())
+            .build();
         User user = new User();
         user.setId(2L);
         user.setPlexAccountId("user-plex-id");
