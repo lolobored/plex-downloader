@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -42,7 +43,13 @@ public class WatchedSyncService {
         }
 
         String plexUrl = settings.getRequired("plex.server.url");
-        AllLeavesResponse resp = fetchAllLeaves(plexUrl, user.getPlexToken(), show.getPlexId());
+        AllLeavesResponse resp;
+        try {
+            resp = fetchAllLeaves(plexUrl, user.getPlexToken(), show.getPlexId());
+        } catch (RestClientException e) {
+            log.warn("Plex API error for user={} show={}: {}", userId, showId, e.getMessage());
+            return;
+        }
 
         if (resp == null || resp.getMediaContainer() == null
                 || resp.getMediaContainer().getMetadata() == null) {
