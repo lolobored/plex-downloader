@@ -1,17 +1,11 @@
 services:
-  frontend:
-    build: ./frontend
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lolobored/plex-downloader:latest
     ports:
-      - "3615:80"
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-
-  backend:
-    build: ./backend
-    ports:
-      - "3616:8080"
+      - "3615:8080"
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/plexdownloader
@@ -49,4 +43,3 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
