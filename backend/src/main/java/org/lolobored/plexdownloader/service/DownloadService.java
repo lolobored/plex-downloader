@@ -190,7 +190,6 @@ public class DownloadService {
         }
 
         queueRepo.delete(item);
-        pruneConversionDirs();
     }
 
     @Async("downloadExecutor")
@@ -228,19 +227,6 @@ public class DownloadService {
             log.error("Copy failed for item {}: {}", itemId, e.getMessage());
         }
         queueRepo.save(item);
-
-        // Prune empty dirs only when no more copies are queued or in-progress
-        boolean moreWork = queueRepo.existsByStatusIn(
-            List.of(DownloadQueueItem.Status.PENDING, DownloadQueueItem.Status.IN_PROGRESS));
-        if (!moreWork) {
-            pruneConversionDirs();
-        }
-    }
-
-    private void pruneConversionDirs() {
-        String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
-        pruneEmptyDirs(Path.of(conversionDir, "in-flight"));
-        pruneEmptyDirs(Path.of(conversionDir, "libraries"));
     }
 
     /**
@@ -266,28 +252,4 @@ public class DownloadService {
         }
     }
 
-    /**
-     * Recursively deletes empty directories under {@code root} (leaves {@code root} itself intact).
-     * Walks deepest-first so a season dir is emptied before its show dir is evaluated.
-     */
-    private void pruneEmptyDirs(Path root) {
-        if (!Files.isDirectory(root)) return;
-        try (var stream = Files.walk(root)) {
-            stream.sorted(java.util.Comparator.reverseOrder())
-                  .filter(p -> !p.equals(root))
-                  .filter(Files::isDirectory)
-                  .forEach(p -> {
-                      try {
-                          if (!Files.list(p).findFirst().isPresent()) {
-                              Files.delete(p);
-                              log.debug("Deleted empty dir: {}", p);
-                          }
-                      } catch (IOException e) {
-                          log.warn("Could not prune dir {}: {}", p, e.getMessage());
-                      }
-                  });
-        } catch (IOException e) {
-            log.warn("Could not walk {} for pruning: {}", root, e.getMessage());
-        }
-    }
 }

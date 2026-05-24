@@ -55,6 +55,7 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
                 log.error("Tdarr sync failed for item {}: {}", item.getId(), e.getMessage());
             }
         }
+        pruneConversionDirs();
     }
 
     /** Refresh Tdarr status for a single queue item by id. Returns the updated item. */
@@ -66,6 +67,7 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
                 "Can only refresh Tdarr status for DONE items");
         }
         applyTdarrStatus(item);
+        pruneConversionDirs();
         return item;
     }
 
@@ -106,6 +108,33 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         }
         queueRepo.save(item);
         log.info("Tdarr status updated: item={} status={}", item.getId(), newStatus);
+    }
+
+    private void pruneConversionDirs() {
+        String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
+        pruneEmptyDirs(Path.of(conversionDir, "in-flight"));
+        pruneEmptyDirs(Path.of(conversionDir, "libraries"));
+    }
+
+    private void pruneEmptyDirs(Path root) {
+        if (!Files.isDirectory(root)) return;
+        try (var stream = Files.walk(root)) {
+            stream.sorted(java.util.Comparator.reverseOrder())
+                  .filter(p -> !p.equals(root))
+                  .filter(Files::isDirectory)
+                  .forEach(p -> {
+                      try {
+                          if (!Files.list(p).findFirst().isPresent()) {
+                              Files.delete(p);
+                              log.debug("Deleted empty dir: {}", p);
+                          }
+                      } catch (IOException e) {
+                          log.warn("Could not prune dir {}: {}", p, e.getMessage());
+                      }
+                  });
+        } catch (IOException e) {
+            log.warn("Could not walk {} for pruning: {}", root, e.getMessage());
+        }
     }
 
     /**
