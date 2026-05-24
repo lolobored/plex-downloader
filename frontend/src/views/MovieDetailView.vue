@@ -43,7 +43,7 @@ function formatDuration(ms) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-getMovie(route.params.id).then(d => { movie.value = d; loading.value = false })
+getMovie(route.params.id).then(d => { movie.value = d }).finally(() => { loading.value = false })
 </script>
 
 <style scoped>

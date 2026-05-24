@@ -49,15 +49,18 @@ const loading = ref(true)
 
 async function load() {
   const { showId, seasonId } = route.params
-  const [sh, se, eps] = await Promise.all([
-    getShow(showId),
-    getSeason(showId, seasonId),
-    getEpisodes(showId, seasonId)
-  ])
-  show.value     = sh
-  season.value   = se
-  episodes.value = eps
-  loading.value  = false
+  try {
+    const [sh, se, eps] = await Promise.all([
+      getShow(showId),
+      getSeason(showId, seasonId),
+      getEpisodes(showId, seasonId)
+    ])
+    show.value     = sh
+    season.value   = se
+    episodes.value = eps
+  } finally {
+    loading.value  = false
+  }
 }
 load()
 </script>

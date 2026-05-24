@@ -42,21 +42,25 @@ const seasonNumber = ref(null)
 const loading      = ref(true)
 
 function formatDuration(ms) {
+  if (!ms) return ''
   const m = Math.floor(ms / 60000)
   return `${m}m`
 }
 
 async function load() {
   const { showId, seasonId, episodeId } = route.params
-  const [ep, sh, se] = await Promise.all([
-    getEpisode(showId, seasonId, episodeId),
-    getShow(showId),
-    getSeason(showId, seasonId)
-  ])
-  episode.value      = ep
-  show.value         = sh
-  seasonNumber.value = se.seasonNumber
-  loading.value      = false
+  try {
+    const [ep, sh, se] = await Promise.all([
+      getEpisode(showId, seasonId, episodeId),
+      getShow(showId),
+      getSeason(showId, seasonId)
+    ])
+    episode.value      = ep
+    show.value         = sh
+    seasonNumber.value = se.seasonNumber
+  } finally {
+    loading.value      = false
+  }
 }
 load()
 </script>

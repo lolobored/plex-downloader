@@ -56,13 +56,16 @@ const seasons = ref([])
 const loading = ref(true)
 
 async function load() {
-  const [s, ss] = await Promise.all([
-    getShow(route.params.showId),
-    getSeasons(route.params.showId)
-  ])
-  show.value    = s
-  seasons.value = ss
-  loading.value = false
+  try {
+    const [s, ss] = await Promise.all([
+      getShow(route.params.showId),
+      getSeasons(route.params.showId)
+    ])
+    show.value    = s
+    seasons.value = ss
+  } finally {
+    loading.value = false
+  }
 }
 load()
 </script>
