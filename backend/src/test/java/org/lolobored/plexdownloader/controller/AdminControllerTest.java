@@ -89,7 +89,6 @@ class AdminControllerTest {
         when(settingsService.get(anyString())).thenReturn(Optional.empty());
         when(settingsService.get("plex.server.url")).thenReturn(Optional.of("http://plex:32400"));
         when(settingsService.get("plex.sync.libraries")).thenReturn(Optional.of("1,2"));
-        when(settingsService.get("watched.sync.cron")).thenReturn(Optional.of("0 */15 * * * *"));
         when(settingsService.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         when(settingsService.get("tdarr.sync.cron")).thenReturn(Optional.of("0 */30 * * * *"));
 
@@ -97,7 +96,7 @@ class AdminControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$['plex.server.url']").value("http://plex:32400"))
             .andExpect(jsonPath("$['plex.sync.libraries']").value("1,2"))
-            .andExpect(jsonPath("$['watched.sync.cron']").value("0 */15 * * * *"))
+            .andExpect(jsonPath("$['watched.sync.cron']").doesNotExist())
             .andExpect(jsonPath("$['tdarr.server.url']").value("http://tdarr:8265"))
             .andExpect(jsonPath("$['tdarr.sync.cron']").value("0 */30 * * * *"))
             .andExpect(jsonPath("$['plex.server.token']").doesNotExist());

@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
+import java.util.Optional;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -28,7 +29,7 @@ class PosterStorageServiceTest {
 
     @Test
     void downloadsPosterWhenNotYetOnDisk() {
-        when(settings.getRequired("plex.poster.dir")).thenReturn(tempDir.toString());
+        when(settings.get("plex.poster.dir")).thenReturn(Optional.of(tempDir.toString()));
 
         service.downloadIfNeeded("12345", "/library/metadata/12345/thumb", 1000L);
 
@@ -37,7 +38,7 @@ class PosterStorageServiceTest {
 
     @Test
     void skipsDownloadWhenFileExistsAndSyncedAtIsNewer() throws IOException {
-        when(settings.getRequired("plex.poster.dir")).thenReturn(tempDir.toString());
+        when(settings.get("plex.poster.dir")).thenReturn(Optional.of(tempDir.toString()));
         Path poster = tempDir.resolve("12345.jpg");
         Files.writeString(poster, "fake-image");
 

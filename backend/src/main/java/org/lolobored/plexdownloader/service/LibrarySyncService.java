@@ -39,6 +39,7 @@ public class LibrarySyncService {
     private final PlexMediaServerClient plexClient;
     private final PosterStorageService posterStorage;
     private final PlaylistSyncService playlistSyncService;
+    private final WatchedSyncService watchedSyncService;
     private final MovieRepository movieRepo;
     private final TvShowRepository showRepo;
     private final SeasonRepository seasonRepo;
@@ -114,6 +115,7 @@ public class LibrarySyncService {
                     new LibraryProgress(k, v.title(), v.itemsSynced(), v.totalItems(), true));
             }
             playlistSyncService.syncAll();
+            watchedSyncService.syncAll();
             lastSyncAt = Instant.now();
             state.set(SyncState.IDLE);
         } catch (Exception e) {

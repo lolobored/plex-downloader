@@ -36,7 +36,6 @@ public class AdminController {
         result.put("plex.conversion.dir",     settingsService.get("plex.conversion.dir").orElse(""));
         result.put("plex.sync.cron",          settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
         result.put("plex.sync.libraries",     settingsService.get("plex.sync.libraries").orElse(""));
-        result.put("watched.sync.cron",       settingsService.get("watched.sync.cron").orElse("0 */15 * * * *"));
         result.put("tdarr.server.url",        settingsService.get("tdarr.server.url").orElse(""));
         result.put("tdarr.sync.cron",         settingsService.get("tdarr.sync.cron").orElse("0 */30 * * * *"));
         return result;

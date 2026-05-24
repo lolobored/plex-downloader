@@ -43,6 +43,8 @@ class LibraryControllerTest {
     @MockBean TvShowRepository showRepo;
     @MockBean SeasonRepository seasonRepo;
     @MockBean EpisodeRepository episodeRepo;
+    @MockBean UserMovieWatchedRepository movieWatchedRepo;
+    @MockBean UserEpisodeWatchedRepository episodeWatchedRepo;
     @MockBean JwtService jwtService;
     @MockBean UserRepository userRepository;
     @MockBean JwtAuthFilter jwtAuthFilter;
@@ -82,7 +84,7 @@ class LibraryControllerTest {
         movie.setDirectors(new ArrayList<>());
 
         Page<Movie> page = new PageImpl<>(List.of(movie));
-        when(movieRepo.search(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
+        when(movieRepo.search(eq(""), isNull(), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/movies"))
             .andExpect(status().isOk())

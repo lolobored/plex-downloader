@@ -30,6 +30,33 @@ public class WatchedSyncService {
     private final MovieRepository movieRepo;
     private final TvShowRepository showRepo;
     private final SettingsService settings;
+    private final ShowSubscriptionRepository showSubscriptionRepo;
+    private final SubscriptionService subscriptionService;
+
+    /**
+     * Sync watched status for all users / all subscribed shows.
+     * Called at the end of library sync — no separate cron needed.
+     */
+    public void syncAll() {
+        log.info("Watched sync starting");
+        showSubscriptionRepo.findAllWithUserAndShow().forEach(sub -> {
+            try {
+                syncShow(sub.getUser().getId(), sub.getShow().getId());
+                subscriptionService.replenish(sub);
+            } catch (Exception e) {
+                log.error("Watched sync failed for user={} show={}: {}",
+                    sub.getUser().getId(), sub.getShow().getId(), e.getMessage());
+            }
+        });
+        userRepo.findAllByPlexTokenIsNotNull().forEach(user -> {
+            try {
+                syncMoviesForUser(user.getId());
+            } catch (Exception e) {
+                log.error("Movie watched sync failed for user={}: {}", user.getId(), e.getMessage());
+            }
+        });
+        log.info("Watched sync complete");
+    }
 
     @Transactional
     public void syncShow(Long userId, Long showId) {

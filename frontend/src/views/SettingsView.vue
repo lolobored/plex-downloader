@@ -55,13 +55,7 @@
           <option v-for="o in SYNC_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
         </select>
       </div>
-      <div class="field">
-        <label>Sync watched status every</label>
-        <select name="watchedSyncCron" v-model="form.watchedSyncCron" class="select-field">
-          <option v-for="o in WATCHED_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
-        </select>
-      </div>
-      <div class="sync-status" v-if="syncStatus">
+<div class="sync-status" v-if="syncStatus">
         <span :class="['state', syncStatus.state.toLowerCase()]">{{ syncStatus.state }}</span>
         <span v-if="syncStatus.lastSyncAt" class="last-sync">
           Last sync: {{ new Date(syncStatus.lastSyncAt).toLocaleString() }}
@@ -128,13 +122,6 @@ const SYNC_OPTIONS = [
   { label: 'Every day',      cron: '0 0 0 * * *'    },
 ]
 
-const WATCHED_OPTIONS = [
-  { label: 'Every 15 minutes', cron: '0 */15 * * * *' },
-  { label: 'Every 30 minutes', cron: '0 */30 * * * *' },
-  { label: 'Every hour',       cron: '0 0 * * * *'    },
-  { label: 'Every 6 hours',    cron: '0 0 */6 * * *'  },
-]
-
 const TDARR_OPTIONS = [
   { label: 'Every 15 minutes', cron: '0 */15 * * * *' },
   { label: 'Every 30 minutes', cron: '0 */30 * * * *' },
@@ -174,7 +161,6 @@ const form = reactive({
   plexPathPrefixApp:  '',
   plexConversionDir:  '',
   syncCron:           '',
-  watchedSyncCron:    '',
   tdarrUrl:           '',
   tdarrSyncCron:      ''
 })
@@ -187,7 +173,6 @@ onMounted(async () => {
     form.plexPathPrefixApp  = s['plex.path.prefix.app']   ?? ''
     form.plexConversionDir  = s['plex.conversion.dir']    ?? ''
     form.syncCron           = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
-    form.watchedSyncCron    = matchCron(s['watched.sync.cron'], WATCHED_OPTIONS)
     form.tdarrUrl           = s['tdarr.server.url']       ?? ''
     form.tdarrSyncCron      = matchCron(s['tdarr.sync.cron'],   TDARR_OPTIONS)
     const storedLibs = s['plex.sync.libraries'] ?? ''
@@ -211,7 +196,6 @@ async function save() {
     'plex.path.prefix.app':   form.plexPathPrefixApp,
     'plex.sync.cron':         form.syncCron,
     'plex.sync.libraries':    selectedLibraryKeys.value.join(','),
-    'watched.sync.cron':      form.watchedSyncCron,
     'tdarr.server.url':       form.tdarrUrl,
     'tdarr.sync.cron':        form.tdarrSyncCron
   }

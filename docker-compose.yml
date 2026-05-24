@@ -1,5 +1,5 @@
 services:
-  app:
+  plex-downloader:
     build:
       context: .
       dockerfile: Dockerfile
