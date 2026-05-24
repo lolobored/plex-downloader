@@ -4,6 +4,9 @@
 # Dev data dirs — local media stubs
 dev-data/
 
+# Local volume data (postgres bind mount)
+volumes/
+
 # Build outputs
 backend/build/
 backend/.gradle/
