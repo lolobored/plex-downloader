@@ -25,7 +25,7 @@ public class WatchedSyncScheduler implements SchedulingConfigurer {
         registrar.addTriggerTask(
             this::syncAll,
             ctx -> {
-                String cron = settings.get("watched.sync.cron").orElse(DEFAULT_CRON);
+                String cron = settings.get("watched.sync.cron").filter(s -> !s.isBlank()).orElse(DEFAULT_CRON);
                 return new CronTrigger(cron).nextExecution(ctx);
             }
         );

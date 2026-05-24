@@ -23,7 +23,7 @@ public class LibrarySyncScheduler implements SchedulingConfigurer {
         registrar.addTriggerTask(
             this::runSync,
             ctx -> {
-                String cron = settings.get("plex.sync.cron").orElse(DEFAULT_CRON);
+                String cron = settings.get("plex.sync.cron").filter(s -> !s.isBlank()).orElse(DEFAULT_CRON);
                 return new CronTrigger(cron).nextExecution(ctx);
             }
         );

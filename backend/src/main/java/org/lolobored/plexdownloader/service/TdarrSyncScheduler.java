@@ -29,7 +29,7 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         registrar.addTriggerTask(
             this::syncAll,
             ctx -> {
-                String cron = settings.get("tdarr.sync.cron").orElse(DEFAULT_CRON);
+                String cron = settings.get("tdarr.sync.cron").filter(s -> !s.isBlank()).orElse(DEFAULT_CRON);
                 return new CronTrigger(cron).nextExecution(ctx);
             }
         );
