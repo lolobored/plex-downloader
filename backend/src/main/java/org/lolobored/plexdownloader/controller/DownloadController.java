@@ -53,4 +53,11 @@ public class DownloadController {
     public List<DownloadQueueItem> getQueue() {
         return downloadService.getQueue();
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancel(@PathVariable Long id,
+                       @AuthenticationPrincipal User user) {
+        downloadService.cancel(id, user);
+    }
 }
