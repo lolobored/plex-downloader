@@ -143,11 +143,16 @@ public class DownloadService {
             }
             Files.createDirectories(dest.getParent());
             Path temp = Path.of(item.getDestFilePath() + ".tmp");
-            Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
             try {
-                Files.move(temp, dest, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
+                try {
+                    Files.move(temp, dest, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException e) {
+                Files.deleteIfExists(temp);
+                throw e;
             }
             item.setStatus(DownloadQueueItem.Status.DONE);
             item.setCompletedAt(Instant.now());
