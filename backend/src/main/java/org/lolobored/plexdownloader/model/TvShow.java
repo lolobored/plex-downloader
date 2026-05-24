@@ -34,7 +34,7 @@ public class TvShow {
     @Column(name = "genre")
     private List<String> genres = new ArrayList<>();
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "show_actors",
         joinColumns = @JoinColumn(name = "show_id"),
         inverseJoinColumns = @JoinColumn(name = "actor_id"))
