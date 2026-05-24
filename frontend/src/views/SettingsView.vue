@@ -141,6 +141,7 @@ async function save() {
     await putSettings(payload)
     form.plexToken = ''
     saveOk.value = true
+    clearTimeout(saveOkTimer)
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
   } finally {
     saving.value = false

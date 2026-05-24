@@ -66,7 +66,11 @@ function formatDate(iso) {
 
 let pollTimer = null
 onMounted(async () => {
-  await dlStore.fetchQueue()
+  try {
+    await dlStore.fetchQueue()
+  } catch (e) {
+    console.error('Initial queue fetch failed:', e)
+  }
   pollTimer = setInterval(() => dlStore.fetchQueue(), 2000)
 })
 onUnmounted(() => clearInterval(pollTimer))
