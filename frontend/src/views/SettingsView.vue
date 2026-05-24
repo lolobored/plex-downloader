@@ -70,14 +70,26 @@
         <span v-if="syncStatus.error" class="sync-error">{{ syncStatus.error }}</span>
       </div>
       <div v-if="syncing || syncStatus?.state === 'RUNNING'" class="sync-progress">
+        <!-- Global bar -->
         <div class="progress-bar">
           <div class="progress-fill" :style="progressStyle"></div>
         </div>
         <span class="progress-label">
-          {{ syncStatus?.itemsSynced ?? 0 }}
+          Total: {{ syncStatus?.itemsSynced ?? 0 }}
           <template v-if="syncStatus?.totalItems"> / {{ syncStatus.totalItems }}</template>
-          items synced…
+          items
         </span>
+        <!-- Per-library bars -->
+        <div v-for="lib in syncStatus?.libraries ?? []" :key="lib.key" class="lib-progress">
+          <div class="lib-progress-header">
+            <span class="lib-name">{{ lib.title }}</span>
+            <span class="lib-count">{{ lib.itemsSynced }} / {{ lib.totalItems }}</span>
+            <span v-if="lib.done" class="lib-done">✓</span>
+          </div>
+          <div class="progress-bar lib-bar">
+            <div class="progress-fill" :style="{ width: lib.totalItems ? Math.round(lib.itemsSynced / lib.totalItems * 100) + '%' : '0%' }"></div>
+          </div>
+        </div>
       </div>
       <div class="sync-actions">
         <button class="btn-save" @click="save" :disabled="saving">Save</button>
@@ -183,6 +195,8 @@ onMounted(async () => {
     syncStatus.value = ss
     // Resume progress bar if sync was already running when page loaded
     if (ss.state === 'RUNNING') resumePolling()
+    // Auto-load library checkboxes if URL + selections already saved
+    if (form.plexUrl && selectedLibraryKeys.value.length > 0) loadLibraries()
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
@@ -288,6 +302,12 @@ input.readonly { opacity: 0.6; cursor: default; }
   min-width: 2px;
 }
 .progress-label { font-size: .8rem; color: var(--text-muted); display: block; margin-top: 5px; }
+.lib-progress { margin-top: 10px; }
+.lib-progress-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.lib-name  { font-size: .85rem; color: var(--text); flex: 1; }
+.lib-count { font-size: .75rem; color: var(--text-muted); }
+.lib-done  { color: var(--green); font-size: .85rem; font-weight: 700; }
+.lib-bar   { height: 4px; }
 .sync-actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
 .btn-sync { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
             border-radius: 6px; padding: 8px 16px; }

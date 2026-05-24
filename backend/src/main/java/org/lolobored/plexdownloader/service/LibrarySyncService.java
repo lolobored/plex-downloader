@@ -6,6 +6,7 @@ import org.lolobored.plexdownloader.client.dto.PlexItem.PlexTag;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.client.dto.PlexLibraryPage;
 import org.lolobored.plexdownloader.client.dto.PlexRole;
+import org.lolobored.plexdownloader.dto.LibraryProgress;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
@@ -18,7 +19,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -48,8 +52,14 @@ public class LibrarySyncService {
     private volatile Instant lastSyncAt;
     private volatile String lastError;
 
+    // Per-library progress — ordered by sync start order
+    private final CopyOnWriteArrayList<String> libraryOrder = new CopyOnWriteArrayList<>();
+    private final ConcurrentHashMap<String, LibraryProgress> libraryProgressMap = new ConcurrentHashMap<>();
+
     public SyncStatusResponse status() {
-        return new SyncStatusResponse(state.get().name(), lastSyncAt, itemsSynced.get(), totalItems.get(), lastError);
+        List<LibraryProgress> libs = libraryOrder.stream()
+            .map(libraryProgressMap::get).filter(Objects::nonNull).toList();
+        return new SyncStatusResponse(state.get().name(), lastSyncAt, itemsSynced.get(), totalItems.get(), libs, lastError);
     }
 
     public boolean isRunning() {
@@ -64,6 +74,8 @@ public class LibrarySyncService {
         }
         itemsSynced.set(0);
         totalItems.set(0);
+        libraryOrder.clear();
+        libraryProgressMap.clear();
         lastError = null;
 
         try {
@@ -80,12 +92,14 @@ public class LibrarySyncService {
                 .filter(l -> selectedKeys.isEmpty() || selectedKeys.contains(l.getKey()))
                 .toList();
 
-            // Pre-flight: count total items across all libraries for progress tracking
-            int total = libraries.stream()
-                .mapToInt(lib -> plexClient.getLibraryContents(lib.getKey(), 0).totalSize())
-                .sum();
-            totalItems.set(total);
-            log.info("Sync starting: {} total items across {} libraries", total, libraries.size());
+            // Pre-flight: count total items per library, build progress entries
+            for (PlexLibrary lib : libraries) {
+                int libTotal = plexClient.getLibraryContents(lib.getKey(), 0).totalSize();
+                totalItems.addAndGet(libTotal);
+                libraryProgressMap.put(lib.getKey(), new LibraryProgress(lib.getKey(), lib.getTitle(), 0, libTotal, false));
+                libraryOrder.add(lib.getKey());
+            }
+            log.info("Sync starting: {} total items across {} libraries", totalItems.get(), libraries.size());
 
             for (PlexLibrary lib : libraries) {
                 if ("movie".equals(lib.getType())) {
@@ -93,6 +107,9 @@ public class LibrarySyncService {
                 } else {
                     syncShowLibrary(lib.getKey());
                 }
+                // Mark library done
+                libraryProgressMap.computeIfPresent(lib.getKey(), (k, v) ->
+                    new LibraryProgress(k, v.title(), v.itemsSynced(), v.totalItems(), true));
             }
             lastSyncAt = Instant.now();
             state.set(SyncState.IDLE);
@@ -108,12 +125,20 @@ public class LibrarySyncService {
         while (true) {
             PlexLibraryPage page = plexClient.getLibraryContents(libraryKey, offset);
             for (PlexItem item : page.items()) {
-                try { upsertMovie(item); itemsSynced.incrementAndGet(); }
-                catch (Exception e) { log.warn("Skipping movie {}: {}", item.getRatingKey(), e.getMessage()); }
+                try {
+                    upsertMovie(item);
+                    itemsSynced.incrementAndGet();
+                    incrementLibraryProgress(libraryKey);
+                } catch (Exception e) { log.warn("Skipping movie {}: {}", item.getRatingKey(), e.getMessage()); }
             }
             offset += page.items().size();
             if (offset >= page.totalSize() || page.items().isEmpty()) break;
         }
+    }
+
+    private void incrementLibraryProgress(String key) {
+        libraryProgressMap.computeIfPresent(key, (k, v) ->
+            new LibraryProgress(k, v.title(), v.itemsSynced() + 1, v.totalItems(), false));
     }
 
     private void upsertMovie(PlexItem listItem) {
@@ -144,8 +169,11 @@ public class LibrarySyncService {
         while (true) {
             PlexLibraryPage page = plexClient.getLibraryContents(libraryKey, offset);
             for (PlexItem item : page.items()) {
-                try { upsertShow(item); itemsSynced.incrementAndGet(); }
-                catch (Exception e) { log.warn("Skipping show {}: {}", item.getRatingKey(), e.getMessage()); }
+                try {
+                    upsertShow(item);
+                    itemsSynced.incrementAndGet();
+                    incrementLibraryProgress(libraryKey);
+                } catch (Exception e) { log.warn("Skipping show {}: {}", item.getRatingKey(), e.getMessage()); }
             }
             offset += page.items().size();
             if (offset >= page.totalSize() || page.items().isEmpty()) break;
