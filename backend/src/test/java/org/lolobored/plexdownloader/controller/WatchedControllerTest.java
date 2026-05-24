@@ -70,7 +70,7 @@ class WatchedControllerTest {
     }
 
     @Test
-    void getWatched_requires401WhenNoAuth() throws Exception {
+    void getWatched_requires4xxWhenUnauthenticated() throws Exception {
         doAnswer(inv -> {
             FilterChain chain = inv.getArgument(2);
             chain.doFilter(inv.getArgument(0), inv.getArgument(1));
