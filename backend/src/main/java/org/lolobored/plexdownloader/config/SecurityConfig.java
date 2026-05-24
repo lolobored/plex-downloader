@@ -24,6 +24,10 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/actuator/health").permitAll()
+                // Static frontend assets (Vue build output)
+                .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/*.js", "/*.css").permitAll()
+                // SPA fallback routes (any path without a dot — handled by SpaController)
+                .requestMatchers("/{path:[^\\.]*}", "/{p1:[^\\.]*}/{p2:[^\\.]*}").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
