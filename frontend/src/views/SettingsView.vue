@@ -78,7 +78,14 @@
       <h3>Tdarr</h3>
       <div class="field">
         <label>Tdarr server URL</label>
-        <input name="tdarrUrl" v-model="form.tdarrUrl" type="url" placeholder="http://192.168.1.10:8265" />
+        <div class="url-row">
+          <input name="tdarrUrl" v-model="form.tdarrUrl" type="url" placeholder="http://192.168.1.10:8265" />
+          <button class="btn-load" data-testid="test-tdarr-btn" @click="testTdarrConnection" :disabled="testingTdarr">
+            {{ testingTdarr ? 'Testing…' : '↻ Test' }}
+          </button>
+        </div>
+        <p v-if="tdarrTestOk === true"  class="ok tdarr-status">✓ Connected</p>
+        <p v-if="tdarrTestOk === false" class="error-inline tdarr-status">✗ {{ tdarrTestError }}</p>
       </div>
       <div class="field">
         <label>Sync Tdarr status every</label>
@@ -94,7 +101,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries } from '@/api/admin.js'
+import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries, testTdarr } from '@/api/admin.js'
 
 const SYNC_OPTIONS = [
   { label: 'Every hour',     cron: '0 0 * * * *'    },
@@ -135,6 +142,10 @@ const availableLibraries  = ref([])
 const selectedLibraryKeys = ref([])
 const loadingLibraries    = ref(false)
 const libraryError        = ref(null)
+
+const testingTdarr  = ref(false)
+const tdarrTestOk   = ref(null)   // null=untested, true=ok, false=fail
+const tdarrTestError = ref('')
 
 const form = reactive({
   plexUrl:      '',
@@ -179,6 +190,22 @@ async function save() {
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
   } finally {
     saving.value = false
+  }
+}
+
+async function testTdarrConnection() {
+  testingTdarr.value = true
+  tdarrTestOk.value = null
+  tdarrTestError.value = ''
+  try {
+    const result = await testTdarr(form.tdarrUrl)
+    tdarrTestOk.value = result.ok
+    if (!result.ok) tdarrTestError.value = result.error ?? 'Connection failed'
+  } catch {
+    tdarrTestOk.value = false
+    tdarrTestError.value = 'Request failed'
+  } finally {
+    testingTdarr.value = false
   }
 }
 
@@ -277,4 +304,7 @@ input.readonly { opacity: 0.6; cursor: default; }
                   border-radius: 6px; padding: 8px 16px; font-size: .9rem; }
 .btn-load:hover:not(:disabled) { border-color: var(--accent-blue); }
 .error-inline   { color: var(--red); font-size: .85rem; margin-top: 6px; }
+.url-row        { display: flex; gap: 8px; align-items: center; }
+.url-row input  { flex: 1; }
+.tdarr-status   { margin-top: 4px; }
 </style>

@@ -1,6 +1,7 @@
 package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
+import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
 import org.lolobored.plexdownloader.service.LibrarySyncScheduler;
@@ -26,6 +27,7 @@ public class AdminController {
     private final LibrarySyncService syncService;
     private final LibrarySyncScheduler syncScheduler;
     private final PlexMediaServerClient plexClient;
+    private final TdarrClient tdarrClient;
 
     @GetMapping("/settings")
     public Map<String, String> getSettings() {
@@ -44,6 +46,15 @@ public class AdminController {
         return url != null && !url.isBlank()
             ? plexClient.getLibraries(url)
             : plexClient.getLibraries();
+    }
+
+    @GetMapping("/tdarr/test")
+    public Map<String, Object> testTdarr(@RequestParam(required = false) String url) {
+        String target = (url != null && !url.isBlank()) ? url
+            : settingsService.get("tdarr.server.url").orElse("");
+        boolean ok = tdarrClient.ping(target);
+        return ok ? Map.of("ok", true)
+                  : Map.of("ok", false, "error", "Could not reach Tdarr server at " + target);
     }
 
     @PutMapping("/settings")

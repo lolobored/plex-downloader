@@ -23,3 +23,9 @@ export async function getPlexLibraries(url) {
   const { data } = await http.get('/api/admin/plex/libraries', { params })
   return data  // [{ key, title, type, agent }, ...]
 }
+
+export async function testTdarr(url) {
+  const params = url ? { url } : {}
+  const { data } = await http.get('/api/admin/tdarr/test', { params })
+  return data  // { ok: true } or { ok: false, error: '...' }
+}

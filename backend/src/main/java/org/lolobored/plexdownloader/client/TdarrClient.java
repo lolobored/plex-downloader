@@ -90,6 +90,23 @@ public class TdarrClient {
             .toBodilessEntity();
     }
 
+    /**
+     * Returns true if the Tdarr server at {@code url} responds to its status endpoint.
+     */
+    public boolean ping(String url) {
+        if (url == null || url.isBlank()) return false;
+        try {
+            RestClient.create().get()
+                .uri(url.stripTrailing() + "/api/v2/status")
+                .retrieve()
+                .toBodilessEntity();
+            return true;
+        } catch (RestClientException e) {
+            log.debug("Tdarr ping failed for {}: {}", url, e.getMessage());
+            return false;
+        }
+    }
+
     public void deleteFile(String filePath) {
         String baseUrl = settings.get("tdarr.server.url").orElse("").trim();
         if (baseUrl.isBlank()) {

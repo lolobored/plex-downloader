@@ -2,6 +2,7 @@ package org.lolobored.plexdownloader.controller;
 
 import tools.jackson.databind.ObjectMapper;
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
+import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
@@ -49,6 +50,7 @@ class AdminControllerTest {
     @MockitoBean LibrarySyncService syncService;
     @MockitoBean LibrarySyncScheduler syncScheduler;
     @MockitoBean PlexMediaServerClient plexClient;
+    @MockitoBean TdarrClient tdarrClient;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
@@ -157,5 +159,24 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/api/admin/sync"))
             .andExpect(status().isConflict());
+    }
+
+    @Test
+    void getTdarrTestReturnsOkWhenPingSucceeds() throws Exception {
+        when(tdarrClient.ping("http://tdarr:8265")).thenReturn(true);
+
+        mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(true));
+    }
+
+    @Test
+    void getTdarrTestReturnsNotOkWhenPingFails() throws Exception {
+        when(tdarrClient.ping("http://tdarr:8265")).thenReturn(false);
+
+        mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(false))
+            .andExpect(jsonPath("$.error").exists());
     }
 }
