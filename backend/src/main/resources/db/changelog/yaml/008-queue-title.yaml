@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-queue-title
+      author: system
+      changes:
+        - addColumn:
+            tableName: download_queue
+            columns:
+              - column:
+                  name: title
+                  type: TEXT

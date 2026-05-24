@@ -47,7 +47,7 @@ public class DownloadService {
             .orElseThrow(() -> new IllegalArgumentException("Movie not found: " + movieId));
         String subDir = "movies/" + Path.of(movie.getFilePath()).getParent().getFileName().toString();
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.MOVIE,
-            movieId, movie.getFilePath(), subDir);
+            movieId, movie.getFilePath(), subDir, movie.getTitle());
         item = queueRepo.save(item);
         self.executeCopyAsync(item.getId());
         return List.of(item.getId());
@@ -62,8 +62,11 @@ public class DownloadService {
             .orElseThrow(() -> new IllegalArgumentException("Show not found for episode: " + episodeId));
         String subDir = "tvshows/" + Path.of(ep.getFilePath()).getParent().getParent().getFileName().toString()
                         + "/" + Path.of(ep.getFilePath()).getParent().getFileName().toString();
+        String epTitle = show.getTitle() + " S" + String.format("%02d", season.getSeasonNumber())
+                         + "E" + String.format("%02d", ep.getEpisodeNumber())
+                         + (ep.getTitle() != null ? " - " + ep.getTitle() : "");
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
-            episodeId, ep.getFilePath(), subDir);
+            episodeId, ep.getFilePath(), subDir, epTitle);
         item = queueRepo.save(item);
         self.executeCopyAsync(item.getId());
         return List.of(item.getId());
@@ -80,8 +83,11 @@ public class DownloadService {
         for (Episode ep : episodes) {
             String subDir = "tvshows/" + Path.of(ep.getFilePath()).getParent().getParent().getFileName().toString()
                             + "/" + Path.of(ep.getFilePath()).getParent().getFileName().toString();
+            String epTitle = show.getTitle() + " S" + String.format("%02d", season.getSeasonNumber())
+                             + "E" + String.format("%02d", ep.getEpisodeNumber())
+                             + (ep.getTitle() != null ? " - " + ep.getTitle() : "");
             DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
-                ep.getId(), ep.getFilePath(), subDir);
+                ep.getId(), ep.getFilePath(), subDir, epTitle);
             item = queueRepo.save(item);
             self.executeCopyAsync(item.getId());
             ids.add(item.getId());
@@ -112,7 +118,8 @@ public class DownloadService {
     }
 
     private DownloadQueueItem buildItem(User user, DownloadQueueItem.MediaType type,
-                                        Long mediaId, String plexFilePath, String subDir) {
+                                        Long mediaId, String plexFilePath, String subDir,
+                                        String title) {
         String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
         String filename = Path.of(plexFilePath).getFileName().toString();
         String destPath = Path.of(conversionDir, "in-flight", subDir, filename).toString();
@@ -123,6 +130,7 @@ public class DownloadService {
         item.setUser(user);
         item.setMediaType(type);
         item.setMediaId(mediaId);
+        item.setTitle(title);
         item.setSourceFilePath(plexFilePath);
         item.setDestFilePath(destPath);
         item.setQueuePosition(nextPos);

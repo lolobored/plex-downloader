@@ -28,6 +28,8 @@ public class DownloadQueueItem {
     private String tdarrError;
     @Column(name = "output_file_path", columnDefinition = "TEXT")
     private String outputFilePath;
+    @Column(name = "title", columnDefinition = "TEXT")
+    private String title;
     @Column(name = "queue_position")
     private Integer queuePosition;
     @Column(name = "error_message", columnDefinition = "TEXT")

@@ -9,7 +9,7 @@
       <div v-for="item in inProgress" :key="item.id" class="queue-item active">
         <span class="spinner">⏳</span>
         <div class="item-info">
-          <span class="type">{{ item.mediaType }} #{{ item.mediaId }}</span>
+          <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
           <span class="sub">Copying…</span>
         </div>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
@@ -22,7 +22,7 @@
       <div v-for="item in pending" :key="item.id" class="queue-item">
         <span class="pos">#{{ item.queuePosition }}</span>
         <div class="item-info">
-          <span class="type">{{ item.mediaType }} #{{ item.mediaId }}</span>
+          <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
           <span class="sub">Queued {{ formatDate(item.requestedAt) }}</span>
         </div>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
@@ -36,7 +36,7 @@
       <div v-for="item in done" :key="item.id" class="queue-item done">
         <span class="done-icon">✓</span>
         <div class="item-info">
-          <span class="type">{{ item.mediaType }} #{{ item.mediaId }}</span>
+          <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
           <span class="sub">{{ formatDate(item.completedAt) }}</span>
           <span v-if="item.status === 'ERROR'" class="error-msg">{{ item.errorMessage }}</span>
         </div>
