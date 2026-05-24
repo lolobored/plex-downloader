@@ -11,19 +11,29 @@ if [ ! -f "$PGDATA/PG_VERSION" ]; then
         --encoding=UTF8 \
         --locale=C \
         "$PGDATA"
+    echo "[init] PostgreSQL data directory created."
+fi
 
-    # Temporary start to create user + database
-    su-exec postgres pg_ctl -D "$PGDATA" \
-        -o "-c listen_addresses='127.0.0.1'" start -w
+# Start PostgreSQL temporarily to ensure user + database exist
+su-exec postgres pg_ctl -D "$PGDATA" \
+    -o "-c listen_addresses='127.0.0.1'" start -w
 
-    su-exec postgres psql -U postgres <<-EOSQL
-        CREATE USER plexdl WITH PASSWORD '${POSTGRES_PASSWORD}';
-        CREATE DATABASE plexdownloader OWNER plexdl;
+# Idempotent: create user and database if they don't exist yet
+su-exec postgres psql -U postgres <<-EOSQL
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'plexdl') THEN
+            CREATE USER plexdl WITH PASSWORD '${POSTGRES_PASSWORD}';
+        END IF;
+    END
+    \$\$;
+    SELECT 'CREATE DATABASE plexdownloader'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'plexdownloader')\gexec
+    ALTER DATABASE plexdownloader OWNER TO plexdl;
 EOSQL
 
-    su-exec postgres pg_ctl -D "$PGDATA" stop -w
-    echo "[init] PostgreSQL initialized."
-fi
+su-exec postgres pg_ctl -D "$PGDATA" stop -w
+echo "[init] PostgreSQL ready."
 
 # Start PostgreSQL (listen only on loopback — no external exposure)
 echo "[boot] Starting PostgreSQL..."

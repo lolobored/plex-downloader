@@ -24,7 +24,8 @@ RUN apk add --no-cache postgresql postgresql-contrib su-exec
 
 # Postgres data directory — will be populated on first boot
 ENV PGDATA=/var/lib/postgresql/data
-RUN mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA"
+RUN mkdir -p "$PGDATA" /run/postgresql \
+    && chown -R postgres:postgres "$PGDATA" /run/postgresql
 
 WORKDIR /app
 COPY --from=backend-build /app/build/libs/*.jar app.jar
