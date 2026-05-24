@@ -130,7 +130,7 @@ class AdminControllerTest {
 
     @Test
     void getSyncStatusReturnsCurrentState() throws Exception {
-        when(syncService.status()).thenReturn(new SyncStatusResponse("IDLE", null, 0, null));
+        when(syncService.status()).thenReturn(new SyncStatusResponse("IDLE", null, 0, 0, null, null));
 
         mockMvc.perform(get("/api/admin/sync/status"))
             .andExpect(status().isOk())

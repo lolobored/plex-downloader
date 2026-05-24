@@ -70,6 +70,34 @@ public class TdarrClient {
         };
     }
 
+    /** Package-private so tests can stub it with @Spy. */
+    void callDelete(String baseUrl, String filePath) {
+        Map<String, Object> body = Map.of(
+            "collection", "FileJSONDB",
+            "mode",       "deleteOne",
+            "docID",      filePath
+        );
+        RestClient.create().post()
+            .uri(baseUrl + "/api/v2/cruddb")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .toBodilessEntity();
+    }
+
+    public void deleteFile(String filePath) {
+        String baseUrl = settings.get("tdarr.server.url").orElse("").trim();
+        if (baseUrl.isBlank()) {
+            log.warn("Tdarr URL not configured, skipping deleteFile for {}", filePath);
+            return;
+        }
+        try {
+            callDelete(baseUrl, filePath);
+        } catch (RestClientException e) {
+            log.warn("Tdarr deleteFile failed for {}: {}", filePath, e.getMessage());
+        }
+    }
+
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class TdarrFileResponse {

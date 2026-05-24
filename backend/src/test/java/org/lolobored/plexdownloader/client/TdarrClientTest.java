@@ -131,4 +131,26 @@ class TdarrClientTest {
         assertThat(client.getFileStatus("/file.mkv").get().status())
             .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
     }
+
+    @Test
+    void deleteFile_doesNotCallDelete_whenUrlBlank() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.empty());
+        client.deleteFile("/some/file.mkv");
+        verify(client, never()).callDelete(anyString(), anyString());
+    }
+
+    @Test
+    void deleteFile_callsDeleteWithCorrectArgs_whenUrlSet() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        doNothing().when(client).callDelete(anyString(), anyString());
+        client.deleteFile("/some/file.mkv");
+        verify(client).callDelete("http://tdarr:8265", "/some/file.mkv");
+    }
+
+    @Test
+    void deleteFile_doesNotThrow_whenRestClientException() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        doThrow(new RestClientException("conn refused")).when(client).callDelete(anyString(), anyString());
+        client.deleteFile("/some/file.mkv");  // must not throw
+    }
 }
