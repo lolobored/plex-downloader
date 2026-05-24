@@ -8,7 +8,6 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.RestClientException;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,6 +19,8 @@ class TdarrClientTest {
 
     @Mock SettingsService settings;
     @Spy @InjectMocks TdarrClient client;
+
+    // ---------- URL guard ----------
 
     @Test
     void getFileStatus_returnsEmpty_whenUrlBlank() {
@@ -33,24 +34,13 @@ class TdarrClientTest {
         assertThat(client.getFileStatus("/some/file.mkv")).isEmpty();
     }
 
-    @Test
-    void getFileStatus_returnsProcessing_whenQueued() {
-        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
-        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Queued");
-        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
-
-        Optional<TdarrClient.TdarrFileStatus> result = client.getFileStatus("/file.mkv");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().status()).isEqualTo(DownloadQueueItem.TdarrStatus.PROCESSING);
-    }
+    // ---------- status mapping — TranscodeDecisionMaker ----------
 
     @Test
-    void getFileStatus_returnsProcessing_whenProcessing() {
+    void getFileStatus_returnsProcessing_whenTranscodeQueued() {
         when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Processing");
+        resp.setTranscodeDecisionMaker("Queued");
         doReturn(resp).when(client).fetchStatus(anyString(), anyString());
 
         assertThat(client.getFileStatus("/file.mkv").get().status())
@@ -58,10 +48,21 @@ class TdarrClientTest {
     }
 
     @Test
-    void getFileStatus_returnsTranscoded_whenDoneTranscoding() {
+    void getFileStatus_returnsProcessing_whenTranscodeProcessing() {
         when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Done transcoding");
+        resp.setTranscodeDecisionMaker("Processing");
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        assertThat(client.getFileStatus("/file.mkv").get().status())
+            .isEqualTo(DownloadQueueItem.TdarrStatus.PROCESSING);
+    }
+
+    @Test
+    void getFileStatus_returnsTranscoded_whenTranscoded() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setTranscodeDecisionMaker("Transcoded");
         doReturn(resp).when(client).fetchStatus(anyString(), anyString());
 
         assertThat(client.getFileStatus("/file.mkv").get().status())
@@ -69,10 +70,10 @@ class TdarrClientTest {
     }
 
     @Test
-    void getFileStatus_returnsTranscoded_whenNoActionNeeded() {
+    void getFileStatus_returnsTranscoded_whenNotRequired() {
         when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("No action needed");
+        resp.setTranscodeDecisionMaker("Not required");
         doReturn(resp).when(client).fetchStatus(anyString(), anyString());
 
         assertThat(client.getFileStatus("/file.mkv").get().status())
@@ -80,18 +81,43 @@ class TdarrClientTest {
     }
 
     @Test
-    void getFileStatus_returnsTdarrError_withErrorMessage() {
+    void getFileStatus_returnsTdarrError_whenTranscodeError() {
         when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Transcode error");
-        resp.setErrorMessage("codec not supported");
+        resp.setTranscodeDecisionMaker("TranscodeError");
+        resp.setErrors("codec not supported");
         doReturn(resp).when(client).fetchStatus(anyString(), anyString());
 
         Optional<TdarrClient.TdarrFileStatus> result = client.getFileStatus("/file.mkv");
-
         assertThat(result.get().status()).isEqualTo(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
         assertThat(result.get().errorMessage()).isEqualTo("codec not supported");
     }
+
+    // ---------- status mapping — HealthCheck ----------
+
+    @Test
+    void getFileStatus_returnsProcessing_whenHealthQueued() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setHealthCheck("Queued");
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        assertThat(client.getFileStatus("/file.mkv").get().status())
+            .isEqualTo(DownloadQueueItem.TdarrStatus.PROCESSING);
+    }
+
+    @Test
+    void getFileStatus_returnsTdarrError_whenHealthError() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setHealthCheck("HealthError");
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        assertThat(client.getFileStatus("/file.mkv").get().status())
+            .isEqualTo(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
+    }
+
+    // ---------- edge cases ----------
 
     @Test
     void getFileStatus_returnsEmpty_whenRestClientException() {
@@ -112,50 +138,27 @@ class TdarrClientTest {
     }
 
     @Test
-    void getFileStatus_includesOutputFilePath_whenTranscoded() {
+    void getFileStatus_returnsNone_whenBothFieldsNull() {
         when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Done transcoding");
-        resp.setOutputFilePaths(List.of("/media/plex-download/libraries/movies/film.mp4"));
+        // both healthCheck and transcodeDecisionMaker null
         doReturn(resp).when(client).fetchStatus(anyString(), anyString());
 
-        Optional<TdarrClient.TdarrFileStatus> result = client.getFileStatus("/file.mkv");
-
-        assertThat(result.get().status()).isEqualTo(DownloadQueueItem.TdarrStatus.TRANSCODED);
-        assertThat(result.get().outputFilePath()).isEqualTo("/media/plex-download/libraries/movies/film.mp4");
+        assertThat(client.getFileStatus("/file.mkv").get().status())
+            .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
     }
 
     @Test
-    void getFileStatus_outputFilePath_isNull_whenNotTranscoded() {
+    void getFileStatus_outputFilePath_alwaysNull() {
         when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
         TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Queued");
+        resp.setTranscodeDecisionMaker("Transcoded");
         doReturn(resp).when(client).fetchStatus(anyString(), anyString());
 
         assertThat(client.getFileStatus("/file.mkv").get().outputFilePath()).isNull();
     }
 
-    @Test
-    void getFileStatus_returnsNone_whenStatusBlank() {
-        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
-        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("  ");
-        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
-
-        assertThat(client.getFileStatus("/file.mkv").get().status())
-            .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
-    }
-
-    @Test
-    void getFileStatus_returnsNone_whenStatusUnknown() {
-        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
-        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
-        resp.setTdarrStatus("Some new unknown status");
-        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
-
-        assertThat(client.getFileStatus("/file.mkv").get().status())
-            .isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
-    }
+    // ---------- deleteFile ----------
 
     @Test
     void deleteFile_doesNotCallDelete_whenUrlBlank() {

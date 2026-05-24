@@ -69,12 +69,10 @@ public class TdarrClient {
             if (response == null) {
                 return Optional.of(new TdarrFileStatus(DownloadQueueItem.TdarrStatus.NONE, null, null));
             }
-            DownloadQueueItem.TdarrStatus status = mapStatus(response.getTdarrStatus());
+            DownloadQueueItem.TdarrStatus status = mapStatus(response.getHealthCheck(), response.getTranscodeDecisionMaker());
             String error = status == DownloadQueueItem.TdarrStatus.TDARR_ERROR
-                ? response.getErrorMessage() : null;
-            String outputPath = (response.getOutputFilePaths() != null && !response.getOutputFilePaths().isEmpty())
-                ? response.getOutputFilePaths().get(0) : null;
-            return Optional.of(new TdarrFileStatus(status, error, outputPath));
+                ? (response.getErrors() != null ? response.getErrors() : "Unknown Tdarr error") : null;
+            return Optional.of(new TdarrFileStatus(status, error, null));
         } catch (RestClientException e) {
             log.error("Tdarr API error for {}: {}", absoluteFilePath, e.getMessage());
             return Optional.empty();
@@ -85,7 +83,7 @@ public class TdarrClient {
         Map<String, Object> body = Map.of(
             "data", Map.of(
                 "collection", "FileJSONDB",
-                "mode",       "getByID",
+                "mode",       "getById",
                 "docID",      filePath
             )
         );
@@ -132,7 +130,7 @@ public class TdarrClient {
         Map<String, Object> body = Map.of(
             "data", Map.of(
                 "collection", "FileJSONDB",
-                "mode",       "deleteOne",
+                "mode",       "removeOne",
                 "docID",      filePath
             )
         );
@@ -157,26 +155,30 @@ public class TdarrClient {
         }
     }
 
-    private DownloadQueueItem.TdarrStatus mapStatus(String tdarrStatus) {
-        if (tdarrStatus == null || tdarrStatus.isBlank()) {
-            return DownloadQueueItem.TdarrStatus.NONE;
-        }
-        return switch (tdarrStatus) {
-            case "Queued", "Processing" -> DownloadQueueItem.TdarrStatus.PROCESSING;
-            case "Done transcoding", "No action needed" -> DownloadQueueItem.TdarrStatus.TRANSCODED;
-            case "Transcode error", "Health error" -> DownloadQueueItem.TdarrStatus.TDARR_ERROR;
-            default -> DownloadQueueItem.TdarrStatus.NONE;
-        };
+    /**
+     * Maps Tdarr's actual API fields to our internal status.
+     * HealthCheck:            "Queued" | "Processing" | "Healthy" | "HealthError"
+     * TranscodeDecisionMaker: "Queued" | "Processing" | "Transcoded" | "Not required" | "TranscodeError"
+     */
+    private DownloadQueueItem.TdarrStatus mapStatus(String healthCheck, String transcode) {
+        if ("HealthError".equals(healthCheck)) return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
+        if ("TranscodeError".equals(transcode))  return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
+        if ("Transcoded".equals(transcode) || "Not required".equals(transcode))
+            return DownloadQueueItem.TdarrStatus.TRANSCODED;
+        if ("Queued".equals(transcode) || "Processing".equals(transcode)
+                || "Queued".equals(healthCheck) || "Processing".equals(healthCheck))
+            return DownloadQueueItem.TdarrStatus.PROCESSING;
+        return DownloadQueueItem.TdarrStatus.NONE;
     }
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     static class TdarrFileResponse {
-        @JsonProperty("tdarrStatus")
-        private String tdarrStatus;
-        @JsonProperty("errorMessage")
-        private String errorMessage;
-        @JsonProperty("outputFilePaths")
-        private java.util.List<String> outputFilePaths;
+        @JsonProperty("HealthCheck")
+        private String healthCheck;
+        @JsonProperty("TranscodeDecisionMaker")
+        private String transcodeDecisionMaker;
+        @JsonProperty("errors")
+        private String errors;
     }
 }
