@@ -1,13 +1,17 @@
 package org.lolobored.plexdownloader.service;
 
+import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -31,6 +35,7 @@ public class DownloadService {
     private final DownloadQueueRepository queueRepo;
     private final PathMappingService pathMapping;
     private final SettingsService settings;
+    private final TdarrClient tdarrClient;
 
     @Autowired
     @Lazy
@@ -112,7 +117,7 @@ public class DownloadService {
         String appPath = pathMapping.translate(plexFilePath);
         String conversionDir = settings.getRequired("plex.conversion.dir");
         String filename = Path.of(appPath).getFileName().toString();
-        String destPath = Path.of(conversionDir, subDir, filename).toString();
+        String destPath = Path.of(conversionDir, "in-flight", subDir, filename).toString();
 
         int nextPos = queueRepo.findMaxQueuePosition().orElse(0) + 1;
 
@@ -125,6 +130,47 @@ public class DownloadService {
         item.setQueuePosition(nextPos);
         item.setStatus(DownloadQueueItem.Status.PENDING);
         return item;
+    }
+
+    @Transactional
+    public void cancel(Long itemId, User user) {
+        DownloadQueueItem item = queueRepo.findById(itemId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Queue item not found"));
+
+        if (!item.getUser().getId().equals(user.getId()) && user.getRole() != User.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
+        }
+        if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Copy in progress, retry when DONE");
+        }
+
+        // Delete in-flight file (always attempt)
+        try {
+            Files.deleteIfExists(Path.of(item.getDestFilePath()));
+        } catch (IOException e) {
+            log.warn("Could not delete in-flight file {}: {}", item.getDestFilePath(), e.getMessage());
+        }
+
+        if (item.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED) {
+            // Delete transcoded output from /libraries
+            if (item.getOutputFilePath() != null) {
+                try {
+                    Files.deleteIfExists(Path.of(item.getOutputFilePath()));
+                } catch (IOException e) {
+                    log.warn("Could not delete output file {}: {}", item.getOutputFilePath(), e.getMessage());
+                }
+            }
+        } else {
+            // Evict from Tdarr DB
+            try {
+                tdarrClient.deleteFile(pathMapping.appToTdarr(item.getDestFilePath()));
+            } catch (Exception e) {
+                log.warn("Tdarr eviction failed for item {}: {}", itemId, e.getMessage());
+            }
+        }
+
+        queueRepo.delete(item);
     }
 
     @Async

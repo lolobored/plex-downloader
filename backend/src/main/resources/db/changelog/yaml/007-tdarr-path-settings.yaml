@@ -3,16 +3,13 @@ databaseChangeLog:
       id: 007-output-file-path
       author: plexdownloader
       changes:
-        - addColumn:
-            tableName: download_queue
-            columns:
-              - column:
-                  name: output_file_path
-                  type: TEXT
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN output_file_path TEXT"
 
   - changeSet:
       id: 007-migrate-path-prefixes
       author: plexdownloader
+      dbms: postgresql
       changes:
         - sql:
             sql: >
