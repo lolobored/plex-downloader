@@ -12,8 +12,8 @@ When a user unsubscribes from a TV show or a Plex playlist, the download queue i
 2. Frontend calls `GET /api/subscriptions/{showId}/queue-count` (or playlist equivalent) → `{ count: N }`.
 3. If N > 0: modal "Unsubscribing will remove **N queued item(s)** from your download queue (including in-progress files). Continue?" with **Cancel** / **Unsubscribe** buttons.
 4. If N = 0: skip modal, proceed immediately.
-5. On confirm: `DELETE /api/subscriptions/{showId}` — deletes subscription row, cancels all cancellable queue items.
-6. Items with status `IN_PROGRESS` are excluded from cancellation (active file copy cannot be safely aborted mid-stream). They finish copying; since the subscription is deleted, no further items are enqueued. IN_PROGRESS items ARE included in the count so the user is informed.
+5. On confirm: `DELETE /api/subscriptions/{showId}` — deletes subscription row, cancels all non-IN_PROGRESS queue items immediately, marks IN_PROGRESS items with `cancellationRequested = true`.
+6. IN_PROGRESS items: the active file copy cannot be safely aborted mid-stream. They are flagged for deferred cancellation — when `executeCopyAsync()` finishes the copy it re-reads the item from DB, detects the flag, and cancels (files deleted, Tdarr evicted, DB entry removed) instead of marking DONE. IN_PROGRESS items ARE included in the count so the user is informed.
 
 ## File/Tdarr Cleanup (matching existing `DownloadService.cancel()` logic)
 
@@ -35,11 +35,26 @@ List<DownloadQueueItem> findAllByUserIdAndShowId(@Param("userId") Long userId,
                                                   @Param("showId") Long showId);
 ```
 
+#### `DownloadQueueItem` — new field
+
+Add `boolean cancellationRequested` (default `false`) to the entity and the DB schema (Flyway migration).
+
 #### `DownloadService` — refactor + new method
 
 Extract private `doCancelItem(DownloadQueueItem item)` with the file deletion + Tdarr eviction logic (no auth check, no IN_PROGRESS guard — internal use only).
 
 Refactor `cancel(Long itemId, User user)` to delegate to `doCancelItem()` after auth + IN_PROGRESS check.
+
+In `executeCopyAsync()`, after the copy completes (success or error path), re-read the item from DB and check `cancellationRequested`:
+```java
+// re-read after copy
+DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
+if (fresh != null && fresh.isCancellationRequested()) {
+    doCancelItem(fresh);  // deletes files, Tdarr eviction, removes DB entry
+    return;
+}
+// otherwise proceed with normal DONE/ERROR status update
+```
 
 Add:
 ```java
@@ -48,8 +63,12 @@ public int cancelAllForShow(Long userId, Long showId) {
     List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndShowId(userId, showId);
     int cancelled = 0;
     for (DownloadQueueItem item : items) {
-        if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) continue; // skip active copy
-        doCancelItem(item);
+        if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+            item.setCancellationRequested(true);  // defer — executeCopyAsync will clean up after copy
+            queueRepo.save(item);
+        } else {
+            doCancelItem(item);
+        }
         cancelled++;
     }
     return cancelled;
@@ -84,10 +103,15 @@ public int cancelAllForUser(Long playlistId, User user) {
         Long mediaId = resolveLocalId(pi.getPlexId(), pi.getMediaType());
         if (mediaId == null) continue;
         DownloadQueueItem.MediaType type = DownloadQueueItem.MediaType.valueOf(pi.getMediaType());
-        Optional<DownloadQueueItem> qi = queueRepo.findByUser_IdAndMediaTypeAndMediaId(user.getId(), type, mediaId);
-        if (qi.isEmpty()) continue;
-        if (qi.get().getStatus() == DownloadQueueItem.Status.IN_PROGRESS) continue;
-        cancelItem(user, pi.getPlexId(), pi.getMediaType());
+        Optional<DownloadQueueItem> qiOpt = queueRepo.findByUser_IdAndMediaTypeAndMediaId(user.getId(), type, mediaId);
+        if (qiOpt.isEmpty()) continue;
+        DownloadQueueItem qi = qiOpt.get();
+        if (qi.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+            qi.setCancellationRequested(true);  // defer
+            queueRepo.save(qi);
+        } else {
+            cancelItem(user, pi.getPlexId(), pi.getMediaType());
+        }
         cancelled++;
     }
     return cancelled;
@@ -177,8 +201,10 @@ if (subscribed.value) {
 
 | File | Change |
 |---|---|
+| `backend/.../model/DownloadQueueItem.java` | Add `cancellationRequested` boolean field |
+| `backend/src/main/resources/db/migration/V<next>__add_cancellation_requested.sql` | `ALTER TABLE download_queue_item ADD COLUMN cancellation_requested BOOLEAN NOT NULL DEFAULT FALSE` |
 | `backend/.../repository/DownloadQueueRepository.java` | Add `findAllByUserIdAndShowId` query |
-| `backend/.../service/DownloadService.java` | Extract `doCancelItem()`, add `cancelAllForShow()` |
+| `backend/.../service/DownloadService.java` | Extract `doCancelItem()`, add `cancelAllForShow()`, deferred cancel in `executeCopyAsync()` |
 | `backend/.../service/SubscriptionService.java` | Call `cancelAllForShow()` in `cancel()` |
 | `backend/.../controller/SubscriptionController.java` | Add `GET /{showId}/queue-count` |
 | `backend/.../service/PlaylistSyncService.java` | Add `cancelAllForUser()`, `countQueuedForUser()` |
@@ -196,15 +222,17 @@ if (subscribed.value) {
 `DownloadServiceTest`:
 - `doCancelItem_deletesPendingItem` — in-flight file deleted, queue entry removed
 - `doCancelItem_deletesTranscodedItem` — both files deleted, Tdarr evict called twice
-- `cancelAllForShow_cancelsAllNonInProgress` — skips IN_PROGRESS, cancels rest, returns correct count
+- `cancelAllForShow_cancelsNonInProgressImmediately` — PENDING/DONE/ERROR cancelled, returns correct count
+- `cancelAllForShow_flagsInProgressForDeferredCancel` — IN_PROGRESS item gets `cancellationRequested=true`, not deleted yet, still counted
 - `cancelAllForShow_returnsZeroWhenQueueEmpty`
+- `executeCopyAsync_cancelsAfterCopyWhenFlagged` — after copy, re-reads item, sees flag, calls `doCancelItem` instead of setting DONE
 
 `SubscriptionServiceTest`:
 - `cancel_removesSubscriptionAndCancelsQueueItems` — subscription deleted, `cancelAllForShow` called
 
 `PlaylistSyncServiceTest`:
-- `cancelAllForUser_skipsInProgress`
-- `cancelAllForUser_cancelsAllOtherStatuses`
+- `cancelAllForUser_flagsInProgressForDeferredCancel`
+- `cancelAllForUser_cancelsNonInProgressImmediately`
 - `countQueuedForUser_returnsCorrectCount`
 
 `SubscriptionControllerTest`:
