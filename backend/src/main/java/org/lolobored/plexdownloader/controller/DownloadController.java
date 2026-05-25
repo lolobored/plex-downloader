@@ -76,8 +76,9 @@ public class DownloadController {
         DownloadQueueItem item = queueRepo.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "Queue item not found"));
-        if (!item.getUser().getId().equals(user.getId())
-                && user.getRole() != User.Role.ADMIN) {
+        User owner = item.getUser();
+        if (owner == null || (!owner.getId().equals(user.getId())
+                && user.getRole() != User.Role.ADMIN)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
         }
         return tdarrSync.requeueOne(id);

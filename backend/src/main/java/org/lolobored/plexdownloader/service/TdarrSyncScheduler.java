@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
@@ -72,6 +73,7 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
     }
 
     /** Requeue a TDARR_ERROR item back to Tdarr. Resets status to DONE/NONE. */
+    @Transactional
     public DownloadQueueItem requeueOne(Long id) {
         DownloadQueueItem item = queueRepo.findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -155,8 +157,8 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
                   .filter(p -> !p.equals(root))
                   .filter(Files::isDirectory)
                   .forEach(p -> {
-                      try {
-                          if (!Files.list(p).findFirst().isPresent()) {
+                      try (var entries = Files.list(p)) {
+                          if (!entries.findFirst().isPresent()) {
                               Files.delete(p);
                               log.debug("Deleted empty dir: {}", p);
                           }

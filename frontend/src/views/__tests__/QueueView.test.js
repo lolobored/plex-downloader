@@ -105,13 +105,8 @@ describe('QueueView', () => {
     expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(false)
   })
 
-  it('clicking retry calls retryQueueItem and updates item in list', async () => {
-    const updatedItem = {
-      id: 22, mediaType: 'MOVIE', mediaId: 5, status: 'PENDING',
-      tdarrStatus: null, tdarrError: null,
-      queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: null
-    }
-    downloadApi.retryQueueItem.mockResolvedValue(updatedItem)
+  it('clicking retry calls retryQueueItem and refreshes queue', async () => {
+    downloadApi.retryQueueItem.mockResolvedValue({ id: 22, status: 'DONE', tdarrStatus: 'NONE' })
 
     const { wrapper, store } = factory([
       { id: 22, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
@@ -121,8 +116,7 @@ describe('QueueView', () => {
     await wrapper.find('[data-testid="retry-btn"]').trigger('click')
     await flushPromises()
     expect(downloadApi.retryQueueItem).toHaveBeenCalledWith(22)
-    const found = store.queueItems.find(i => i.id === 22)
-    expect(found.status).toBe('PENDING')
+    expect(store.fetchQueue).toHaveBeenCalled()
   })
 
   it('shows remove button on each item', () => {

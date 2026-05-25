@@ -108,9 +108,8 @@ async function refreshTdarr(id) {
 async function retryItem(id) {
   retrying.value = new Set([...retrying.value, id])
   try {
-    const updated = await retryQueueItem(id)
-    const idx = dlStore.queueItems.findIndex(i => i.id === updated.id)
-    if (idx !== -1) dlStore.queueItems[idx] = updated
+    await retryQueueItem(id)
+    await dlStore.fetchQueue()
   } catch (e) {
     console.error('Retry failed', e)
   } finally {
