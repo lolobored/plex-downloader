@@ -20,7 +20,12 @@
     </div>
 
     <div class="item-list">
-      <div v-for="item in playlist.items" :key="item.id" class="item-row">
+      <div v-for="item in playlist.items" :key="item.id"
+           class="item-row"
+           :class="{ clickable: item.mediaId != null }"
+           :tabindex="item.mediaId != null ? 0 : undefined"
+           @click="navigateToItem(item)"
+           @keydown.enter="navigateToItem(item)">
         <img
           class="item-thumb"
           :src="`/api/posters/${item.plexId}.jpg`"
@@ -109,6 +114,15 @@ function cancelUnsubscribe() {
   showConfirm.value = false
 }
 
+function navigateToItem(item) {
+  if (item.mediaId == null) return
+  if (item.mediaType === 'MOVIE') {
+    router.push(`/movies/${item.mediaId}`)
+  } else if (item.mediaType === 'EPISODE') {
+    router.push(`/tv/${item.showId}/seasons/${item.seasonId}/episodes/${item.mediaId}`)
+  }
+}
+
 function statusClass(item) {
   if (!item.queueStatus) return 'status-none'
   if (item.tdarrStatus === 'TRANSCODED') return 'status-done'
@@ -153,6 +167,8 @@ h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
   display: flex; align-items: center; gap: 12px;
   padding: 8px 12px; background: var(--surface2); border-radius: 6px;
 }
+.item-row.clickable { cursor: pointer; }
+.item-row.clickable:hover { background: color-mix(in srgb, var(--surface2) 85%, var(--text) 15%); }
 .item-thumb {
   width: 32px; height: 48px; object-fit: cover;
   border-radius: 3px; flex-shrink: 0; background: var(--surface);
