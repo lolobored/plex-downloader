@@ -6,3 +6,4 @@ export const subscribe         = (showId, targetCount) => api.post('/api/subscri
 export const unsubscribe       = (showId)              => api.delete(`/api/subscriptions/${showId}`)
 export const syncNow           = (showId)              => api.post(`/api/subscriptions/${showId}/sync`).then(r => r.data)
 export const enqueueUnwatched  = (showId, limit)       => api.post(`/api/download/show/${showId}/unwatched`, { limit }).then(r => r.data)
+export const getShowQueueCount = (showId)              => api.get(`/api/subscriptions/${showId}/queue-count`).then(r => r.data.count)

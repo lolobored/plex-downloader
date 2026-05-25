@@ -17,3 +17,8 @@ export async function subscribe(id) {
 export async function unsubscribe(id) {
   await http.delete(`/api/playlists/${id}/subscribe`)
 }
+
+export async function getPlaylistQueueCount(playlistId) {
+  const { data } = await http.get(`/api/playlists/${playlistId}/queue-count`)
+  return data.count  // number
+}
