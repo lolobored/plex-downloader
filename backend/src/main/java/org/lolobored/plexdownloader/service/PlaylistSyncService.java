@@ -180,6 +180,26 @@ public class PlaylistSyncService {
         });
     }
 
+    public int countQueuedForUser(Long userId, Long playlistId) {
+        return queueRepo.findAllByUserIdAndPlaylistId(userId, playlistId).size();
+    }
+
+    @Transactional
+    public int cancelAllForUser(Long userId, Long playlistId) {
+        List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndPlaylistId(userId, playlistId);
+        int cancelled = 0;
+        for (DownloadQueueItem item : items) {
+            if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+                item.setCancellationRequested(true);
+                queueRepo.save(item);
+            } else {
+                downloadService.doCancelItem(item);
+            }
+            cancelled++;
+        }
+        return cancelled;
+    }
+
     private Long resolveLocalId(String plexId, String mediaType) {
         if ("MOVIE".equals(mediaType)) return movieRepo.findByPlexId(plexId).map(Movie::getId).orElse(null);
         if ("EPISODE".equals(mediaType)) return episodeRepo.findByPlexId(plexId).map(Episode::getId).orElse(null);

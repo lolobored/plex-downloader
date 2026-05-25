@@ -176,4 +176,51 @@ class PlaylistSyncServiceTest {
         verify(downloadService).enqueueMovie(100L, user);
         verify(downloadService).enqueueEpisode(200L, user);
     }
+
+    @Test
+    void countQueuedForUser_returnsCount() {
+        DownloadQueueItem i1 = new DownloadQueueItem(); i1.setId(1L);
+        DownloadQueueItem i2 = new DownloadQueueItem(); i2.setId(2L);
+        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(i1, i2));
+
+        int count = service.countQueuedForUser(1L, 5L);
+
+        assertThat(count).isEqualTo(2);
+    }
+
+    @Test
+    void cancelAllForUser_cancelsNonInProgressItems() {
+        DownloadQueueItem pending = new DownloadQueueItem();
+        pending.setId(1L); pending.setStatus(DownloadQueueItem.Status.PENDING);
+        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(pending));
+
+        int result = service.cancelAllForUser(1L, 5L);
+
+        assertThat(result).isEqualTo(1);
+        verify(downloadService).doCancelItem(pending);
+        verify(queueRepo, never()).save(any());
+    }
+
+    @Test
+    void cancelAllForUser_flagsInProgressForDeferredCancel() {
+        DownloadQueueItem inProgress = new DownloadQueueItem();
+        inProgress.setId(2L); inProgress.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(inProgress));
+
+        service.cancelAllForUser(1L, 5L);
+
+        verify(queueRepo).save(inProgress);
+        assertThat(inProgress.isCancellationRequested()).isTrue();
+        verify(downloadService, never()).doCancelItem(any());
+    }
+
+    @Test
+    void cancelAllForUser_returnsZeroWhenEmpty() {
+        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of());
+
+        int result = service.cancelAllForUser(1L, 5L);
+
+        assertThat(result).isEqualTo(0);
+        verify(downloadService, never()).doCancelItem(any());
+    }
 }
