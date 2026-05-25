@@ -71,6 +71,32 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         return item;
     }
 
+    /** Requeue a TDARR_ERROR item back to Tdarr. Resets status to DONE/NONE. */
+    public DownloadQueueItem requeueOne(Long id) {
+        DownloadQueueItem item = queueRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Queue item not found: " + id));
+        if (item.getStatus() != DownloadQueueItem.Status.ERROR
+                || item.getTdarrStatus() != DownloadQueueItem.TdarrStatus.TDARR_ERROR) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Item is not in TDARR_ERROR state (status=" + item.getStatus()
+                + " tdarrStatus=" + item.getTdarrStatus() + ")");
+        }
+        try {
+            tdarrClient.requeueFile(item.getDestFilePath());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "Tdarr requeue failed: " + e.getMessage());
+        }
+        item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        item.setErrorMessage(null);
+        item.setTdarrError(null);
+        queueRepo.save(item);
+        log.info("Tdarr requeue: item={} reset to DONE/NONE", id);
+        return item;
+    }
+
     void applyTdarrStatus(DownloadQueueItem item) {
         Optional<TdarrClient.TdarrFileStatus> statusOpt = tdarrClient.getFileStatus(item.getDestFilePath());
         if (statusOpt.isEmpty()) {

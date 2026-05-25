@@ -186,4 +186,80 @@ class TdarrSyncSchedulerTest {
             )
         );
     }
+
+    // ---------- requeueOne ----------
+
+    @Test
+    void requeueOne_resetsItemAndCallsTdarr() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(1L);
+        item.setStatus(DownloadQueueItem.Status.ERROR);
+        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
+        item.setErrorMessage("Tdarr transcoding failed: codec error");
+        item.setTdarrError("codec error");
+        item.setDestFilePath("/conversion/in-flight/movies/film/film.mkv");
+
+        when(queueRepo.findById(1L)).thenReturn(Optional.of(item));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        doNothing().when(tdarrClient).requeueFile(anyString());
+
+        DownloadQueueItem result = scheduler.requeueOne(1L);
+
+        verify(tdarrClient).requeueFile("/conversion/in-flight/movies/film/film.mkv");
+        assertThat(result.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
+        assertThat(result.getTdarrStatus()).isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
+        assertThat(result.getErrorMessage()).isNull();
+        assertThat(result.getTdarrError()).isNull();
+    }
+
+    @Test
+    void requeueOne_throws404_whenItemNotFound() {
+        when(queueRepo.findById(99L)).thenReturn(Optional.empty());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> scheduler.requeueOne(99L))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("not found");
+    }
+
+    @Test
+    void requeueOne_throws400_whenStatusNotError() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(2L);
+        item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
+        when(queueRepo.findById(2L)).thenReturn(Optional.of(item));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> scheduler.requeueOne(2L))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("TDARR_ERROR");
+    }
+
+    @Test
+    void requeueOne_throws400_whenTdarrStatusNotTdarrError() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(3L);
+        item.setStatus(DownloadQueueItem.Status.ERROR);
+        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.PROCESSING);
+        when(queueRepo.findById(3L)).thenReturn(Optional.of(item));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> scheduler.requeueOne(3L))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("TDARR_ERROR");
+    }
+
+    @Test
+    void requeueOne_throws502_whenTdarrCallFails() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(4L);
+        item.setStatus(DownloadQueueItem.Status.ERROR);
+        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
+        item.setDestFilePath("/conversion/in-flight/movies/film/film.mkv");
+        when(queueRepo.findById(4L)).thenReturn(Optional.of(item));
+        doThrow(new org.springframework.web.client.RestClientException("timeout"))
+            .when(tdarrClient).requeueFile(anyString());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> scheduler.requeueOne(4L))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("502");
+    }
 }
