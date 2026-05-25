@@ -148,4 +148,202 @@ describe('QueueView', () => {
     expect(downloadApi.removeQueueItem).toHaveBeenCalledWith(3)
     expect(store.fetchQueue).toHaveBeenCalled()
   })
+
+  // ── Filter bar ──────────────────────────────────────────────────────────────
+
+  it('filter bar renders type chips, status chips, and search input', () => {
+    const { wrapper } = factory([])
+    expect(wrapper.find('[data-testid="chip-type-ALL"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-type-MOVIE"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-type-TV"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-ERROR"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-TRANSCODED"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="filter-search"]').exists()).toBe(true)
+  })
+
+  it('Movie chip filters out TV items', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click')
+    expect(wrapper.text()).toContain('Inception')
+    expect(wrapper.text()).not.toContain('Pilot')
+  })
+
+  it('TV chip filters out movie items', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="chip-type-TV"]').trigger('click')
+    expect(wrapper.text()).not.toContain('Inception')
+    expect(wrapper.text()).toContain('Pilot')
+  })
+
+  it('clicking active type chip resets filter and shows all', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click')
+    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click') // toggle off
+    expect(wrapper.text()).toContain('Inception')
+    expect(wrapper.text()).toContain('Pilot')
+  })
+
+  it('active type chip has active class', async () => {
+    const { wrapper } = factory([])
+    const chip = wrapper.find('[data-testid="chip-type-MOVIE"]')
+    await chip.trigger('click')
+    expect(chip.classes()).toContain('active')
+  })
+
+  it('status chip ERROR hides non-error items', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Good', status: 'DONE',
+        tdarrStatus: 'TRANSCODED', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Bad', status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click')
+    expect(wrapper.text()).not.toContain('Good')
+    expect(wrapper.text()).toContain('Bad')
+  })
+
+  it('status chips ERROR + TRANSCODED show both', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'AllDone', status: 'DONE',
+        tdarrStatus: 'TRANSCODED', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'BadItem', status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 3, mediaType: 'MOVIE', mediaId: 3, title: 'StillWaiting', status: 'PENDING',
+        tdarrStatus: null, queuePosition: 3,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
+    ])
+    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click')
+    await wrapper.find('[data-testid="chip-status-TRANSCODED"]').trigger('click')
+    expect(wrapper.text()).toContain('AllDone')
+    expect(wrapper.text()).toContain('BadItem')
+    expect(wrapper.text()).not.toContain('StillWaiting')
+  })
+
+  it('active status chip has active class', async () => {
+    const { wrapper } = factory([])
+    const chip = wrapper.find('[data-testid="chip-status-ERROR"]')
+    await chip.trigger('click')
+    expect(chip.classes()).toContain('active')
+  })
+
+  it('text filter matches title', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Matrix', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="filter-search"]').setValue('incep')
+    expect(wrapper.text()).toContain('Inception')
+    expect(wrapper.text()).not.toContain('Matrix')
+  })
+
+  it('text filter matches mediaType', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="filter-search"]').setValue('episode')
+    expect(wrapper.text()).not.toContain('Inception')
+    expect(wrapper.text()).toContain('Pilot')
+  })
+
+  it('text filter matches errorMessage', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Bad', status: 'ERROR',
+        errorMessage: 'disk full', tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Other', status: 'ERROR',
+        errorMessage: 'network timeout', tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="filter-search"]').setValue('disk')
+    expect(wrapper.text()).toContain('Bad')
+    expect(wrapper.text()).not.toContain('Other')
+  })
+
+  it('text filter matches rendered fallback when title is absent', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 42, title: null, status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="filter-search"]').setValue('movie #42')
+    expect(wrapper.text()).toContain('MOVIE #42')
+  })
+
+  it('text filter matches tdarrError field', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Film', status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec unsupported', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Other', status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', tdarrError: 'network error', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="filter-search"]').setValue('codec')
+    expect(wrapper.text()).toContain('Film')
+    expect(wrapper.text()).not.toContain('Other')
+  })
+
+  it('toggling active status chip off restores items', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Good', status: 'DONE',
+        tdarrStatus: 'TRANSCODED', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Bad', status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click')
+    expect(wrapper.text()).not.toContain('Good')
+    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click') // toggle off
+    expect(wrapper.text()).toContain('Good')
+    expect(wrapper.text()).toContain('Bad')
+  })
+
+  it('DONE chip matches DONE item with null tdarrStatus', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Legacy', status: 'DONE',
+        tdarrStatus: null, queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Waiting', status: 'PENDING',
+        tdarrStatus: null, queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
+    ])
+    await wrapper.find('[data-testid="chip-status-DONE"]').trigger('click')
+    expect(wrapper.text()).toContain('Legacy')
+    expect(wrapper.text()).not.toContain('Waiting')
+  })
 })

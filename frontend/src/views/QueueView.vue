@@ -2,6 +2,29 @@
   <div>
     <h2>Download Queue</h2>
 
+    <div class="filter-bar">
+      <div class="filter-group">
+        <button type="button" data-testid="chip-type-ALL"
+                class="chip" :class="{ active: typeFilter === 'ALL' }"
+                @click="setTypeFilter('ALL')">All</button>
+        <button type="button" data-testid="chip-type-MOVIE"
+                class="chip" :class="{ active: typeFilter === 'MOVIE' }"
+                @click="setTypeFilter('MOVIE')">Movie</button>
+        <button type="button" data-testid="chip-type-TV"
+                class="chip" :class="{ active: typeFilter === 'TV' }"
+                @click="setTypeFilter('TV')">TV</button>
+      </div>
+      <div class="filter-group">
+        <button v-for="s in STATUS_CHIPS" :key="s.key"
+                type="button"
+                :data-testid="'chip-status-' + s.key"
+                class="chip" :class="{ active: statusFilter.has(s.key) }"
+                @click="toggleStatusFilter(s.key)">{{ s.label }}</button>
+      </div>
+      <input data-testid="filter-search" v-model="textFilter"
+             type="search" class="filter-search" placeholder="Search…" />
+    </div>
+
     <div v-if="allEmpty" class="empty">Queue is empty.</div>
 
     <section v-if="inProgress.length" class="section">
@@ -41,7 +64,7 @@
           <span v-if="item.status === 'ERROR'" class="error-msg">{{ item.errorMessage }}</span>
         </div>
         <template v-if="item.status === 'DONE'">
-          <span v-if="item.tdarrStatus === 'NONE'"        class="tdarr-badge none">Queued in Tdarr</span>
+          <span v-if="!item.tdarrStatus || item.tdarrStatus === 'NONE'" class="tdarr-badge none">Queued in Tdarr</span>
           <span v-else-if="item.tdarrStatus === 'PROCESSING'"  class="tdarr-badge processing">Transcoding…</span>
           <span v-else-if="item.tdarrStatus === 'TRANSCODED'"  class="tdarr-badge transcoded">Transcoded ✓</span>
           <button :data-testid="'tdarr-refresh-btn-' + item.id"
@@ -81,6 +104,60 @@ const removing    = ref(new Set())
 const refreshing  = ref(new Set())
 const retrying    = ref(new Set())
 
+// ── Filter state ─────────────────────────────────────────────────────────────
+const typeFilter   = ref('ALL')      // 'ALL' | 'MOVIE' | 'TV'
+const statusFilter = ref(new Set())  // Set<string>
+const textFilter   = ref('')
+
+const STATUS_CHIPS = [
+  { key: 'PENDING',     label: 'Pending' },
+  { key: 'COPYING',     label: 'Copying' },
+  { key: 'DONE',        label: 'Done' },
+  { key: 'TRANSCODING', label: 'Transcoding' },
+  { key: 'TRANSCODED',  label: 'Transcoded' },
+  { key: 'ERROR',       label: 'Error' },
+]
+
+function matchesType(item) {
+  if (typeFilter.value === 'ALL') return true
+  if (typeFilter.value === 'MOVIE') return item.mediaType === 'MOVIE'
+  if (typeFilter.value === 'TV')    return ['EPISODE', 'SEASON', 'SHOW'].includes(item.mediaType)
+  return true
+}
+
+function matchesStatus(item) {
+  if (statusFilter.value.size === 0) return true
+  const a = statusFilter.value
+  if (a.has('PENDING')     && item.status === 'PENDING') return true
+  if (a.has('COPYING')     && item.status === 'IN_PROGRESS') return true
+  if (a.has('DONE')        && item.status === 'DONE' && (!item.tdarrStatus || item.tdarrStatus === 'NONE')) return true
+  if (a.has('TRANSCODING') && item.tdarrStatus === 'PROCESSING') return true
+  if (a.has('TRANSCODED')  && item.tdarrStatus === 'TRANSCODED') return true
+  if (a.has('ERROR')       && (item.status === 'ERROR' || item.tdarrStatus === 'TDARR_ERROR')) return true
+  return false
+}
+
+function matchesText(item) {
+  const q = textFilter.value.trim().toLowerCase()
+  if (!q) return true
+  const displayTitle = item.title || `${item.mediaType} #${item.mediaId}`
+  return [displayTitle, item.mediaType, item.errorMessage, item.tdarrError]
+    .filter(Boolean)
+    .some(s => s.toLowerCase().includes(q))
+}
+
+function setTypeFilter(type) {
+  typeFilter.value = typeFilter.value === type ? 'ALL' : type
+}
+
+function toggleStatusFilter(status) {
+  const next = new Set(statusFilter.value)
+  if (next.has(status)) next.delete(status)
+  else next.add(status)
+  statusFilter.value = next
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
 async function remove(id) {
   removing.value = new Set([...removing.value, id])
   try {
@@ -119,10 +196,31 @@ async function retryItem(id) {
   }
 }
 
-const inProgress = computed(() => dlStore.queueItems.filter(i => i.status === 'IN_PROGRESS'))
-const pending    = computed(() => dlStore.queueItems.filter(i => i.status === 'PENDING'))
-const done       = computed(() => dlStore.queueItems.filter(i => i.status === 'DONE' || i.status === 'ERROR'))
-const allEmpty   = computed(() => inProgress.value.length === 0 && pending.value.length === 0 && done.value.length === 0)
+// ── Filtered section lists ────────────────────────────────────────────────────
+const inProgress = computed(() =>
+  dlStore.queueItems
+    .filter(i => i.status === 'IN_PROGRESS')
+    .filter(matchesType)
+    .filter(matchesText)
+    .filter(matchesStatus)
+)
+const pending = computed(() =>
+  dlStore.queueItems
+    .filter(i => i.status === 'PENDING')
+    .filter(matchesType)
+    .filter(matchesText)
+    .filter(matchesStatus)
+)
+const done = computed(() =>
+  dlStore.queueItems
+    .filter(i => i.status === 'DONE' || i.status === 'ERROR')
+    .filter(matchesType)
+    .filter(matchesText)
+    .filter(matchesStatus)
+)
+const allEmpty = computed(() =>
+  inProgress.value.length === 0 && pending.value.length === 0 && done.value.length === 0
+)
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -143,6 +241,17 @@ onUnmounted(() => clearInterval(pollTimer))
 
 <style scoped>
 h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 24px; }
+.filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+        border-radius: 16px; padding: 4px 12px; font-size: .8rem; cursor: pointer;
+        transition: background .15s, color .15s, border-color .15s; }
+.chip:hover:not(.active) { border-color: var(--accent-blue); color: var(--text); }
+.chip.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
+.filter-search { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+                 border-radius: 16px; padding: 4px 12px; font-size: .8rem; outline: none;
+                 min-width: 160px; }
+.filter-search:focus { border-color: var(--accent-blue); }
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
 .section { margin-bottom: 32px; }
 h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
