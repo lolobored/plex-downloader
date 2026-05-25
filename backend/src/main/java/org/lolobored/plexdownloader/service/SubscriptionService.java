@@ -69,13 +69,11 @@ public class SubscriptionService {
      * Convenience method: replenish only if the user has an active subscription for this show.
      * Avoids controllers having to inject ShowSubscriptionRepository directly.
      */
-    @Transactional
     public void replenishIfSubscribed(Long userId, Long showId) {
         subscriptionRepo.findByUserIdAndShowId(userId, showId)
             .ifPresent(this::replenish);
     }
 
-    @Transactional
     public void replenish(ShowSubscription sub) {
         Long userId = sub.getUser().getId();
         Long showId = sub.getShow().getId();
