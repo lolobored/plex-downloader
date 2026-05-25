@@ -365,6 +365,36 @@ class DownloadServiceTest {
     }
 
     @Test
+    void cancelAllForShow_handlesMixedStatuses(@TempDir Path tmp) throws Exception {
+        Path inFlightFile = tmp.resolve("ep.mkv");
+        Files.writeString(inFlightFile, "data");
+
+        DownloadQueueItem pending = new DownloadQueueItem();
+        pending.setId(22L);
+        pending.setStatus(DownloadQueueItem.Status.PENDING);
+        pending.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        pending.setDestFilePath(inFlightFile.toString());
+
+        DownloadQueueItem active = new DownloadQueueItem();
+        active.setId(23L);
+        active.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+        active.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        active.setDestFilePath("/conv/in-flight/ep2.mkv");
+
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(pending, active));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int count = service.cancelAllForShow(1L, 10L);
+
+        assertThat(count).isEqualTo(2);
+        verify(queueRepo).delete(pending);         // PENDING cancelled immediately
+        assertThat(inFlightFile).doesNotExist();
+        assertThat(active.isCancellationRequested()).isTrue(); // IN_PROGRESS deferred
+        verify(queueRepo).save(active);
+        verify(queueRepo, never()).delete(active);
+    }
+
+    @Test
     void executeCopyAsync_cancelsAfterCopyWhenFlagged() throws Exception {
         Path sourceFile = tempDir.resolve("source.mkv");
         Files.writeString(sourceFile, "content");

@@ -251,19 +251,20 @@ public class DownloadService {
 
         // Re-read to detect cancellationRequested flag set by an unsubscribe during copy
         DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
-        if (fresh != null && fresh.isCancellationRequested()) {
+        if (fresh == null) return;  // record deleted externally — do not re-create
+        if (fresh.isCancellationRequested()) {
             doCancelItem(fresh);
             return;
         }
 
         if (copySucceeded) {
-            item.setStatus(DownloadQueueItem.Status.DONE);
-            item.setCompletedAt(Instant.now());
+            fresh.setStatus(DownloadQueueItem.Status.DONE);
+            fresh.setCompletedAt(Instant.now());
         } else {
-            item.setStatus(DownloadQueueItem.Status.ERROR);
-            item.setErrorMessage(copyError.getMessage());
+            fresh.setStatus(DownloadQueueItem.Status.ERROR);
+            fresh.setErrorMessage(copyError.getMessage());
         }
-        queueRepo.save(item);
+        queueRepo.save(fresh);
     }
 
     /**
