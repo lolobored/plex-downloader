@@ -5,6 +5,7 @@ import org.lolobored.plexdownloader.dto.DownloadResponse;
 import org.lolobored.plexdownloader.dto.UnwatchedEnqueueRequest;
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.model.User;
+import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import org.lolobored.plexdownloader.service.DownloadService;
 import org.lolobored.plexdownloader.service.SubscriptionService;
 import org.lolobored.plexdownloader.service.TdarrSyncScheduler;
@@ -24,6 +25,7 @@ public class DownloadController {
     private final DownloadService downloadService;
     private final SubscriptionService subscriptionService;
     private final TdarrSyncScheduler tdarrSync;
+    private final DownloadQueueRepository queueRepo;
 
     @PostMapping
     public DownloadResponse download(@RequestBody DownloadRequest req,
@@ -66,5 +68,18 @@ public class DownloadController {
     @PostMapping("/{id}/tdarr-refresh")
     public DownloadQueueItem refreshTdarrStatus(@PathVariable Long id) {
         return tdarrSync.syncOne(id);
+    }
+
+    @PostMapping("/{id}/retry")
+    public DownloadQueueItem retryTdarr(@PathVariable Long id,
+                                         @AuthenticationPrincipal User user) {
+        DownloadQueueItem item = queueRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Queue item not found"));
+        if (!item.getUser().getId().equals(user.getId())
+                && user.getRole() != User.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
+        }
+        return tdarrSync.requeueOne(id);
     }
 }
