@@ -142,6 +142,37 @@ public class TdarrClient {
             .toBodilessEntity();
     }
 
+    /** Package-private for testing — stub with @Spy. */
+    void callRequeue(String baseUrl, String filePath) {
+        Map<String, Object> body = Map.of(
+            "data", Map.of(
+                "collection", "FileJSONDB",
+                "mode",       "update",
+                "docID",      filePath,
+                "obj",        Map.of(
+                    "TranscodeDecisionMaker", "Queued",
+                    "HealthCheck",            "Queued",
+                    "errors",                 ""
+                )
+            )
+        );
+        withAuth(HTTP_CLIENT.post()
+            .uri(baseUrl + "/api/v2/cruddb")
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body))
+            .retrieve()
+            .toBodilessEntity();
+    }
+
+    public void requeueFile(String filePath) {
+        String baseUrl = settings.get("tdarr.server.url").orElse("").trim();
+        if (baseUrl.isBlank()) {
+            log.warn("Tdarr URL not configured, skipping requeueFile for {}", filePath);
+            return;
+        }
+        callRequeue(baseUrl, filePath);  // throws RestClientException on failure — caller handles
+    }
+
     public void deleteFile(String filePath) {
         String baseUrl = settings.get("tdarr.server.url").orElse("").trim();
         if (baseUrl.isBlank()) {

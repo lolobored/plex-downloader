@@ -192,4 +192,29 @@ class TdarrClientTest {
         doThrow(new RestClientException("conn refused")).when(client).callDelete(anyString(), anyString());
         client.deleteFile("/some/file.mkv");  // must not throw
     }
+
+    // ---------- requeueFile ----------
+
+    @Test
+    void requeueFile_doesNotCallRequeue_whenUrlBlank() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.empty());
+        client.requeueFile("/some/file.mkv");
+        verify(client, never()).callRequeue(anyString(), anyString());
+    }
+
+    @Test
+    void requeueFile_callsRequeueWithCorrectArgs_whenUrlSet() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        doNothing().when(client).callRequeue(anyString(), anyString());
+        client.requeueFile("/some/file.mkv");
+        verify(client).callRequeue("http://tdarr:8265", "/some/file.mkv");
+    }
+
+    @Test
+    void requeueFile_rethrows_whenRestClientException() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        doThrow(new RestClientException("conn refused")).when(client).callRequeue(anyString(), anyString());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> client.requeueFile("/some/file.mkv"))
+            .isInstanceOf(RestClientException.class);
+    }
 }
