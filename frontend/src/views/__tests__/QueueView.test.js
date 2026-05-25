@@ -8,7 +8,9 @@ import * as downloadApi from '../../api/download.js'
 vi.mock('../../api/download.js', () => ({
   getQueue: vi.fn().mockResolvedValue([]),
   enqueue: vi.fn().mockResolvedValue({}),
-  removeQueueItem: vi.fn().mockResolvedValue(undefined)
+  removeQueueItem: vi.fn().mockResolvedValue(undefined),
+  refreshTdarrStatus: vi.fn().mockResolvedValue({}),
+  retryQueueItem: vi.fn().mockResolvedValue({})
 }))
 
 describe('QueueView', () => {
@@ -77,12 +79,50 @@ describe('QueueView', () => {
 
   it('shows TDARR_ERROR badge with error message', () => {
     const { wrapper } = factory([
-      { id: 13, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+      { id: 13, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
         tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec not supported',
         queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
     ])
     expect(wrapper.text()).toContain('Tdarr error')
     expect(wrapper.text()).toContain('codec not supported')
+  })
+
+  it('shows retry button for ERROR+TDARR_ERROR items', () => {
+    const { wrapper } = factory([
+      { id: 20, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec not supported',
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(true)
+  })
+
+  it('does not show retry button for DONE items', () => {
+    const { wrapper } = factory([
+      { id: 21, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
+        tdarrStatus: 'TRANSCODED', tdarrError: null,
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(false)
+  })
+
+  it('clicking retry calls retryQueueItem and updates item in list', async () => {
+    const updatedItem = {
+      id: 22, mediaType: 'MOVIE', mediaId: 5, status: 'PENDING',
+      tdarrStatus: null, tdarrError: null,
+      queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: null
+    }
+    downloadApi.retryQueueItem.mockResolvedValue(updatedItem)
+
+    const { wrapper, store } = factory([
+      { id: 22, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
+        tdarrStatus: 'TDARR_ERROR', tdarrError: 'fail',
+        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
+    ])
+    await wrapper.find('[data-testid="retry-btn"]').trigger('click')
+    await flushPromises()
+    expect(downloadApi.retryQueueItem).toHaveBeenCalledWith(22)
+    const found = store.queueItems.find(i => i.id === 22)
+    expect(found.status).toBe('PENDING')
   })
 
   it('shows remove button on each item', () => {

@@ -44,9 +44,6 @@
           <span v-if="item.tdarrStatus === 'NONE'"        class="tdarr-badge none">Queued in Tdarr</span>
           <span v-else-if="item.tdarrStatus === 'PROCESSING'"  class="tdarr-badge processing">Transcoding…</span>
           <span v-else-if="item.tdarrStatus === 'TRANSCODED'"  class="tdarr-badge transcoded">Transcoded ✓</span>
-          <span v-else-if="item.tdarrStatus === 'TDARR_ERROR'" class="tdarr-badge tdarr-error">
-            Tdarr error<span v-if="item.tdarrError"> — {{ item.tdarrError }}</span>
-          </span>
           <button :data-testid="'tdarr-refresh-btn-' + item.id"
                   class="btn-tdarr-refresh"
                   :disabled="refreshing.has(item.id)"
@@ -55,6 +52,17 @@
             {{ refreshing.has(item.id) ? '…' : '↻' }}
           </button>
         </template>
+        <span v-if="item.status === 'ERROR' && item.tdarrStatus === 'TDARR_ERROR'" class="tdarr-badge tdarr-error">
+          Tdarr error<span v-if="item.tdarrError"> — {{ item.tdarrError }}</span>
+        </span>
+        <button v-if="item.status === 'ERROR' && item.tdarrStatus === 'TDARR_ERROR'"
+                type="button"
+                class="btn-retry"
+                data-testid="retry-btn"
+                :disabled="retrying.has(item.id)"
+                @click="retryItem(item.id)">
+          {{ retrying.has(item.id) ? '…' : '⟳ Retry' }}
+        </button>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
           :disabled="removing.has(item.id)" title="Remove"
           @click="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
@@ -66,11 +74,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDownloadStore } from '@/stores/download.js'
-import { removeQueueItem, refreshTdarrStatus } from '@/api/download.js'
+import { removeQueueItem, refreshTdarrStatus, retryQueueItem } from '@/api/download.js'
 
 const dlStore = useDownloadStore()
 const removing    = ref(new Set())
 const refreshing  = ref(new Set())
+const retrying    = ref(new Set())
 
 async function remove(id) {
   removing.value = new Set([...removing.value, id])
@@ -93,6 +102,21 @@ async function refreshTdarr(id) {
     const next = new Set(refreshing.value)
     next.delete(id)
     refreshing.value = next
+  }
+}
+
+async function retryItem(id) {
+  retrying.value = new Set([...retrying.value, id])
+  try {
+    const updated = await retryQueueItem(id)
+    const idx = dlStore.queueItems.findIndex(i => i.id === updated.id)
+    if (idx !== -1) dlStore.queueItems[idx] = updated
+  } catch (e) {
+    console.error('Retry failed', e)
+  } finally {
+    const next = new Set(retrying.value)
+    next.delete(id)
+    retrying.value = next
   }
 }
 
@@ -150,4 +174,7 @@ h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform
                      font-size: .85rem; padding: 2px 6px; border-radius: 4px; }
 .btn-tdarr-refresh:hover:not(:disabled) { color: var(--accent-blue); background: rgba(52,152,219,.1); }
 .btn-tdarr-refresh:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-retry { background: none; border: 1px solid var(--red); color: var(--red); cursor: pointer;
+             font-size: .8rem; padding: 2px 8px; border-radius: 4px; }
+.btn-retry:hover { background: rgba(231,76,60,.1); }
 </style>
