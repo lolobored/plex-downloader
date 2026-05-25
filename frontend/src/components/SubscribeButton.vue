@@ -24,15 +24,26 @@
         </button>
       </div>
       <div v-if="current" class="picker-section">
-        <button class="picker-opt cancel-opt" @click="doCancel">✕ Cancel subscription</button>
+        <button class="picker-opt cancel-opt" @click="handleUnsubscribeClick">✕ Cancel subscription</button>
       </div>
     </div>
+
+    <ConfirmModal
+      v-if="showConfirm"
+      :message="confirmMessage"
+      confirmLabel="Yes, cancel downloads"
+      cancelLabel="Keep"
+      @confirm="confirmUnsubscribe"
+      @cancel="cancelUnsubscribe"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import { useWatchedStore } from '@/stores/watched.js'
+import { getShowQueueCount } from '@/api/watched.js'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 
 const COUNTS = [5, 10, 15, 20]
 
@@ -44,6 +55,9 @@ const props = defineProps({
 const watchedStore = useWatchedStore()
 const open    = ref(false)
 const loading = ref(false)
+
+const showConfirm    = ref(false)
+const confirmMessage = ref('')
 
 const current    = computed(() => watchedStore.getSubscription(props.showId))
 const statusClass = computed(() => current.value ? 'active-sub' : 'idle')
@@ -64,11 +78,24 @@ async function doOneTime(n) {
   finally { loading.value = false }
 }
 
-async function doCancel() {
+async function handleUnsubscribeClick() {
   open.value = false
+  const count = await getShowQueueCount(props.showId)
+  confirmMessage.value = count > 0
+    ? `This will remove your subscription and cancel ${count} queued download${count === 1 ? '' : 's'}. Continue?`
+    : 'Remove subscription for this show?'
+  showConfirm.value = true
+}
+
+async function confirmUnsubscribe() {
+  showConfirm.value = false
   loading.value = true
   try { await watchedStore.unsubscribe(props.showId) }
   finally { loading.value = false }
+}
+
+function cancelUnsubscribe() {
+  showConfirm.value = false
 }
 </script>
 
