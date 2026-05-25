@@ -133,6 +133,24 @@ class TdarrSyncSchedulerTest {
     }
 
     @Test
+    void syncAll_setsItemStatusToError_whenTdarrError() {
+        DownloadQueueItem item = doneItem("/conversion/in-flight/movies/test/movie.mkv");
+        when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of(item));
+        when(tdarrClient.getFileStatus(anyString()))
+            .thenReturn(Optional.of(new TdarrClient.TdarrFileStatus(
+                DownloadQueueItem.TdarrStatus.TDARR_ERROR, "codec not supported", null)));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        scheduler.syncAll();
+
+        verify(queueRepo).save(argThat(i ->
+            i.getStatus() == DownloadQueueItem.Status.ERROR &&
+            i.getErrorMessage() != null &&
+            i.getErrorMessage().contains("codec not supported")
+        ));
+    }
+
+    @Test
     void syncAll_doesNothingWhenNoItemsPending() {
         when(queueRepo.findByStatusAndTdarrStatusNotIn(any(), any())).thenReturn(List.of());
 

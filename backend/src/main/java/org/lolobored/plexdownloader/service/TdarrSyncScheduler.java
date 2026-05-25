@@ -106,8 +106,14 @@ public class TdarrSyncScheduler implements SchedulingConfigurer {
         if (outputPath != null) {
             item.setOutputFilePath(outputPath);
         }
+        if (newStatus == DownloadQueueItem.TdarrStatus.TDARR_ERROR) {
+            item.setStatus(DownloadQueueItem.Status.ERROR);
+            String detail = ts.errorMessage() != null ? ts.errorMessage() : "unknown error";
+            item.setErrorMessage("Tdarr transcoding failed: " + detail);
+        }
         queueRepo.save(item);
-        log.info("Tdarr status updated: item={} status={}", item.getId(), newStatus);
+        log.info("Tdarr status updated: item={} tdarrStatus={} status={}",
+            item.getId(), newStatus, item.getStatus());
     }
 
     private void pruneConversionDirs() {
