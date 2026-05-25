@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -18,6 +19,7 @@ public class QueueRecoveryService {
     private final DownloadQueueRepository queueRepo;
     private final DownloadService downloadService;
 
+    @Transactional
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         // Reset interrupted copies: IN_PROGRESS → PENDING
