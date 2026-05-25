@@ -105,8 +105,8 @@ public class DownloadService {
         return ids;
     }
 
-    public List<DownloadQueueItem> getQueue() {
-        return queueRepo.findAllByOrderByQueuePositionAsc();
+    public List<DownloadQueueItem> getQueue(Long userId) {
+        return queueRepo.findAllByUserIdOrderByQueuePositionAsc(userId);
     }
 
     static String slugify(String title) {

@@ -54,8 +54,8 @@ public class DownloadController {
     }
 
     @GetMapping("/queue")
-    public List<DownloadQueueItem> getQueue() {
-        return downloadService.getQueue();
+    public List<DownloadQueueItem> getQueue(@AuthenticationPrincipal User user) {
+        return downloadService.getQueue(user.getId());
     }
 
     @DeleteMapping("/{id}")
@@ -77,8 +77,7 @@ public class DownloadController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "Queue item not found"));
         User owner = item.getUser();
-        if (owner == null || (!owner.getId().equals(user.getId())
-                && user.getRole() != User.Role.ADMIN)) {
+        if (owner == null || !owner.getId().equals(user.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
         }
         return tdarrSync.requeueOne(id);

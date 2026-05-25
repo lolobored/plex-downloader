@@ -122,7 +122,7 @@ class DownloadControllerTest {
     }
 
     @Test
-    void retry_returns200_whenAdminRetryOtherUsersItem() throws Exception {
+    void retry_returns403_whenAdminTriesOtherUsersItem() throws Exception {
         user.setRole(User.Role.ADMIN);
         User other = new User(); other.setId(99L);
         DownloadQueueItem item = new DownloadQueueItem();
@@ -131,17 +131,10 @@ class DownloadControllerTest {
         item.setStatus(DownloadQueueItem.Status.ERROR);
         item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
 
-        DownloadQueueItem reset = new DownloadQueueItem();
-        reset.setId(8L);
-        reset.setStatus(DownloadQueueItem.Status.DONE);
-        reset.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-
         when(queueRepo.findById(8L)).thenReturn(Optional.of(item));
-        when(tdarrSync.requeueOne(8L)).thenReturn(reset);
 
         mockMvc.perform(post("/api/download/8/retry"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("DONE"));
+            .andExpect(status().isForbidden());
     }
 
     @Test

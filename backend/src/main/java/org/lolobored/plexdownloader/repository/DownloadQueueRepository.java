@@ -15,6 +15,8 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
 
     List<DownloadQueueItem> findAllByOrderByQueuePositionAsc();
 
+    List<DownloadQueueItem> findAllByUserIdOrderByQueuePositionAsc(Long userId);
+
     @Query("SELECT i FROM DownloadQueueItem i WHERE i.status = 'IN_PROGRESS'")
     Optional<DownloadQueueItem> findInProgress();
 
