@@ -32,4 +32,15 @@ describe('PosterCard', () => {
     await w.find('.poster-card').trigger('click')
     expect(w.emitted('click')).toBeTruthy()
   })
+
+  it('shows watched badge when watched=true', () => {
+    const w = mount(PosterCard, { props: { title: 'Test', plexId: 'x', watched: true } })
+    expect(w.find('.watched-badge').exists()).toBe(true)
+    expect(w.find('.watched-badge').text()).toBe('✓')
+  })
+
+  it('does not have loading=lazy on img', () => {
+    const w = mount(PosterCard, { props: { title: 'Test', plexId: 'x' } })
+    expect(w.find('img').attributes('loading')).toBeUndefined()
+  })
 })

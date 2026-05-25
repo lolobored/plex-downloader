@@ -1,7 +1,7 @@
 <template>
   <div class="poster-card" @click="$emit('click')">
     <div class="img-wrap">
-      <img :src="`/api/posters/${plexId}.jpg`" :alt="title" loading="lazy" />
+      <img :src="`/api/posters/${plexId}.jpg`" :alt="title" />
       <div v-if="watched" class="watched-badge" title="Watched">✓</div>
       <div class="badge-slot"><slot name="badge" /></div>
     </div>
