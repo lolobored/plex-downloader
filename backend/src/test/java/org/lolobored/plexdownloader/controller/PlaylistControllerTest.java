@@ -2,6 +2,8 @@ package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
 import org.lolobored.plexdownloader.model.*;
+import org.lolobored.plexdownloader.model.Season;
+import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
 import org.lolobored.plexdownloader.service.PlaylistSyncService;
 import jakarta.servlet.FilterChain;
@@ -111,6 +113,60 @@ class PlaylistControllerTest {
             .andExpect(jsonPath("$.items[0].title").value("Inception"))
             .andExpect(jsonPath("$.items[0].year").value(2010))
             .andExpect(jsonPath("$.items[0].mediaType").value("MOVIE"));
+    }
+
+    @Test
+    void getPlaylist_movieItem_includesMediaId() throws Exception {
+        Playlist p = new Playlist();
+        p.setId(1L); p.setPlexId("pl1"); p.setTitle("Action"); p.setPlaylistType("video"); p.setLeafCount(1);
+        when(playlistRepo.findById(1L)).thenReturn(Optional.of(p));
+        when(subRepo.existsByUserIdAndPlaylistId(1L, 1L)).thenReturn(false);
+        when(itemRepo.findTop4ByPlaylistIdOrderByOrdinalAsc(1L)).thenReturn(List.of());
+
+        PlaylistItem pi = new PlaylistItem();
+        pi.setId(10L); pi.setPlexId("m1"); pi.setMediaType("MOVIE"); pi.setOrdinal(0);
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(1L)).thenReturn(List.of(pi));
+
+        Movie m = new Movie(); m.setId(100L); m.setTitle("Inception"); m.setYear(2010);
+        when(movieRepo.findByPlexId("m1")).thenReturn(Optional.of(m));
+        when(queueRepo.findByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.MOVIE, 100L))
+            .thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/playlists/1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].mediaId").value(100))
+            .andExpect(jsonPath("$.items[0].showId").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.items[0].seasonId").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void getPlaylist_episodeItem_includesMediaIdShowIdSeasonId() throws Exception {
+        Playlist p = new Playlist();
+        p.setId(2L); p.setPlexId("pl2"); p.setTitle("TV"); p.setPlaylistType("video"); p.setLeafCount(1);
+        when(playlistRepo.findById(2L)).thenReturn(Optional.of(p));
+        when(subRepo.existsByUserIdAndPlaylistId(1L, 2L)).thenReturn(false);
+        when(itemRepo.findTop4ByPlaylistIdOrderByOrdinalAsc(2L)).thenReturn(List.of());
+
+        PlaylistItem pi = new PlaylistItem();
+        pi.setId(20L); pi.setPlexId("ep1"); pi.setMediaType("EPISODE"); pi.setOrdinal(0);
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(2L)).thenReturn(List.of(pi));
+
+        TvShow show = new TvShow(); show.setId(5L);
+        Season season = new Season(); season.setId(12L); season.setShow(show);
+        Episode ep = new Episode();
+        ep.setId(99L); ep.setTitle("Pilot"); ep.setSeason(season);
+        ep.setAirDate(java.time.LocalDate.of(2020, 1, 1));
+
+        when(episodeRepo.findByPlexId("ep1")).thenReturn(Optional.of(ep));
+        when(queueRepo.findByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.EPISODE, 99L))
+            .thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/playlists/2"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].mediaId").value(99))
+            .andExpect(jsonPath("$.items[0].showId").value(5))
+            .andExpect(jsonPath("$.items[0].seasonId").value(12))
+            .andExpect(jsonPath("$.items[0].year").value(2020));
     }
 
     @Test

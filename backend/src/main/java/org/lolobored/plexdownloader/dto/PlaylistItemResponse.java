@@ -7,6 +7,9 @@ public record PlaylistItemResponse(
     Integer ordinal,
     String title,
     Integer year,
-    String queueStatus,   // null if not queued
-    String tdarrStatus    // null if not queued
+    String queueStatus,
+    String tdarrStatus,
+    Long mediaId,
+    Long showId,
+    Long seasonId
 ) {}
