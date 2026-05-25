@@ -122,6 +122,15 @@ class SubscriptionControllerTest {
     }
 
     @Test
+    void getQueueCount_returnsCount() throws Exception {
+        when(subscriptionService.getQueueCount(1L, 10L)).thenReturn(7);
+
+        mockMvc.perform(get("/api/subscriptions/10/queue-count"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(7));
+    }
+
+    @Test
     void syncNow_returnsWatchedIds() throws Exception {
         doNothing().when(watchedSyncService).syncShow(1L, 10L);
         when(showSubscriptionRepository.findByUserIdAndShowId(1L, 10L))

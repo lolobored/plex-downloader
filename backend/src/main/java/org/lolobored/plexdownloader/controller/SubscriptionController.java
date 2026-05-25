@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/subscriptions")
@@ -43,6 +44,12 @@ public class SubscriptionController {
                                              @AuthenticationPrincipal User user) {
         subscriptionService.cancel(user.getId(), showId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{showId}/queue-count")
+    public Map<String, Integer> getQueueCount(@PathVariable Long showId,
+                                               @AuthenticationPrincipal User user) {
+        return Map.of("count", subscriptionService.getQueueCount(user.getId(), showId));
     }
 
     @PostMapping("/{showId}/sync")
