@@ -55,7 +55,14 @@ public class SubscriptionService {
     @Transactional
     public void cancel(Long userId, Long showId) {
         subscriptionRepo.findByUserIdAndShowId(userId, showId)
-            .ifPresent(subscriptionRepo::delete);
+            .ifPresent(sub -> {
+                subscriptionRepo.delete(sub);
+                downloadService.cancelAllForShow(userId, showId);
+            });
+    }
+
+    public int getQueueCount(Long userId, Long showId) {
+        return queueRepo.findAllByUserIdAndShowId(userId, showId).size();
     }
 
     /**

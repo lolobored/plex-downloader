@@ -89,6 +89,40 @@ class SubscriptionServiceTest {
     }
 
     @Test
+    void cancel_callsCancelAllForShowAfterDeletingSubscription() {
+        ShowSubscription sub = new ShowSubscription();
+        sub.setId(5L);
+        when(subscriptionRepo.findByUserIdAndShowId(1L, 10L)).thenReturn(Optional.of(sub));
+        when(downloadService.cancelAllForShow(1L, 10L)).thenReturn(3);
+
+        service.cancel(1L, 10L);
+
+        InOrder order = inOrder(subscriptionRepo, downloadService);
+        order.verify(subscriptionRepo).delete(sub);
+        order.verify(downloadService).cancelAllForShow(1L, 10L);
+    }
+
+    @Test
+    void cancel_doesNotCallCancelWhenNoSubscription() {
+        when(subscriptionRepo.findByUserIdAndShowId(1L, 10L)).thenReturn(Optional.empty());
+
+        service.cancel(1L, 10L);
+
+        verify(downloadService, never()).cancelAllForShow(anyLong(), anyLong());
+    }
+
+    @Test
+    void getQueueCount_returnsItemCount() {
+        DownloadQueueItem item1 = new DownloadQueueItem(); item1.setId(1L);
+        DownloadQueueItem item2 = new DownloadQueueItem(); item2.setId(2L);
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(item1, item2));
+
+        int count = service.getQueueCount(1L, 10L);
+
+        assertThat(count).isEqualTo(2);
+    }
+
+    @Test
     void replenish_enqueuesUpToTarget() {
         ShowSubscription sub = new ShowSubscription();
         sub.setUser(user); sub.setShow(show); sub.setTargetCount(2);
