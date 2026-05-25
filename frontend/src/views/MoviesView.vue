@@ -12,27 +12,27 @@
         <div v-else-if="!allMovies.length && !loading" class="empty">No movies found.</div>
 
         <div class="grid">
-          <template v-for="group in groupedMovies" :key="group.letter">
-            <!-- Zero-height anchor for sidebar navigation -->
-            <div
-              :id="'letter-' + group.letter"
-              class="letter-anchor"
-              :ref="el => { if (el) sectionRefs[group.letter] = el; else delete sectionRefs[group.letter] }"
-            />
-            <PosterCard
-              v-for="m in group.movies"
-              :key="m.id"
-              :plexId="m.plexId"
-              :title="m.title"
-              :subtitle="m.year?.toString()"
-              :watched="m.watched"
-              @click="router.push(`/movies/${m.id}`)"
-            >
-              <template #badge>
-                <DownloadButton type="MOVIE" :mediaId="m.id" small />
-              </template>
-            </PosterCard>
-          </template>
+          <PosterCard
+            v-for="m in sortedMovies"
+            :key="m.id"
+            :id="isFirstOfLetter(m) ? 'letter-' + firstLetter(m.title) : undefined"
+            :class="isFirstOfLetter(m) ? 'letter-start' : undefined"
+            :ref="el => {
+              const l = firstLetter(m.title)
+              if (firstMovieOfLetter.get(l) !== m.id) return
+              if (el) sectionRefs[l] = el.$el ?? el
+              else delete sectionRefs[l]
+            }"
+            :plexId="m.plexId"
+            :title="m.title"
+            :subtitle="m.year?.toString()"
+            :watched="m.watched"
+            @click="router.push(`/movies/${m.id}`)"
+          >
+            <template #badge>
+              <DownloadButton type="MOVIE" :mediaId="m.id" small />
+            </template>
+          </PosterCard>
         </div>
 
         <div ref="sentinel" class="sentinel" />
@@ -54,12 +54,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { getMovies } from '@/api/library.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import DownloadButton from '@/components/DownloadButton.vue'
+
+defineOptions({ name: 'MoviesView' })
 
 const router   = useRouter()
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -89,19 +91,24 @@ const sortedMovies = computed(() =>
   )
 )
 
-const groupedMovies = computed(() => {
+// Map of letter → id of the first movie (alphabetically) for that letter
+const firstMovieOfLetter = computed(() => {
   const map = new Map()
   for (const m of sortedMovies.value) {
     const l = firstLetter(m.title)
-    if (!map.has(l)) map.set(l, [])
-    map.get(l).push(m)
+    if (!map.has(l)) map.set(l, m.id)
   }
-  return [...map.entries()]
-    .sort(([a], [b]) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b))
-    .map(([letter, movies]) => ({ letter, movies }))
+  return map
 })
 
-const allLetters    = computed(() => groupedMovies.value.map(g => g.letter))
+function isFirstOfLetter(m) {
+  return firstMovieOfLetter.value.get(firstLetter(m.title)) === m.id
+}
+
+const allLetters = computed(() => {
+  const letters = [...firstMovieOfLetter.value.keys()]
+  return letters.sort((a, b) => a === '#' ? 1 : b === '#' ? -1 : a.localeCompare(b))
+})
 const loadedLetters = computed(() => new Set(allLetters.value))
 
 async function loadMore() {
@@ -126,7 +133,7 @@ async function loadMore() {
   // Check manually: if sentinel is still on-screen and there are more pages, keep loading.
   if (hasMore.value && sentinel.value) {
     const rect = sentinel.value.getBoundingClientRect()
-    if (rect.top < window.innerHeight + 400) loadMore()
+    if (rect.top < window.innerHeight + 1200) loadMore()
   }
 }
 
@@ -146,10 +153,14 @@ onMounted(() => {
   loadMore()
   scrollObserver = new IntersectionObserver(
     ([entry]) => { if (entry.isIntersecting) loadMore() },
-    { rootMargin: '400px' }
+    { rootMargin: '1200px' }
   )
   if (sentinel.value) scrollObserver.observe(sentinel.value)
   window.addEventListener('scroll', updateActiveLetter, { passive: true })
+})
+
+onActivated(() => {
+  updateActiveLetter()
 })
 
 onUnmounted(() => {
@@ -192,12 +203,7 @@ h2 { font-size: 1.5rem; font-weight: 600; }
 
 .movie-list { flex: 1; min-width: 0; }
 
-.letter-anchor {
-  grid-column: 1 / -1;
-  height: 0;
-  overflow: hidden;
-  scroll-margin-top: 70px;
-}
+.letter-start { scroll-margin-top: 70px; }
 
 .grid {
   display: grid;
