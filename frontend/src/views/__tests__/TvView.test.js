@@ -30,4 +30,8 @@ describe('TvView', () => {
     expect(w.findAll('.pc')).toHaveLength(2)
     expect(w.text()).toContain('Breaking Bad')
   })
+
+  it('has name TvView for keep-alive', () => {
+    expect(TvView.name ?? TvView.__name).toBe('TvView')
+  })
 })

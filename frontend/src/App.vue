@@ -2,7 +2,9 @@
   <div id="root">
     <NavBar v-if="authStore.isLoggedIn" />
     <main>
-      <router-view />
+      <keep-alive include="MoviesView,TvView">
+        <router-view />
+      </keep-alive>
     </main>
   </div>
 </template>

@@ -34,6 +34,8 @@ import { getShows } from '@/api/library.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 
+defineOptions({ name: 'TvView' })
+
 const router     = useRouter()
 const shows      = ref([])
 const loading    = ref(false)
