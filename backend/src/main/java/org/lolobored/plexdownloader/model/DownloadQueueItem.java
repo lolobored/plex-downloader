@@ -42,6 +42,8 @@ public class DownloadQueueItem {
     private Instant requestedAt = Instant.now();
     @Column(name = "completed_at")
     private Instant completedAt;
+    @Column(name = "cancellation_requested", nullable = false)
+    private boolean cancellationRequested = false;
 
     public enum MediaType { MOVIE, EPISODE }
     public enum Status { PENDING, IN_PROGRESS, DONE, ERROR }

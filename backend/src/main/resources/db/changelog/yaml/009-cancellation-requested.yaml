@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-cancellation-requested
+      author: system
+      changes:
+        - addColumn:
+            tableName: download_queue
+            columns:
+              - column:
+                  name: cancellation_requested
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
