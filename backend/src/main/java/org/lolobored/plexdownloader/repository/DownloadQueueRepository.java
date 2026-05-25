@@ -31,4 +31,8 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
 
     Optional<DownloadQueueItem> findByUser_IdAndMediaTypeAndMediaId(
         Long userId, DownloadQueueItem.MediaType type, Long mediaId);
+
+    List<DownloadQueueItem> findByStatus(DownloadQueueItem.Status status);
+
+    List<DownloadQueueItem> findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status status);
 }
