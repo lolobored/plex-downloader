@@ -150,18 +150,39 @@ public class DownloadService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Copy in progress, retry when DONE");
         }
+        doCancelItem(item);
+    }
 
+    @Transactional
+    public int cancelAllForShow(Long userId, Long showId) {
+        List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndShowId(userId, showId);
+        int cancelled = 0;
+        for (DownloadQueueItem item : items) {
+            if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+                item.setCancellationRequested(true);
+                queueRepo.save(item);
+            } else {
+                doCancelItem(item);
+            }
+            cancelled++;
+        }
+        return cancelled;
+    }
+
+    // Package-private for testing
+    void doCancelItem(DownloadQueueItem item) {
         // Delete in-flight file (always attempt — may already be gone after transcoding)
-        try {
-            Files.deleteIfExists(Path.of(item.getDestFilePath()));
-        } catch (IOException e) {
-            log.warn("Could not delete in-flight file {}: {}", item.getDestFilePath(), e.getMessage());
+        if (item.getDestFilePath() != null) {
+            try {
+                Files.deleteIfExists(Path.of(item.getDestFilePath()));
+            } catch (IOException e) {
+                log.warn("Could not delete in-flight file {}: {}", item.getDestFilePath(), e.getMessage());
+            }
         }
 
         if (item.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED) {
-            // Resolve libraries path: use stored outputFilePath or derive from destFilePath
             String librariesPath = item.getOutputFilePath();
-            if (librariesPath == null) {
+            if (librariesPath == null && item.getDestFilePath() != null) {
                 Path derived = deriveLibrariesPath(item.getDestFilePath());
                 if (derived != null) librariesPath = derived.toString();
             }
@@ -173,19 +194,20 @@ public class DownloadService {
                     log.warn("Could not delete transcoded file {}: {}", lp, e.getMessage());
                 }
                 try {
-                    tdarrClient.deleteFile(lp);  // evict libraries entry from Tdarr DB
+                    tdarrClient.deleteFile(lp);
                 } catch (Exception e) {
-                    log.warn("Tdarr eviction (libraries) failed for item {}: {}", itemId, e.getMessage());
+                    log.warn("Tdarr eviction (libraries) failed for item {}: {}", item.getId(), e.getMessage());
                 }
             } else {
-                log.warn("Item {} is TRANSCODED but could not resolve libraries path", itemId);
+                log.warn("Item {} is TRANSCODED but could not resolve libraries path", item.getId());
             }
         } else {
-            // Evict in-flight entry from Tdarr DB
-            try {
-                tdarrClient.deleteFile(item.getDestFilePath());
-            } catch (Exception e) {
-                log.warn("Tdarr eviction failed for item {}: {}", itemId, e.getMessage());
+            if (item.getDestFilePath() != null) {
+                try {
+                    tdarrClient.deleteFile(item.getDestFilePath());
+                } catch (Exception e) {
+                    log.warn("Tdarr eviction failed for item {}: {}", item.getId(), e.getMessage());
+                }
             }
         }
 
@@ -200,6 +222,8 @@ public class DownloadService {
         item.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
         queueRepo.save(item);
 
+        boolean copySucceeded = false;
+        IOException copyError = null;
         try {
             Path source = Path.of(item.getSourceFilePath());
             Path dest = Path.of(item.getDestFilePath());
@@ -219,12 +243,25 @@ public class DownloadService {
                 Files.deleteIfExists(temp);
                 throw e;
             }
+            copySucceeded = true;
+        } catch (IOException e) {
+            copyError = e;
+            log.error("Copy failed for item {}: {}", itemId, e.getMessage());
+        }
+
+        // Re-read to detect cancellationRequested flag set by an unsubscribe during copy
+        DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
+        if (fresh != null && fresh.isCancellationRequested()) {
+            doCancelItem(fresh);
+            return;
+        }
+
+        if (copySucceeded) {
             item.setStatus(DownloadQueueItem.Status.DONE);
             item.setCompletedAt(Instant.now());
-        } catch (IOException e) {
+        } else {
             item.setStatus(DownloadQueueItem.Status.ERROR);
-            item.setErrorMessage(e.getMessage());
-            log.error("Copy failed for item {}: {}", itemId, e.getMessage());
+            item.setErrorMessage(copyError.getMessage());
         }
         queueRepo.save(item);
     }

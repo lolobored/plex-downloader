@@ -316,6 +316,90 @@ class DownloadServiceTest {
     }
 
     @Test
+    void cancelAllForShow_cancelsNonInProgressItems(@TempDir Path tmp) throws Exception {
+        Path inFlightFile = tmp.resolve("ep.mkv");
+        Files.writeString(inFlightFile, "data");
+
+        DownloadQueueItem pending = new DownloadQueueItem();
+        pending.setId(20L);
+        pending.setStatus(DownloadQueueItem.Status.PENDING);
+        pending.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        pending.setDestFilePath(inFlightFile.toString());
+
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(pending));
+
+        int count = service.cancelAllForShow(1L, 10L);
+
+        assertThat(count).isEqualTo(1);
+        verify(queueRepo).delete(pending);
+        assertThat(inFlightFile).doesNotExist();
+    }
+
+    @Test
+    void cancelAllForShow_flagsInProgressForDeferredCancel() {
+        DownloadQueueItem active = new DownloadQueueItem();
+        active.setId(21L);
+        active.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+        active.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        active.setDestFilePath("/conv/in-flight/ep.mkv");
+
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(active));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int count = service.cancelAllForShow(1L, 10L);
+
+        assertThat(count).isEqualTo(1);
+        assertThat(active.isCancellationRequested()).isTrue();
+        verify(queueRepo).save(active);
+        verify(queueRepo, never()).delete(any());
+    }
+
+    @Test
+    void cancelAllForShow_returnsZeroWhenQueueEmpty() {
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of());
+
+        int count = service.cancelAllForShow(1L, 10L);
+
+        assertThat(count).isEqualTo(0);
+        verify(queueRepo, never()).delete(any());
+    }
+
+    @Test
+    void executeCopyAsync_cancelsAfterCopyWhenFlagged() throws Exception {
+        Path sourceFile = tempDir.resolve("source.mkv");
+        Files.writeString(sourceFile, "content");
+        Path destFile = tempDir.resolve("out").resolve("out.mkv");
+
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(30L);
+        item.setSourceFilePath(sourceFile.toString());
+        item.setDestFilePath(destFile.toString());
+        item.setStatus(DownloadQueueItem.Status.PENDING);
+        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+
+        // fresh re-read returns item with cancellationRequested = true
+        DownloadQueueItem freshItem = new DownloadQueueItem();
+        freshItem.setId(30L);
+        freshItem.setSourceFilePath(sourceFile.toString());
+        freshItem.setDestFilePath(destFile.toString());
+        freshItem.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+        freshItem.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        freshItem.setCancellationRequested(true);
+
+        when(queueRepo.findById(30L))
+            .thenReturn(Optional.of(item))    // first call: load item
+            .thenReturn(Optional.of(freshItem)); // second call: re-read after copy
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.executeCopyAsync(30L);
+
+        // item should be deleted, not saved as DONE
+        verify(queueRepo).delete(freshItem);
+        verify(queueRepo, never()).save(argThat(i ->
+            i instanceof DownloadQueueItem qi && qi.getStatus() == DownloadQueueItem.Status.DONE));
+    }
+
+    @Test
     void executeCopyAsync_atomicRename_cleansUpTempFile() throws Exception {
         Path sourceFile = tempDir.resolve("source.mkv");
         Files.writeString(sourceFile, "video-content");
