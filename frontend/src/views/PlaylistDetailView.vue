@@ -13,7 +13,7 @@
         :class="{ subscribed: subscribed }"
         data-testid="subscribe-btn"
         :disabled="subscribing"
-        @click="toggleSubscription"
+        @click="subscribed ? handleUnsubscribeClick() : doSubscribe()"
       >
         {{ subscribed ? '✓ Unsubscribe' : 'Subscribe' }}
       </button>
@@ -37,21 +37,34 @@
         <span class="status-badge" :class="statusClass(item)">{{ statusLabel(item) }}</span>
       </div>
     </div>
+
+    <ConfirmModal
+      v-if="showConfirm"
+      :message="confirmMessage"
+      confirmLabel="Yes, cancel downloads"
+      cancelLabel="Keep"
+      @confirm="confirmUnsubscribe"
+      @cancel="cancelUnsubscribe"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getPlaylist, subscribe, unsubscribe } from '@/api/playlists.js'
+import { getPlaylist, subscribe, unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 
 const route  = useRoute()
 const router = useRouter()
 
-const playlist   = ref(null)
-const loading    = ref(true)
-const subscribed = ref(false)
+const playlist    = ref(null)
+const loading     = ref(true)
+const subscribed  = ref(false)
 const subscribing = ref(false)
+
+const showConfirm    = ref(false)
+const confirmMessage = ref('')
 
 onMounted(async () => {
   try {
@@ -63,19 +76,37 @@ onMounted(async () => {
   }
 })
 
-async function toggleSubscription() {
+async function doSubscribe() {
   subscribing.value = true
   try {
-    if (subscribed.value) {
-      await unsubscribe(Number(route.params.id))
-      subscribed.value = false
-    } else {
-      await subscribe(Number(route.params.id))
-      subscribed.value = true
-    }
+    await subscribe(Number(route.params.id))
+    subscribed.value = true
   } finally {
     subscribing.value = false
   }
+}
+
+async function handleUnsubscribeClick() {
+  const count = await getPlaylistQueueCount(Number(route.params.id))
+  confirmMessage.value = count > 0
+    ? `This will remove your subscription and cancel ${count} queued download${count === 1 ? '' : 's'}. Continue?`
+    : 'Remove subscription for this playlist?'
+  showConfirm.value = true
+}
+
+async function confirmUnsubscribe() {
+  showConfirm.value = false
+  subscribing.value = true
+  try {
+    await unsubscribe(Number(route.params.id))
+    subscribed.value = false
+  } finally {
+    subscribing.value = false
+  }
+}
+
+function cancelUnsubscribe() {
+  showConfirm.value = false
 }
 
 function statusClass(item) {
