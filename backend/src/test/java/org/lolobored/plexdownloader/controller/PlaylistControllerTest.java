@@ -146,9 +146,21 @@ class PlaylistControllerTest {
     }
 
     @Test
-    void unsubscribe_deletesSubscription_doesNotCancelFiles() throws Exception {
+    void unsubscribe_cancelsQueueAndDeletesSubscription() throws Exception {
+        when(playlistSyncService.cancelAllForUser(1L, 1L)).thenReturn(2);
+
         mockMvc.perform(delete("/api/playlists/1/subscribe")).andExpect(status().isNoContent());
+
+        verify(playlistSyncService).cancelAllForUser(1L, 1L);
         verify(subRepo).deleteByUserIdAndPlaylistId(1L, 1L);
-        verify(playlistSyncService, never()).enqueueForSubscription(anyLong(), any());
+    }
+
+    @Test
+    void getQueueCount_returnsCount() throws Exception {
+        when(playlistSyncService.countQueuedForUser(1L, 5L)).thenReturn(3);
+
+        mockMvc.perform(get("/api/playlists/5/queue-count"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(3));
     }
 }

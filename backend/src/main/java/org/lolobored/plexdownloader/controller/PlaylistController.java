@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -61,9 +62,16 @@ public class PlaylistController {
         }
     }
 
+    @GetMapping("/{id}/queue-count")
+    public Map<String, Integer> getQueueCount(@PathVariable Long id,
+                                               @AuthenticationPrincipal User user) {
+        return Map.of("count", playlistSyncService.countQueuedForUser(user.getId(), id));
+    }
+
     @DeleteMapping("/{id}/subscribe")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void unsubscribe(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        playlistSyncService.cancelAllForUser(user.getId(), id);
         subRepo.deleteByUserIdAndPlaylistId(user.getId(), id);
     }
 
