@@ -93,6 +93,17 @@ class TdarrClientTest {
         assertThat(result.get().errorMessage()).isEqualTo("codec not supported");
     }
 
+    @Test
+    void getFileStatus_returnsTdarrError_whenCancelled() {
+        when(settings.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
+        TdarrClient.TdarrFileResponse resp = new TdarrClient.TdarrFileResponse();
+        resp.setTranscodeDecisionMaker("Cancelled");
+        doReturn(resp).when(client).fetchStatus(anyString(), anyString());
+
+        assertThat(client.getFileStatus("/file.mkv").get().status())
+            .isEqualTo(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
+    }
+
     // ---------- status mapping — HealthCheck ----------
 
     @Test

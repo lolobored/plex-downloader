@@ -162,7 +162,8 @@ public class TdarrClient {
      */
     private DownloadQueueItem.TdarrStatus mapStatus(String healthCheck, String transcode) {
         if ("HealthError".equals(healthCheck)) return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
-        if ("TranscodeError".equals(transcode))  return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
+        if ("TranscodeError".equals(transcode) || "Cancelled".equals(transcode))
+            return DownloadQueueItem.TdarrStatus.TDARR_ERROR;
         if ("Transcoded".equals(transcode) || "Transcode success".equals(transcode)
                 || "Not required".equals(transcode))
             return DownloadQueueItem.TdarrStatus.TRANSCODED;
