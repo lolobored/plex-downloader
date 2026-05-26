@@ -1,5 +1,6 @@
 package org.lolobored.plexdownloader.service;
 
+import org.lolobored.plexdownloader.dto.SeasonSubscriptionResponse;
 import org.lolobored.plexdownloader.dto.SubscriptionResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
@@ -19,6 +20,7 @@ import java.util.Set;
 public class SubscriptionService {
 
     private final ShowSubscriptionRepository subscriptionRepo;
+    private final SeasonSubscriptionRepository seasonSubRepo;
     private final UserEpisodeWatchedRepository watchedRepo;
     private final DownloadQueueRepository queueRepo;
     private final DownloadService downloadService;
@@ -26,6 +28,8 @@ public class SubscriptionService {
     private final SeasonRepository seasonRepo;
     private final UserRepository userRepo;
     private final TvShowRepository showRepo;
+
+    // ── Show subscriptions ────────────────────────────────────────────────────
 
     public List<SubscriptionResponse> listSubscriptions(Long userId) {
         return subscriptionRepo.findByUserId(userId).stream()
@@ -65,10 +69,6 @@ public class SubscriptionService {
         return queueRepo.findAllByUserIdAndShowId(userId, showId).size();
     }
 
-    /**
-     * Convenience method: replenish only if the user has an active subscription for this show.
-     * Avoids controllers having to inject ShowSubscriptionRepository directly.
-     */
     public void replenishIfSubscribed(Long userId, Long showId) {
         subscriptionRepo.findByUserIdAndShowId(userId, showId)
             .ifPresent(this::replenish);
@@ -89,7 +89,7 @@ public class SubscriptionService {
         for (Long episodeId : toEnqueue) {
             try {
                 downloadService.enqueueEpisode(episodeId, sub.getUser());
-                log.info("Auto-enqueued episode {} for user {} (subscription)", episodeId, userId);
+                log.info("Auto-enqueued episode {} for user {} (show subscription)", episodeId, userId);
             } catch (Exception e) {
                 log.error("Failed to auto-enqueue episode {} for user {}: {}",
                     episodeId, userId, e.getMessage());
@@ -97,19 +97,76 @@ public class SubscriptionService {
         }
     }
 
-    public List<Long> enqueueUnwatched(Long userId, Long showId, int limit) {
+    // ── Season subscriptions ──────────────────────────────────────────────────
+
+    public List<SeasonSubscriptionResponse> listSeasonSubscriptions(Long userId) {
+        return seasonSubRepo.findByUserId(userId).stream()
+            .map(SeasonSubscriptionResponse::from).toList();
+    }
+
+    @Transactional
+    public SeasonSubscriptionResponse upsertSeason(Long userId, Long seasonId, int targetCount) {
         User user = userRepo.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-        Set<Long> watchedIds    = watchedRepo.findWatchedEpisodeIds(userId, showId);
-        Set<Long> alreadyQueued = queueRepo.findActiveEpisodeIdsForShow(userId, showId);
+        Season season = seasonRepo.findById(seasonId)
+            .orElseThrow(() -> new IllegalArgumentException("Season not found: " + seasonId));
 
-        List<Long> toEnqueue = nextUnwatchedEpisodeIds(showId, watchedIds, alreadyQueued, limit);
-        List<Long> jobIds = new ArrayList<>();
-        for (Long episodeId : toEnqueue) {
-            jobIds.addAll(downloadService.enqueueEpisode(episodeId, user));
-        }
-        return jobIds;
+        SeasonSubscription sub = seasonSubRepo.findByUserIdAndSeasonId(userId, seasonId)
+            .orElseGet(() -> {
+                SeasonSubscription s = new SeasonSubscription();
+                s.setUser(user);
+                s.setSeason(season);
+                return s;
+            });
+        sub.setTargetCount(targetCount);
+        sub.setUpdatedAt(Instant.now());
+        seasonSubRepo.save(sub);
+        return SeasonSubscriptionResponse.from(sub);
     }
+
+    @Transactional
+    public void cancelSeason(Long userId, Long seasonId) {
+        seasonSubRepo.findByUserIdAndSeasonId(userId, seasonId)
+            .ifPresent(sub -> {
+                seasonSubRepo.delete(sub);
+                downloadService.cancelAllForSeason(userId, seasonId);
+            });
+    }
+
+    public int getSeasonQueueCount(Long userId, Long seasonId) {
+        return queueRepo.findAllByUserIdAndSeasonId(userId, seasonId).size();
+    }
+
+    public void replenishIfSubscribedSeason(Long userId, Long seasonId) {
+        seasonSubRepo.findByUserIdAndSeasonId(userId, seasonId)
+            .ifPresent(this::replenishSeason);
+    }
+
+    public void replenishSeason(SeasonSubscription sub) {
+        Long userId   = sub.getUser().getId();
+        Long seasonId = sub.getSeason().getId();
+        Long showId   = sub.getSeason().getShow().getId();
+
+        Set<Long> watchedIds = watchedRepo.findWatchedEpisodeIds(userId, showId);
+        Set<Long> activeIds  = queueRepo.findActiveEpisodeIdsForSeason(userId, seasonId);
+
+        long activeUnwatched = activeIds.stream().filter(id -> !watchedIds.contains(id)).count();
+        int deficit = sub.getTargetCount() - (int) activeUnwatched;
+        if (deficit <= 0) return;
+
+        List<Long> toEnqueue = nextUnwatchedEpisodeIdsForSeason(seasonId, watchedIds, activeIds, deficit);
+        for (Long episodeId : toEnqueue) {
+            try {
+                downloadService.enqueueEpisode(episodeId, sub.getUser());
+                log.info("Auto-enqueued episode {} for user {} (season subscription)", episodeId, userId);
+            } catch (Exception e) {
+                log.error("Failed to auto-enqueue episode {} for user {}: {}",
+                    episodeId, userId, e.getMessage());
+            }
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private List<Long> nextUnwatchedEpisodeIds(Long showId, Set<Long> watchedIds,
                                                 Set<Long> skipIds, int limit) {
@@ -121,6 +178,18 @@ public class SubscriptionService {
                 if (!watchedIds.contains(ep.getId()) && !skipIds.contains(ep.getId())) {
                     result.add(ep.getId());
                 }
+            }
+        }
+        return result;
+    }
+
+    private List<Long> nextUnwatchedEpisodeIdsForSeason(Long seasonId, Set<Long> watchedIds,
+                                                          Set<Long> skipIds, int limit) {
+        List<Long> result = new ArrayList<>();
+        for (Episode ep : episodeRepo.findBySeasonIdOrderByEpisodeNumber(seasonId)) {
+            if (result.size() >= limit) break;
+            if (!watchedIds.contains(ep.getId()) && !skipIds.contains(ep.getId())) {
+                result.add(ep.getId());
             }
         }
         return result;

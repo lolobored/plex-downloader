@@ -2,6 +2,7 @@ package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
+import org.lolobored.plexdownloader.dto.SeasonSubscriptionResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.*;
 class SubscriptionServiceTest {
 
     @Mock ShowSubscriptionRepository subscriptionRepo;
+    @Mock SeasonSubscriptionRepository seasonSubRepo;
     @Mock UserEpisodeWatchedRepository watchedRepo;
     @Mock DownloadQueueRepository queueRepo;
     @Mock DownloadService downloadService;
@@ -38,6 +40,7 @@ class SubscriptionServiceTest {
         user = new User(); user.setId(1L);
         show = new TvShow(); show.setId(10L);
         season = new Season(); season.setId(100L); season.setSeasonNumber(1);
+        season.setShow(show);
 
         ep1 = new Episode(); ep1.setId(1L); ep1.setEpisodeNumber(1);
         ep2 = new Episode(); ep2.setId(2L); ep2.setEpisodeNumber(2);
@@ -173,23 +176,6 @@ class SubscriptionServiceTest {
     }
 
     @Test
-    void enqueueUnwatched_queuesFirstNUnwatched() {
-        when(userRepo.findById(1L)).thenReturn(Optional.of(user));
-        when(watchedRepo.findWatchedEpisodeIds(1L, 10L)).thenReturn(Set.of(1L));
-        when(queueRepo.findActiveEpisodeIdsForShow(1L, 10L)).thenReturn(Set.of());
-        when(seasonRepo.findByShowIdOrderBySeasonNumber(10L)).thenReturn(List.of(season));
-        when(episodeRepo.findBySeasonIdOrderByEpisodeNumber(100L))
-            .thenReturn(List.of(ep1, ep2, ep3));
-        when(downloadService.enqueueEpisode(anyLong(), any())).thenReturn(List.of(99L));
-
-        List<Long> jobIds = service.enqueueUnwatched(1L, 10L, 2);
-
-        assertThat(jobIds).hasSize(2);
-        verify(downloadService).enqueueEpisode(2L, user); // ep1 watched, ep2 and ep3 queued
-        verify(downloadService).enqueueEpisode(3L, user);
-    }
-
-    @Test
     void listSubscriptions_returnsUserSubs() {
         ShowSubscription sub = new ShowSubscription();
         sub.setId(1L); sub.setUser(user); sub.setShow(show);
@@ -200,5 +186,78 @@ class SubscriptionServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).targetCount()).isEqualTo(10);
+    }
+
+    @Test
+    void upsertSeason_createsNewSeasonSubscription() {
+        Season s = new Season(); s.setId(100L); s.setShow(show);
+        when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+        when(seasonRepo.findById(100L)).thenReturn(Optional.of(s));
+        when(seasonSubRepo.findByUserIdAndSeasonId(1L, 100L)).thenReturn(Optional.empty());
+        when(seasonSubRepo.save(any())).thenAnswer(inv -> {
+            SeasonSubscription sub = inv.getArgument(0);
+            sub.setId(77L);
+            return sub;
+        });
+
+        SeasonSubscriptionResponse resp = service.upsertSeason(1L, 100L, 5);
+
+        assertThat(resp.seasonId()).isEqualTo(100L);
+        assertThat(resp.showId()).isEqualTo(10L);
+        assertThat(resp.targetCount()).isEqualTo(5);
+    }
+
+    @Test
+    void cancelSeason_deletesSubAndCancelsQueue() {
+        SeasonSubscription sub = new SeasonSubscription();
+        sub.setId(77L);
+        when(seasonSubRepo.findByUserIdAndSeasonId(1L, 100L)).thenReturn(Optional.of(sub));
+
+        service.cancelSeason(1L, 100L);
+
+        verify(seasonSubRepo).delete(sub);
+        verify(downloadService).cancelAllForSeason(1L, 100L);
+    }
+
+    @Test
+    void cancelSeason_doesNothingWhenNoSub() {
+        when(seasonSubRepo.findByUserIdAndSeasonId(1L, 100L)).thenReturn(Optional.empty());
+
+        service.cancelSeason(1L, 100L);
+
+        verify(downloadService, never()).cancelAllForSeason(anyLong(), anyLong());
+    }
+
+    @Test
+    void replenishSeason_enqueuesUpToTarget_withinSeason() {
+        Season s = new Season(); s.setId(100L); s.setShow(show);
+        SeasonSubscription sub = new SeasonSubscription();
+        sub.setUser(user); sub.setSeason(s); sub.setTargetCount(2);
+
+        when(watchedRepo.findWatchedEpisodeIds(1L, 10L)).thenReturn(Set.of());
+        when(queueRepo.findActiveEpisodeIdsForSeason(1L, 100L)).thenReturn(Set.of());
+        when(episodeRepo.findBySeasonIdOrderByEpisodeNumber(100L))
+            .thenReturn(List.of(ep1, ep2, ep3));
+        when(downloadService.enqueueEpisode(anyLong(), any())).thenReturn(List.of(99L));
+
+        service.replenishSeason(sub);
+
+        verify(downloadService, times(2)).enqueueEpisode(anyLong(), eq(user));
+        verify(downloadService).enqueueEpisode(1L, user);
+        verify(downloadService).enqueueEpisode(2L, user);
+    }
+
+    @Test
+    void replenishSeason_doesNothingWhenBufferFull() {
+        Season s = new Season(); s.setId(100L); s.setShow(show);
+        SeasonSubscription sub = new SeasonSubscription();
+        sub.setUser(user); sub.setSeason(s); sub.setTargetCount(2);
+
+        when(watchedRepo.findWatchedEpisodeIds(1L, 10L)).thenReturn(Set.of());
+        when(queueRepo.findActiveEpisodeIdsForSeason(1L, 100L)).thenReturn(Set.of(1L, 2L));
+
+        service.replenishSeason(sub);
+
+        verify(downloadService, never()).enqueueEpisode(anyLong(), any());
     }
 }

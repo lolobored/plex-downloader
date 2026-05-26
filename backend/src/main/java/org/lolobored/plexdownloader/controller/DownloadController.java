@@ -2,12 +2,10 @@ package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.dto.DownloadRequest;
 import org.lolobored.plexdownloader.dto.DownloadResponse;
-import org.lolobored.plexdownloader.dto.UnwatchedEnqueueRequest;
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import org.lolobored.plexdownloader.service.DownloadService;
-import org.lolobored.plexdownloader.service.SubscriptionService;
 import org.lolobored.plexdownloader.service.TdarrSyncScheduler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,7 +21,6 @@ import java.util.List;
 public class DownloadController {
 
     private final DownloadService downloadService;
-    private final SubscriptionService subscriptionService;
     private final TdarrSyncScheduler tdarrSync;
     private final DownloadQueueRepository queueRepo;
 
@@ -38,18 +35,6 @@ public class DownloadController {
             default -> throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST, "Unknown type: " + req.type());
         };
-        return new DownloadResponse(jobIds, "QUEUED");
-    }
-
-    @PostMapping("/show/{showId}/unwatched")
-    public DownloadResponse enqueueUnwatched(@PathVariable Long showId,
-                                              @RequestBody UnwatchedEnqueueRequest req,
-                                              @AuthenticationPrincipal User user) {
-        if (req.limit() == null || !List.of(5, 10, 15, 20).contains(req.limit())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "limit must be 5, 10, 15, or 20");
-        }
-        List<Long> jobIds = subscriptionService.enqueueUnwatched(user.getId(), showId, req.limit());
         return new DownloadResponse(jobIds, "QUEUED");
     }
 
