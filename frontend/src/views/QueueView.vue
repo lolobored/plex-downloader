@@ -29,20 +29,26 @@
 
     <section v-if="inProgress.length" class="section">
       <h3>In Progress</h3>
-      <div v-for="item in inProgress" :key="item.id" class="queue-item active">
+      <div v-for="item in inProgress" :key="item.id"
+           class="queue-item active clickable"
+           data-testid="queue-item-row"
+           @click="navigateToItem(item)">
         <span class="spinner">⏳</span>
         <div class="item-info">
           <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
           <span class="sub">Copying…</span>
         </div>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
-          :disabled="true" title="Wait for copy to finish">✕</button>
+          :disabled="true" title="Wait for copy to finish" @click.stop>✕</button>
       </div>
     </section>
 
     <section v-if="pending.length" class="section">
       <h3>Pending</h3>
-      <div v-for="item in pending" :key="item.id" class="queue-item">
+      <div v-for="item in pending" :key="item.id"
+           class="queue-item clickable"
+           data-testid="queue-item-row"
+           @click="navigateToItem(item)">
         <span class="pos">#{{ item.queuePosition }}</span>
         <div class="item-info">
           <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
@@ -50,13 +56,16 @@
         </div>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
           :disabled="removing.has(item.id)" title="Remove"
-          @click="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
+          @click.stop="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
       </div>
     </section>
 
     <section v-if="done.length" class="section">
       <h3>Completed</h3>
-      <div v-for="item in done" :key="item.id" class="queue-item done">
+      <div v-for="item in done" :key="item.id"
+           class="queue-item done clickable"
+           data-testid="queue-item-row"
+           @click="navigateToItem(item)">
         <span class="done-icon">✓</span>
         <div class="item-info">
           <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
@@ -71,7 +80,7 @@
                   class="btn-tdarr-refresh"
                   :disabled="refreshing.has(item.id)"
                   :title="refreshing.has(item.id) ? 'Refreshing…' : 'Check Tdarr status'"
-                  @click="refreshTdarr(item.id)">
+                  @click.stop="refreshTdarr(item.id)">
             {{ refreshing.has(item.id) ? '…' : '↻' }}
           </button>
         </template>
@@ -83,12 +92,12 @@
                 class="btn-retry"
                 data-testid="retry-btn"
                 :disabled="retrying.has(item.id)"
-                @click="retryItem(item.id)">
+                @click.stop="retryItem(item.id)">
           {{ retrying.has(item.id) ? '…' : '⟳ Retry' }}
         </button>
         <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
           :disabled="removing.has(item.id)" title="Remove"
-          @click="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
+          @click.stop="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
       </div>
     </section>
   </div>
@@ -96,8 +105,11 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
 import { removeQueueItem, refreshTdarrStatus, retryQueueItem } from '@/api/download.js'
+
+const router = useRouter()
 
 const dlStore = useDownloadStore()
 const removing    = ref(new Set())
@@ -196,6 +208,14 @@ async function retryItem(id) {
   }
 }
 
+function navigateToItem(item) {
+  if (item.mediaType === 'MOVIE') {
+    router.push('/movies/' + item.mediaId)
+  } else if (item.mediaType === 'EPISODE' && item.showId != null) {
+    router.push('/tv/' + item.showId + '/seasons/' + item.seasonId + '/episodes/' + item.mediaId)
+  }
+}
+
 // ── Filtered section lists ────────────────────────────────────────────────────
 const inProgress = computed(() =>
   dlStore.queueItems
@@ -261,6 +281,8 @@ h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform
               background: var(--surface2); border-radius: 8px; margin-bottom: 8px; }
 .queue-item.active { border-left: 3px solid var(--accent-blue); }
 .queue-item.done   { opacity: 0.65; }
+.queue-item.clickable { cursor: pointer; }
+.queue-item.clickable:hover { background: color-mix(in srgb, var(--surface2) 85%, var(--text) 15%); }
 .spinner, .done-icon { font-size: 1.2rem; }
 .pos { font-size: 1rem; color: var(--text-muted); min-width: 28px; }
 .item-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }

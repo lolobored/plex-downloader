@@ -4,6 +4,7 @@ import { createTestingPinia } from '@pinia/testing'
 import { useDownloadStore } from '../../stores/download.js'
 import QueueView from '../QueueView.vue'
 import * as downloadApi from '../../api/download.js'
+import { useRouter } from 'vue-router'
 
 vi.mock('../../api/download.js', () => ({
   getQueue: vi.fn().mockResolvedValue([]),
@@ -13,7 +14,19 @@ vi.mock('../../api/download.js', () => ({
   retryQueueItem: vi.fn().mockResolvedValue({})
 }))
 
+vi.mock('vue-router', () => ({
+  useRouter: vi.fn(),
+  useRoute: vi.fn(() => ({ params: {} }))
+}))
+
 describe('QueueView', () => {
+  let pushMock
+
+  beforeEach(() => {
+    pushMock = vi.fn()
+    vi.mocked(useRouter).mockReturnValue({ push: pushMock })
+  })
+
   function factory(items = []) {
     const pinia = createTestingPinia({ createSpy: vi.fn })
     const store = useDownloadStore(pinia)
@@ -345,5 +358,46 @@ describe('QueueView', () => {
     await wrapper.find('[data-testid="chip-status-DONE"]').trigger('click')
     expect(wrapper.text()).toContain('Legacy')
     expect(wrapper.text()).not.toContain('Waiting')
+  })
+
+  // ── Navigation ───────────────────────────────────────────────────────────────
+
+  it('clicking MOVIE item navigates to movie detail', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 42, title: 'Inception', status: 'PENDING',
+        tdarrStatus: null, showId: null, seasonId: null,
+        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
+    ])
+    await flushPromises()
+
+    await wrapper.find('[data-testid="queue-item-row"]').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith('/movies/42')
+  })
+
+  it('clicking EPISODE item navigates to episode detail', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'EPISODE', mediaId: 99, title: 'Pilot', status: 'PENDING',
+        tdarrStatus: null, showId: 10, seasonId: 20,
+        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
+    ])
+    await flushPromises()
+
+    await wrapper.find('[data-testid="queue-item-row"]').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith('/tv/10/seasons/20/episodes/99')
+  })
+
+  it('clicking remove button does not navigate', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 42, title: 'Inception', status: 'PENDING',
+        tdarrStatus: null, showId: null, seasonId: null,
+        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
+    ])
+    await flushPromises()
+
+    await wrapper.find('[data-testid="remove-btn-1"]').trigger('click')
+
+    expect(pushMock).not.toHaveBeenCalled()
   })
 })
