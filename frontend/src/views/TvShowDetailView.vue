@@ -26,11 +26,7 @@
           :subtitle="`${s.episodeCount} episodes`"
           :watched="s.watched"
           @click="router.push(`/tv/${show.id}/seasons/${s.id}`)"
-        >
-          <template #badge>
-            <SubscribeButton :showId="show.id" small />
-          </template>
-        </PosterCard>
+        />
       </div>
     </div>
 

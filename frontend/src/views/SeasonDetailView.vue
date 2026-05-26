@@ -9,7 +9,7 @@
         <h1>{{ show.title }}</h1>
         <h2>{{ season.title || `Season ${season.seasonNumber}` }}</h2>
         <p class="ep-count">{{ season.episodeCount }} episodes</p>
-        <SubscribeButton :showId="show.id" />
+        <SubscribeButton :showId="show.id" :seasonId="season.id" />
       </div>
     </div>
 

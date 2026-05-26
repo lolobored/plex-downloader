@@ -33,7 +33,7 @@ function factory(overrides = {}) {
     global: {
       plugins: [pinia],
       stubs: {
-        SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small'] },
+        SubscribeButton: { template: '<div class="sb" :data-season-id="seasonId" />', props: ['showId', 'small', 'seasonId'] },
         DownloadButton:  { template: '<button class="dl-btn" />', props: ['type', 'mediaId', 'small'] }
       }
     }
@@ -101,5 +101,13 @@ describe('SeasonDetailView', () => {
     expect(getShow).toHaveBeenCalledWith('10')
     expect(getSeason).toHaveBeenCalledWith('10', '100')
     expect(getEpisodes).toHaveBeenCalledWith('10', '100')
+  })
+
+  it('passes seasonId to SubscribeButton', async () => {
+    const { w } = factory()
+    await flushPromises()
+    const sb = w.find('.sb')
+    expect(sb.exists()).toBe(true)
+    expect(sb.attributes('data-season-id')).toBe('100')
   })
 })

@@ -34,13 +34,35 @@ describe('TvShowDetailView', () => {
     const w = mount(TvShowDetailView, {
       global: {
         plugins: [pinia],
-        stubs: { SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small'] },
-                 PosterCard: { template: '<div class="pc" />', props: ['plexId','title','subtitle'] } }
+        stubs: { SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small', 'seasonId'] },
+                 PosterCard: { template: '<div class="pc"><slot name="badge" /></div>', props: ['plexId','title','subtitle','watched'] } }
       }
     })
     await flushPromises()
     expect(w.text()).toContain('Breaking Bad')
     expect(store.fetchWatched).toHaveBeenCalledWith(10)
     expect(store.fetchSubscriptions).toHaveBeenCalled()
+  })
+
+  it('season cards have no subscribe badge', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useWatchedStore(pinia)
+    store.fetchWatched = vi.fn()
+    store.fetchSubscriptions = vi.fn()
+    const w = mount(TvShowDetailView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small', 'seasonId'] },
+          PosterCard: { template: '<div class="pc"><slot name="badge" /></div>', props: ['plexId','title','subtitle','watched'] }
+        }
+      }
+    })
+    await flushPromises()
+    const cards = w.findAll('.pc')
+    expect(cards.length).toBeGreaterThan(0)
+    cards.forEach(card => {
+      expect(card.find('.sb').exists()).toBe(false)
+    })
   })
 })
