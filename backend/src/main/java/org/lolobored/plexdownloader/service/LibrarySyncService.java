@@ -135,14 +135,25 @@ public class LibrarySyncService {
                 }
             }
 
-            playlistSyncService.syncAll();
-            watchedSyncService.syncAll();
             lastSyncAt = Instant.now();
             state.set(SyncState.IDLE);
         } catch (Exception e) {
             lastError = e.getMessage();
             state.set(SyncState.ERROR);
-            log.error("Sync failed", e);
+            log.error("Library sync failed", e);
+        }
+
+        // Playlist and watched sync always run — even if library sync errored — so
+        // playlist item removals are never skipped due to a library-sync exception.
+        try {
+            playlistSyncService.syncAll();
+        } catch (Exception e) {
+            log.error("Playlist sync failed", e);
+        }
+        try {
+            watchedSyncService.syncAll();
+        } catch (Exception e) {
+            log.error("Watched sync failed", e);
         }
     }
 

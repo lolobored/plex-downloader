@@ -101,9 +101,17 @@ public class PlaylistSyncService {
         Set<String> removed = new HashSet<>(oldPlexIds); removed.removeAll(newPlexIds);
         log.info("Playlist '{}': {} item(s) fetched, +{} added, -{} removed",
             pp.getTitle(), fetched.size(), added.size(), removed.size());
+        if (!removed.isEmpty()) {
+            log.info("Playlist '{}': removing plexIds from playlist_items: {}", pp.getTitle(), removed);
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Playlist '{}': oldPlexIds={}", pp.getTitle(), oldPlexIds);
+            log.debug("Playlist '{}': newPlexIds from Plex={}", pp.getTitle(), newPlexIds);
+        }
 
         // Persist removals
         for (String plexId : removed) {
+            log.info("Playlist '{}': deleting playlist_item plexId={} playlistId={}", pp.getTitle(), plexId, local.getId());
             itemRepo.deleteByPlaylistIdAndPlexId(local.getId(), plexId);
         }
 
