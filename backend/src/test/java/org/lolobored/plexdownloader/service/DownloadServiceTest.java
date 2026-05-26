@@ -430,6 +430,34 @@ class DownloadServiceTest {
     }
 
     @Test
+    void cancelAllForSeason_cancelsPendingItems() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(1L);
+        item.setStatus(DownloadQueueItem.Status.PENDING);
+
+        when(queueRepo.findAllByUserIdAndSeasonId(1L, 100L)).thenReturn(List.of(item));
+
+        int count = service.cancelAllForSeason(1L, 100L);
+
+        assertThat(count).isEqualTo(1);
+        verify(queueRepo).findAllByUserIdAndSeasonId(1L, 100L);
+    }
+
+    @Test
+    void cancelAllForSeason_setsFlag_forInProgressItems() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(2L);
+        item.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+
+        when(queueRepo.findAllByUserIdAndSeasonId(1L, 100L)).thenReturn(List.of(item));
+
+        service.cancelAllForSeason(1L, 100L);
+
+        assertThat(item.isCancellationRequested()).isTrue();
+        verify(queueRepo).save(item);
+    }
+
+    @Test
     void executeCopyAsync_atomicRename_cleansUpTempFile() throws Exception {
         Path sourceFile = tempDir.resolve("source.mkv");
         Files.writeString(sourceFile, "video-content");

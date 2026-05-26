@@ -169,6 +169,22 @@ public class DownloadService {
         return cancelled;
     }
 
+    @Transactional
+    public int cancelAllForSeason(Long userId, Long seasonId) {
+        List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndSeasonId(userId, seasonId);
+        int cancelled = 0;
+        for (DownloadQueueItem item : items) {
+            if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+                item.setCancellationRequested(true);
+                queueRepo.save(item);
+            } else {
+                doCancelItem(item);
+            }
+            cancelled++;
+        }
+        return cancelled;
+    }
+
     // Package-private for testing
     void doCancelItem(DownloadQueueItem item) {
         // Delete in-flight file (always attempt — may already be gone after transcoding)
