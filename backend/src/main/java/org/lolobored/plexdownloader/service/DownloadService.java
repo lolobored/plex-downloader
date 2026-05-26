@@ -134,9 +134,10 @@ public class DownloadService {
                 long[] meta = episodeMeta.get(item.getMediaId());
                 return DownloadQueueItemResponse.from(item,
                     meta != null ? meta[0] : null,
-                    meta != null ? meta[1] : null);
+                    meta != null ? meta[1] : null,
+                    null, null, null, null);
             }
-            return DownloadQueueItemResponse.from(item, null, null);
+            return DownloadQueueItemResponse.from(item, null, null, null, null, null, null);
         }).toList();
     }
 

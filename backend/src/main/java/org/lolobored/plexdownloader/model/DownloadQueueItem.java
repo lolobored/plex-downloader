@@ -44,6 +44,8 @@ public class DownloadQueueItem {
     private Instant completedAt;
     @Column(name = "cancellation_requested", nullable = false)
     private boolean cancellationRequested = false;
+    @Column(name = "playlist_id")
+    private Long playlistId;
 
     public enum MediaType { MOVIE, EPISODE }
     public enum Status { PENDING, IN_PROGRESS, DONE, ERROR }

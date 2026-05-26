@@ -16,15 +16,25 @@ public record DownloadQueueItemResponse(
     Instant requestedAt,
     Instant completedAt,
     Long showId,
-    Long seasonId
+    Long seasonId,
+    Long playlistId,
+    String playlistTitle,
+    String showTitle,
+    Integer seasonNumber
 ) {
-    public static DownloadQueueItemResponse from(DownloadQueueItem item, Long showId, Long seasonId) {
+    public static DownloadQueueItemResponse from(
+            DownloadQueueItem item,
+            Long showId, Long seasonId,
+            Long playlistId, String playlistTitle,
+            String showTitle, Integer seasonNumber) {
         return new DownloadQueueItemResponse(
             item.getId(), item.getMediaType(), item.getMediaId(),
             item.getStatus(), item.getTdarrStatus(), item.getTdarrError(),
             item.getTitle(), item.getQueuePosition(), item.getErrorMessage(),
             item.getRequestedAt(), item.getCompletedAt(),
-            showId, seasonId
+            showId, seasonId,
+            playlistId, playlistTitle,
+            showTitle, seasonNumber
         );
     }
 }
