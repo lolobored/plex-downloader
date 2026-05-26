@@ -166,9 +166,10 @@ const QueueItemRow = defineComponent({
       const isTdarrError = item.tdarrStatus === 'TDARR_ERROR'
 
       let statusLabel = 'pending'
-      if (item.status === 'IN_PROGRESS') statusLabel = 'copying…'
-      else if (item.status === 'ERROR' || isTdarrError) statusLabel = 'error'
-      else if (item.status === 'DONE') statusLabel = 'done'
+      let statusClass = 'badge-pending'
+      if (item.status === 'IN_PROGRESS') { statusLabel = 'copying…'; statusClass = 'badge-copying' }
+      else if (item.status === 'ERROR' || isTdarrError) { statusLabel = 'error'; statusClass = 'badge-error' }
+      else if (item.status === 'DONE') { statusLabel = 'done'; statusClass = 'badge-done' }
 
       return h('div', {
         class: ['queue-item', 'clickable', isInProgress ? 'active' : '', (item.status === 'DONE' || item.status === 'ERROR') ? 'done' : ''].filter(Boolean).join(' '),
@@ -177,7 +178,6 @@ const QueueItemRow = defineComponent({
       }, [
         h('div', { class: 'item-info' }, [
           h('span', { class: 'type' }, item.title || `${item.mediaType} #${item.mediaId}`),
-          h('span', { class: 'sub' }, statusLabel),
           item.status === 'ERROR' && item.errorMessage
             ? h('span', { class: 'error-msg' }, item.errorMessage)
             : null,
@@ -185,6 +185,7 @@ const QueueItemRow = defineComponent({
             ? h('span', { class: 'error-msg' }, item.tdarrError)
             : null,
         ].filter(Boolean)),
+        h('span', { class: ['status-badge', statusClass].join(' ') }, statusLabel),
         isTdarrError
           ? h('button', {
               class: 'btn-retry',
@@ -441,8 +442,13 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
 .queue-item.clickable:hover { background: color-mix(in srgb, var(--surface2) 85%, var(--text) 15%); }
 .item-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .type { font-weight: 500; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sub  { font-size: .78rem; color: var(--text-muted); }
 .error-msg { font-size: .78rem; color: var(--red); }
+.status-badge { flex-shrink: 0; font-size: .7rem; font-weight: 600; border-radius: 10px;
+                padding: 2px 8px; letter-spacing: .03em; text-transform: uppercase; }
+.badge-pending { background: rgba(120,120,140,.18); color: var(--text-muted); border: 1px solid rgba(120,120,140,.3); }
+.badge-copying { background: rgba(52,152,219,.18); color: #5dade2; border: 1px solid rgba(52,152,219,.3); }
+.badge-done    { background: rgba(39,174,96,.18);  color: #2ecc71;  border: 1px solid rgba(39,174,96,.3); }
+.badge-error   { background: rgba(231,76,60,.18);  color: #e74c3c;  border: 1px solid rgba(231,76,60,.3); }
 .btn-remove { background: none; border: none; color: var(--text-muted); cursor: pointer;
               font-size: 1rem; padding: 4px 8px; border-radius: 4px; }
 .btn-remove:hover:not(:disabled) { color: var(--red); background: rgba(231,76,60,.1); }
