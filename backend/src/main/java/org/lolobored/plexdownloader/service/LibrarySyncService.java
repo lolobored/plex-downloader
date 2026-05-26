@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -104,16 +105,36 @@ public class LibrarySyncService {
             }
             log.info("Sync starting: {} total items across {} libraries", totalItems.get(), libraries.size());
 
+            Set<String> seenMoviePlexIds = new HashSet<>();
+            Set<String> seenShowPlexIds  = new HashSet<>();
+
             for (PlexLibrary lib : libraries) {
                 if ("movie".equals(lib.getType())) {
-                    syncMovieLibrary(lib.getKey());
+                    syncMovieLibrary(lib.getKey(), seenMoviePlexIds);
                 } else {
-                    syncShowLibrary(lib.getKey());
+                    syncShowLibrary(lib.getKey(), seenShowPlexIds);
                 }
                 // Mark library done
                 libraryProgressMap.computeIfPresent(lib.getKey(), (k, v) ->
                     new LibraryProgress(k, v.title(), v.itemsSynced(), v.totalItems(), true));
             }
+
+            // Prune media no longer present in Plex
+            if (!seenMoviePlexIds.isEmpty()) {
+                List<Movie> orphanMovies = movieRepo.findByPlexIdNotIn(seenMoviePlexIds);
+                if (!orphanMovies.isEmpty()) {
+                    log.info("Pruning {} movie(s) no longer in Plex", orphanMovies.size());
+                    movieRepo.deleteAll(orphanMovies);
+                }
+            }
+            if (!seenShowPlexIds.isEmpty()) {
+                List<TvShow> orphanShows = showRepo.findByPlexIdNotIn(seenShowPlexIds);
+                if (!orphanShows.isEmpty()) {
+                    log.info("Pruning {} show(s) no longer in Plex", orphanShows.size());
+                    showRepo.deleteAll(orphanShows);
+                }
+            }
+
             playlistSyncService.syncAll();
             watchedSyncService.syncAll();
             lastSyncAt = Instant.now();
@@ -125,11 +146,12 @@ public class LibrarySyncService {
         }
     }
 
-    private void syncMovieLibrary(String libraryKey) {
+    private void syncMovieLibrary(String libraryKey, Set<String> seenPlexIds) {
         int offset = 0;
         while (true) {
             PlexLibraryPage page = plexClient.getLibraryContents(libraryKey, offset);
             for (PlexItem item : page.items()) {
+                seenPlexIds.add(item.getRatingKey()); // mark as live in Plex regardless of upsert success
                 try {
                     upsertMovie(item);
                     itemsSynced.incrementAndGet();
@@ -169,11 +191,12 @@ public class LibrarySyncService {
         movieRepo.save(movie);
     }
 
-    private void syncShowLibrary(String libraryKey) {
+    private void syncShowLibrary(String libraryKey, Set<String> seenPlexIds) {
         int offset = 0;
         while (true) {
             PlexLibraryPage page = plexClient.getLibraryContents(libraryKey, offset);
             for (PlexItem item : page.items()) {
+                seenPlexIds.add(item.getRatingKey()); // mark as live in Plex regardless of upsert success
                 try {
                     upsertShow(item);
                     itemsSynced.incrementAndGet();

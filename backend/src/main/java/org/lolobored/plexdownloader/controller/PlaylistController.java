@@ -42,6 +42,7 @@ public class PlaylistController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         List<PlaylistItemResponse> items = itemRepo.findByPlaylistIdOrderByOrdinalAsc(id).stream()
             .map(pi -> toItemResponse(pi, user.getId()))
+            .filter(r -> r.mediaId() != null)  // skip items whose media was deleted from Plex
             .toList();
         List<String> posterPlexIds = itemRepo.findTop4ByPlaylistIdOrderByOrdinalAsc(id).stream()
             .map(PlaylistItem::getPlexId).toList();
