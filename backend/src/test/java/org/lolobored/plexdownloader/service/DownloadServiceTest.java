@@ -2,6 +2,7 @@ package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.model.*;
+import org.lolobored.plexdownloader.model.Playlist;
 import org.lolobored.plexdownloader.model.Season;
 import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
@@ -41,6 +42,7 @@ class DownloadServiceTest {
     @Mock DownloadQueueRepository queueRepo;
     @Mock SettingsService settings;
     @Mock TdarrClient tdarrClient;
+    @Mock PlaylistRepository playlistRepo;
     @Spy @InjectMocks DownloadService service;
 
     @BeforeEach
@@ -469,12 +471,15 @@ class DownloadServiceTest {
         item.setStatus(DownloadQueueItem.Status.PENDING);
 
         when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
 
         List<DownloadQueueItemResponse> result = service.getQueue(1L);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).showId()).isNull();
         assertThat(result.get(0).seasonId()).isNull();
+        assertThat(result.get(0).playlistId()).isNull();
+        assertThat(result.get(0).playlistTitle()).isNull();
         assertThat(result.get(0).mediaId()).isEqualTo(5L);
     }
 
@@ -486,18 +491,21 @@ class DownloadServiceTest {
         item.setMediaId(99L);
         item.setStatus(DownloadQueueItem.Status.DONE);
 
-        TvShow show = new TvShow(); show.setId(10L);
-        Season season = new Season(); season.setId(20L); season.setShow(show);
+        TvShow show = new TvShow(); show.setId(10L); show.setTitle("Breaking Bad");
+        Season season = new Season(); season.setId(20L); season.setSeasonNumber(1); season.setShow(show);
         Episode ep = new Episode(); ep.setId(99L); ep.setSeason(season);
 
         when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
         when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(99L))).thenReturn(List.of(ep));
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
 
         List<DownloadQueueItemResponse> result = service.getQueue(1L);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).showId()).isEqualTo(10L);
         assertThat(result.get(0).seasonId()).isEqualTo(20L);
+        assertThat(result.get(0).showTitle()).isEqualTo("Breaking Bad");
+        assertThat(result.get(0).seasonNumber()).isEqualTo(1);
         assertThat(result.get(0).mediaId()).isEqualTo(99L);
     }
 
@@ -522,5 +530,85 @@ class DownloadServiceTest {
         assertThat(destFile).exists();
         assertThat(destDir.resolve("output.mkv.tmp")).doesNotExist();
         assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
+    }
+
+    @Test
+    void enqueueMovie_withPlaylistId_setsPlaylistIdOnItem() throws IOException {
+        Path sourceFile = tempDir.resolve("movie.mkv");
+        Files.writeString(sourceFile, "fake");
+
+        Movie movie = new Movie();
+        movie.setId(1L);
+        movie.setTitle("Inception");
+        movie.setFilePath(sourceFile.toString());
+
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        ArgumentCaptor<DownloadQueueItem> captor = ArgumentCaptor.forClass(DownloadQueueItem.class);
+        when(queueRepo.save(captor.capture())).thenAnswer(inv -> {
+            DownloadQueueItem i = inv.getArgument(0);
+            i.setId(100L);
+            return i;
+        });
+
+        service.enqueueMovie(1L, new User(), 42L);
+
+        assertThat(captor.getValue().getPlaylistId()).isEqualTo(42L);
+    }
+
+    @Test
+    void enqueueMovie_withoutPlaylistId_setsNullPlaylistId() throws IOException {
+        Path sourceFile = tempDir.resolve("movie2.mkv");
+        Files.writeString(sourceFile, "fake");
+
+        Movie movie = new Movie();
+        movie.setId(2L);
+        movie.setTitle("The Matrix");
+        movie.setFilePath(sourceFile.toString());
+
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(movieRepo.findById(2L)).thenReturn(Optional.of(movie));
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        ArgumentCaptor<DownloadQueueItem> captor = ArgumentCaptor.forClass(DownloadQueueItem.class);
+        when(queueRepo.save(captor.capture())).thenAnswer(inv -> {
+            DownloadQueueItem i = inv.getArgument(0);
+            i.setId(101L);
+            return i;
+        });
+
+        service.enqueueMovie(2L, new User());
+
+        assertThat(captor.getValue().getPlaylistId()).isNull();
+    }
+
+    @Test
+    void getQueue_returnsPlaylistTitleAndShowTitleForEpisode() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(2L);
+        item.setMediaType(DownloadQueueItem.MediaType.EPISODE);
+        item.setMediaId(99L);
+        item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setPlaylistId(5L);
+
+        TvShow show = new TvShow(); show.setId(10L); show.setTitle("Breaking Bad");
+        Season season = new Season(); season.setId(20L); season.setSeasonNumber(1); season.setShow(show);
+        Episode ep = new Episode(); ep.setId(99L); ep.setSeason(season);
+
+        Playlist playlist = new Playlist(); playlist.setId(5L); playlist.setTitle("Action Movies");
+
+        when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(99L))).thenReturn(List.of(ep));
+        when(playlistRepo.findAllById(Set.of(5L))).thenReturn(List.of(playlist));
+
+        List<DownloadQueueItemResponse> result = service.getQueue(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).showId()).isEqualTo(10L);
+        assertThat(result.get(0).seasonId()).isEqualTo(20L);
+        assertThat(result.get(0).showTitle()).isEqualTo("Breaking Bad");
+        assertThat(result.get(0).seasonNumber()).isEqualTo(1);
+        assertThat(result.get(0).playlistId()).isEqualTo(5L);
+        assertThat(result.get(0).playlistTitle()).isEqualTo("Action Movies");
     }
 }

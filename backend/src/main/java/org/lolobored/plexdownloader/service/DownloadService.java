@@ -4,6 +4,7 @@ import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
+import org.lolobored.plexdownloader.repository.PlaylistRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,7 @@ public class DownloadService {
     private final DownloadQueueRepository queueRepo;
     private final SettingsService settings;
     private final TdarrClient tdarrClient;
+    private final PlaylistRepository playlistRepo;
 
     @Autowired
     @Lazy
@@ -47,17 +49,26 @@ public class DownloadService {
     }
 
     public List<Long> enqueueMovie(Long movieId, User user) {
+        return enqueueMovie(movieId, user, null);
+    }
+
+    public List<Long> enqueueMovie(Long movieId, User user, Long playlistId) {
         Movie movie = movieRepo.findById(movieId)
             .orElseThrow(() -> new IllegalArgumentException("Movie not found: " + movieId));
         String subDir = "movies/" + Path.of(movie.getFilePath()).getParent().getFileName().toString();
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.MOVIE,
             movieId, movie.getFilePath(), subDir, movie.getTitle());
+        item.setPlaylistId(playlistId);
         item = queueRepo.save(item);
         self.executeCopyAsync(item.getId());
         return List.of(item.getId());
     }
 
     public List<Long> enqueueEpisode(Long episodeId, User user) {
+        return enqueueEpisode(episodeId, user, null);
+    }
+
+    public List<Long> enqueueEpisode(Long episodeId, User user, Long playlistId) {
         Episode ep = episodeRepo.findById(episodeId)
             .orElseThrow(() -> new IllegalArgumentException("Episode not found: " + episodeId));
         Season season = seasonRepo.findById(ep.getSeason().getId())
@@ -71,6 +82,7 @@ public class DownloadService {
                          + (ep.getTitle() != null ? " - " + ep.getTitle() : "");
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
             episodeId, ep.getFilePath(), subDir, epTitle);
+        item.setPlaylistId(playlistId);
         item = queueRepo.save(item);
         self.executeCopyAsync(item.getId());
         return List.of(item.getId());
@@ -109,35 +121,53 @@ public class DownloadService {
         return ids;
     }
 
+    private record EpisodeMeta(Long showId, Long seasonId, String showTitle, Integer seasonNumber) {}
+
     public List<DownloadQueueItemResponse> getQueue(Long userId) {
         List<DownloadQueueItem> items = queueRepo.findAllByUserIdOrderByQueuePositionAsc(userId);
 
-        // Collect episode IDs for batch fetch
+        // Batch-fetch episode → season → show metadata
         Set<Long> episodeIds = items.stream()
             .filter(i -> i.getMediaType() == DownloadQueueItem.MediaType.EPISODE)
             .map(DownloadQueueItem::getMediaId)
             .collect(Collectors.toSet());
-
-        // Build episode-id → {showId, seasonId} lookup
-        Map<Long, long[]> episodeMeta = new java.util.HashMap<>();
+        Map<Long, EpisodeMeta> episodeMeta = new java.util.HashMap<>();
         if (!episodeIds.isEmpty()) {
             episodeRepo.findWithSeasonAndShowByIdIn(episodeIds).forEach(ep ->
-                episodeMeta.put(ep.getId(), new long[]{
+                episodeMeta.put(ep.getId(), new EpisodeMeta(
                     ep.getSeason().getShow().getId(),
-                    ep.getSeason().getId()
-                })
+                    ep.getSeason().getId(),
+                    ep.getSeason().getShow().getTitle(),
+                    ep.getSeason().getSeasonNumber()
+                ))
             );
         }
 
+        // Batch-fetch playlist titles
+        Set<Long> playlistIds = items.stream()
+            .filter(i -> i.getPlaylistId() != null)
+            .map(DownloadQueueItem::getPlaylistId)
+            .collect(Collectors.toSet());
+        Map<Long, String> playlistTitles = new java.util.HashMap<>();
+        if (!playlistIds.isEmpty()) {
+            playlistRepo.findAllById(playlistIds)
+                .forEach(p -> playlistTitles.put(p.getId(), p.getTitle()));
+        }
+
         return items.stream().map(item -> {
+            Long playlistId    = item.getPlaylistId();
+            String playlistTitle = playlistId != null ? playlistTitles.get(playlistId) : null;
             if (item.getMediaType() == DownloadQueueItem.MediaType.EPISODE) {
-                long[] meta = episodeMeta.get(item.getMediaId());
+                EpisodeMeta em = episodeMeta.get(item.getMediaId());
                 return DownloadQueueItemResponse.from(item,
-                    meta != null ? meta[0] : null,
-                    meta != null ? meta[1] : null,
-                    null, null, null, null);
+                    em != null ? em.showId()       : null,
+                    em != null ? em.seasonId()     : null,
+                    playlistId, playlistTitle,
+                    em != null ? em.showTitle()    : null,
+                    em != null ? em.seasonNumber() : null
+                );
             }
-            return DownloadQueueItemResponse.from(item, null, null, null, null, null, null);
+            return DownloadQueueItemResponse.from(item, null, null, playlistId, playlistTitle, null, null);
         }).toList();
     }
 
