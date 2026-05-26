@@ -14,12 +14,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
+
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -455,6 +458,47 @@ class DownloadServiceTest {
 
         assertThat(item.isCancellationRequested()).isTrue();
         verify(queueRepo).save(item);
+    }
+
+    @Test
+    void getQueue_returnsMovieItemWithNullShowAndSeasonId() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(1L);
+        item.setMediaType(DownloadQueueItem.MediaType.MOVIE);
+        item.setMediaId(5L);
+        item.setStatus(DownloadQueueItem.Status.PENDING);
+
+        when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+
+        List<DownloadQueueItemResponse> result = service.getQueue(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).showId()).isNull();
+        assertThat(result.get(0).seasonId()).isNull();
+        assertThat(result.get(0).mediaId()).isEqualTo(5L);
+    }
+
+    @Test
+    void getQueue_returnsEpisodeItemWithShowAndSeasonId() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(2L);
+        item.setMediaType(DownloadQueueItem.MediaType.EPISODE);
+        item.setMediaId(99L);
+        item.setStatus(DownloadQueueItem.Status.DONE);
+
+        TvShow show = new TvShow(); show.setId(10L);
+        Season season = new Season(); season.setId(20L); season.setShow(show);
+        Episode ep = new Episode(); ep.setId(99L); ep.setSeason(season);
+
+        when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(99L))).thenReturn(List.of(ep));
+
+        List<DownloadQueueItemResponse> result = service.getQueue(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).showId()).isEqualTo(10L);
+        assertThat(result.get(0).seasonId()).isEqualTo(20L);
+        assertThat(result.get(0).mediaId()).isEqualTo(99L);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.client.TdarrClient;
+import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,9 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -105,8 +109,35 @@ public class DownloadService {
         return ids;
     }
 
-    public List<DownloadQueueItem> getQueue(Long userId) {
-        return queueRepo.findAllByUserIdOrderByQueuePositionAsc(userId);
+    public List<DownloadQueueItemResponse> getQueue(Long userId) {
+        List<DownloadQueueItem> items = queueRepo.findAllByUserIdOrderByQueuePositionAsc(userId);
+
+        // Collect episode IDs for batch fetch
+        Set<Long> episodeIds = items.stream()
+            .filter(i -> i.getMediaType() == DownloadQueueItem.MediaType.EPISODE)
+            .map(DownloadQueueItem::getMediaId)
+            .collect(Collectors.toSet());
+
+        // Build episode-id → {showId, seasonId} lookup
+        Map<Long, long[]> episodeMeta = new java.util.HashMap<>();
+        if (!episodeIds.isEmpty()) {
+            episodeRepo.findWithSeasonAndShowByIdIn(episodeIds).forEach(ep ->
+                episodeMeta.put(ep.getId(), new long[]{
+                    ep.getSeason().getShow().getId(),
+                    ep.getSeason().getId()
+                })
+            );
+        }
+
+        return items.stream().map(item -> {
+            if (item.getMediaType() == DownloadQueueItem.MediaType.EPISODE) {
+                long[] meta = episodeMeta.get(item.getMediaId());
+                return DownloadQueueItemResponse.from(item,
+                    meta != null ? meta[0] : null,
+                    meta != null ? meta[1] : null);
+            }
+            return DownloadQueueItemResponse.from(item, null, null);
+        }).toList();
     }
 
     static String slugify(String title) {

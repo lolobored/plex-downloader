@@ -2,6 +2,7 @@ package org.lolobored.plexdownloader.controller;
 
 import tools.jackson.databind.ObjectMapper;
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
+import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
@@ -72,6 +73,24 @@ class DownloadControllerTest {
             chain.doFilter(req, res);
             return null;
         }).when(jwtAuthFilter).doFilter(any(), any(), any());
+    }
+
+    @Test
+    void getQueue_returnsEnrichedItems() throws Exception {
+        DownloadQueueItemResponse resp = new DownloadQueueItemResponse(
+            1L, DownloadQueueItem.MediaType.EPISODE, 99L,
+            DownloadQueueItem.Status.PENDING, DownloadQueueItem.TdarrStatus.NONE,
+            null, "Show S01E01", 1, null,
+            java.time.Instant.parse("2026-01-01T00:00:00Z"), null,
+            10L, 20L
+        );
+        when(downloadService.getQueue(1L)).thenReturn(List.of(resp));
+
+        mockMvc.perform(get("/api/download/queue"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].showId").value(10))
+            .andExpect(jsonPath("$[0].seasonId").value(20))
+            .andExpect(jsonPath("$[0].mediaId").value(99));
     }
 
     @Test

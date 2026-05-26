@@ -1,5 +1,6 @@
 package org.lolobored.plexdownloader.controller;
 
+import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.dto.DownloadRequest;
 import org.lolobored.plexdownloader.dto.DownloadResponse;
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
@@ -39,7 +40,7 @@ public class DownloadController {
     }
 
     @GetMapping("/queue")
-    public List<DownloadQueueItem> getQueue(@AuthenticationPrincipal User user) {
+    public List<DownloadQueueItemResponse> getQueue(@AuthenticationPrincipal User user) {
         return downloadService.getQueue(user.getId());
     }
 
