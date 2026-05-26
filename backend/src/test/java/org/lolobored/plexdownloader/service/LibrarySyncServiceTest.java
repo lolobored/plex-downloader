@@ -150,6 +150,7 @@ class LibrarySyncServiceTest {
         when(plexClient.getItemDetail("100")).thenReturn(showDetail);
         when(plexClient.getChildren("100")).thenReturn(List.of(seasonItem));
         when(plexClient.getChildren("200")).thenReturn(List.of(episodeItem));
+        when(plexClient.getItemDetail("300")).thenReturn(episodeItem);
         when(showRepo.findByPlexId("100")).thenReturn(Optional.empty());
         when(showRepo.save(any())).thenAnswer(inv -> {
             TvShow s = inv.getArgument(0);

@@ -254,25 +254,26 @@ public class LibrarySyncService {
     }
 
     private void upsertEpisode(PlexItem epItem, Season season) {
-        Episode episode = episodeRepo.findByPlexId(epItem.getRatingKey()).orElseGet(Episode::new);
-        episode.setPlexId(epItem.getRatingKey());
+        PlexItem detail = plexClient.getItemDetail(epItem.getRatingKey());
+        Episode episode = episodeRepo.findByPlexId(detail.getRatingKey()).orElseGet(Episode::new);
+        episode.setPlexId(detail.getRatingKey());
         episode.setSeason(season);
-        episode.setEpisodeNumber(epItem.getIndex() != null ? epItem.getIndex() : 0);
-        episode.setTitle(epItem.getTitle());
-        episode.setSummary(epItem.getSummary());
-        episode.setDurationMs(epItem.getDuration());
-        episode.setFilePath(epItem.firstFilePath());
-        episode.setVideoResolution(epItem.firstVideoResolution());
-        if (epItem.getThumb() != null) {
-            posterStorage.downloadIfNeeded(epItem.getRatingKey(), epItem.getThumb(), epItem.getUpdatedAt());
+        episode.setEpisodeNumber(detail.getIndex() != null ? detail.getIndex() : 0);
+        episode.setTitle(detail.getTitle());
+        episode.setSummary(detail.getSummary());
+        episode.setDurationMs(detail.getDuration());
+        episode.setFilePath(detail.firstFilePath());
+        episode.setVideoResolution(detail.firstVideoResolution());
+        if (detail.getThumb() != null) {
+            posterStorage.downloadIfNeeded(detail.getRatingKey(), detail.getThumb(), detail.getUpdatedAt());
         }
-        episode.setThumbnailUrl(posterStorage.posterUrl(epItem.getRatingKey()));
-        if (epItem.getAirDate() != null) {
-            try { episode.setAirDate(LocalDate.parse(epItem.getAirDate())); }
+        episode.setThumbnailUrl(posterStorage.posterUrl(detail.getRatingKey()));
+        if (detail.getAirDate() != null) {
+            try { episode.setAirDate(LocalDate.parse(detail.getAirDate())); }
             catch (Exception ignored) {}
         }
-        episode.setDirector(firstTag(epItem.getDirector()));
-        episode.setWriter(firstTag(epItem.getWriter()));
+        episode.setDirector(firstTag(detail.getDirector()));
+        episode.setWriter(firstTag(detail.getWriter()));
         episode.setSyncedAt(Instant.now());
         episodeRepo.save(episode);
     }
