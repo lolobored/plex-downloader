@@ -58,11 +58,23 @@ public class PlaylistSyncService {
                 log.warn("Failed to sync playlist {}: {}", pp.getRatingKey(), e.getMessage());
             }
         }
+        // Clean up local playlists that no longer exist in Plex
+        Set<String> activePlexIds = plexPlaylists.stream()
+            .map(PlexPlaylist::getRatingKey)
+            .collect(Collectors.toSet());
+        playlistRepo.findAll().stream()
+            .filter(local -> !activePlexIds.contains(local.getPlexId()))
+            .forEach(orphan -> {
+                log.info("Playlist sync: removing orphan playlist '{}' (no longer in Plex)", orphan.getTitle());
+                itemRepo.deleteAllByPlaylistId(orphan.getId());
+                subRepo.deleteByPlaylistId(orphan.getId());
+                playlistRepo.delete(orphan);
+            });
         log.info("Playlist sync: done");
     }
 
     @Transactional
-    void syncPlaylist(PlexPlaylist pp) {
+    public void syncPlaylist(PlexPlaylist pp) {
         log.info("Playlist '{}': fetching {} item(s) from Plex", pp.getTitle(), pp.getLeafCount());
         // Upsert Playlist row
         Playlist local = playlistRepo.findByPlexId(pp.getRatingKey()).orElseGet(Playlist::new);

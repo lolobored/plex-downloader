@@ -14,7 +14,13 @@ public interface PlaylistItemRepository extends JpaRepository<PlaylistItem, Long
     List<PlaylistItem> findTop4ByPlaylistIdOrderByOrdinalAsc(Long playlistId);
     @Modifying
     @Transactional
-    void deleteByPlaylistIdAndPlexId(Long playlistId, String plexId);
+    @Query("DELETE FROM PlaylistItem pi WHERE pi.playlistId = :playlistId AND pi.plexId = :plexId")
+    void deleteByPlaylistIdAndPlexId(@Param("playlistId") Long playlistId, @Param("plexId") String plexId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM PlaylistItem pi WHERE pi.playlistId = :playlistId")
+    void deleteAllByPlaylistId(@Param("playlistId") Long playlistId);
 
     @Query("SELECT i.plexId FROM PlaylistItem i WHERE i.playlistId = :playlistId")
     Set<String> findPlexIdsByPlaylistId(@Param("playlistId") Long playlistId);

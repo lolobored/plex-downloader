@@ -21,4 +21,8 @@ public interface PlaylistSubscriptionRepository extends JpaRepository<PlaylistSu
     @Transactional
     @Query("DELETE FROM PlaylistSubscription s WHERE s.user.id = :userId AND s.playlist.id = :playlistId")
     void deleteByUserIdAndPlaylistId(@Param("userId") Long userId, @Param("playlistId") Long playlistId);
+
+    @Modifying
+    @Transactional
+    void deleteByPlaylistId(Long playlistId);
 }

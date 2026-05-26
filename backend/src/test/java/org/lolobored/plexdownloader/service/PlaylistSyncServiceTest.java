@@ -103,6 +103,7 @@ class PlaylistSyncServiceTest {
 
         service.syncAll();
 
+        verify(itemRepo).deleteByPlaylistIdAndPlexId(10L, "m1");
         verify(queueRepo).delete(qi);
         verify(tdarrClient).deleteFile(destFile.toString());
         assertThat(destFile).doesNotExist();
@@ -153,6 +154,32 @@ class PlaylistSyncServiceTest {
     void syncAll_doesNotThrow_whenPlexUnreachable() {
         when(plexClient.getPlaylists()).thenThrow(new RuntimeException("Plex unreachable"));
         service.syncAll();  // must not throw
+    }
+
+    @Test
+    void syncAll_removesOrphanPlaylist_whenDeletedFromPlex() {
+        // Plex returns only pl1, not pl2
+        when(plexClient.getPlaylists()).thenReturn(List.of(plexPlaylist("pl1")));
+
+        // pl1 exists locally
+        Playlist pl1 = localPlaylist(10L, "pl1");
+        when(playlistRepo.findByPlexId("pl1")).thenReturn(Optional.of(pl1));
+        when(playlistRepo.save(any())).thenReturn(pl1);
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of());
+        when(plexClient.getPlaylistItems("pl1")).thenReturn(List.of());
+        when(subRepo.findByPlaylistIdWithUser(10L)).thenReturn(List.of());
+
+        // pl2 exists only locally (orphan — deleted from Plex)
+        Playlist pl2 = localPlaylist(20L, "pl2");
+        pl2.setTitle("Orphan");
+        when(playlistRepo.findAll()).thenReturn(List.of(pl1, pl2));
+
+        service.syncAll();
+
+        verify(itemRepo).deleteAllByPlaylistId(20L);
+        verify(subRepo).deleteByPlaylistId(20L);
+        verify(playlistRepo).delete(pl2);
+        verify(playlistRepo, never()).delete(pl1);
     }
 
     @Test
