@@ -240,6 +240,9 @@ public class LibrarySyncService {
         episode.setDurationMs(epItem.getDuration());
         episode.setFilePath(epItem.firstFilePath());
         episode.setVideoResolution(epItem.firstVideoResolution());
+        if (epItem.getThumb() != null) {
+            posterStorage.downloadIfNeeded(epItem.getRatingKey(), epItem.getThumb(), epItem.getUpdatedAt());
+        }
         episode.setThumbnailUrl(posterStorage.posterUrl(epItem.getRatingKey()));
         if (epItem.getAirDate() != null) {
             try { episode.setAirDate(LocalDate.parse(epItem.getAirDate())); }
