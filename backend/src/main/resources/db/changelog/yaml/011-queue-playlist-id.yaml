@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-queue-playlist-id
+      author: system
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE download_queue
+                ADD COLUMN playlist_id BIGINT REFERENCES playlists(id) ON DELETE SET NULL
