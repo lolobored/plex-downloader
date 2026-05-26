@@ -72,22 +72,21 @@ public class WatchedSyncService {
         }
 
         String plexUrl = settings.getRequired("plex.server.url");
-        AllLeavesResponse resp;
+        List<PlexEpisodeWatchStatus> allEpisodes;
         try {
-            resp = fetchAllLeaves(plexUrl, user.getPlexToken(), show.getPlexId());
+            allEpisodes = fetchAllLeavesPages(plexUrl, user.getPlexToken(), show.getPlexId());
         } catch (RestClientException e) {
             log.warn("Plex API error for user={} show={}: {}", userId, showId, e.getMessage());
             return;
         }
 
-        if (resp == null || resp.getMediaContainer() == null
-                || resp.getMediaContainer().getMetadata() == null) {
+        if (allEpisodes.isEmpty()) {
             log.warn("Empty allLeaves response for show {}", showId);
             return;
         }
 
         Instant now = Instant.now();
-        for (PlexEpisodeWatchStatus item : resp.getMediaContainer().getMetadata()) {
+        for (PlexEpisodeWatchStatus item : allEpisodes) {
             if (item.getViewCount() == null || item.getViewCount() == 0) continue;
             episodeRepo.findByPlexId(item.getRatingKey()).ifPresent(episode -> {
                 UserEpisodeWatched watched = watchedRepo
@@ -105,7 +104,7 @@ public class WatchedSyncService {
                 watchedRepo.save(watched);
             });
         }
-        log.info("Watched sync complete for user={} show={}", userId, showId);
+        log.info("Watched sync complete for user={} show={} episodes={}", userId, showId, allEpisodes.size());
     }
 
     public void syncIfStale(Long userId, Long showId) {
@@ -120,18 +119,39 @@ public class WatchedSyncService {
         return watchedRepo.findWatchedEpisodeIds(userId, showId);
     }
 
+    private static final int LEAVES_PAGE_SIZE = 50;
+
     // Protected for mocking in tests
-    protected AllLeavesResponse fetchAllLeaves(String plexUrl, String plexToken, String showPlexId) {
+    protected List<PlexEpisodeWatchStatus> fetchAllLeavesPages(String plexUrl, String plexToken, String showPlexId) {
         RestClient client = RestClient.builder()
             .baseUrl(plexUrl)
             .defaultHeader("X-Plex-Token", plexToken)
             .defaultHeader("X-Plex-Client-Identifier", "plex-downloader-app")
             .defaultHeader("Accept", "application/json")
             .build();
-        return client.get()
-            .uri("/library/metadata/{ratingKey}/allLeaves", showPlexId)
-            .retrieve()
-            .body(AllLeavesResponse.class);
+
+        List<PlexEpisodeWatchStatus> all = new java.util.ArrayList<>();
+        int offset = 0;
+        while (true) {
+            final int currentOffset = offset;
+            AllLeavesResponse resp = client.get()
+                .uri(u -> u.path("/library/metadata/{ratingKey}/allLeaves")
+                    .build(showPlexId))
+                .header("X-Plex-Container-Start", String.valueOf(currentOffset))
+                .header("X-Plex-Container-Size", String.valueOf(LEAVES_PAGE_SIZE))
+                .retrieve()
+                .body(AllLeavesResponse.class);
+
+            if (resp == null || resp.getMediaContainer() == null
+                    || resp.getMediaContainer().getMetadata() == null) break;
+
+            AllLeavesResponse.Container mc = resp.getMediaContainer();
+            all.addAll(mc.getMetadata());
+
+            if (offset + mc.getSize() >= mc.getTotalSize()) break;
+            offset += LEAVES_PAGE_SIZE;
+        }
+        return all;
     }
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
@@ -143,6 +163,9 @@ public class WatchedSyncService {
         public static class Container {
             @JsonProperty("Metadata")
             private List<PlexEpisodeWatchStatus> metadata;
+            private int totalSize;
+            private int size;
+            private int offset;
         }
     }
 

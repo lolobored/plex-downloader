@@ -58,18 +58,14 @@ class WatchedSyncServiceTest {
         when(showRepo.findById(10L)).thenReturn(Optional.of(show));
         when(settings.getRequired("plex.server.url")).thenReturn("http://plex:32400");
 
-        WatchedSyncService.AllLeavesResponse mockResp = new WatchedSyncService.AllLeavesResponse();
-        WatchedSyncService.AllLeavesResponse.Container container =
-            new WatchedSyncService.AllLeavesResponse.Container();
         WatchedSyncService.PlexEpisodeWatchStatus item =
             new WatchedSyncService.PlexEpisodeWatchStatus();
         item.setRatingKey("ep-plex-1");
         item.setViewCount(2);
         item.setLastViewedAt(1000000L);
-        container.setMetadata(java.util.List.of(item));
-        mockResp.setMediaContainer(container);
 
-        doReturn(mockResp).when(service).fetchAllLeaves("http://plex:32400", "tok123", "plex-show-1");
+        doReturn(java.util.List.of(item))
+            .when(service).fetchAllLeavesPages("http://plex:32400", "tok123", "plex-show-1");
 
         Episode ep = new Episode();
         ep.setId(5L);
@@ -93,17 +89,13 @@ class WatchedSyncServiceTest {
         when(showRepo.findById(10L)).thenReturn(Optional.of(show));
         when(settings.getRequired("plex.server.url")).thenReturn("http://plex:32400");
 
-        WatchedSyncService.AllLeavesResponse mockResp = new WatchedSyncService.AllLeavesResponse();
-        WatchedSyncService.AllLeavesResponse.Container container =
-            new WatchedSyncService.AllLeavesResponse.Container();
         WatchedSyncService.PlexEpisodeWatchStatus item =
             new WatchedSyncService.PlexEpisodeWatchStatus();
         item.setRatingKey("ep-plex-2");
         item.setViewCount(0);
-        container.setMetadata(java.util.List.of(item));
-        mockResp.setMediaContainer(container);
 
-        doReturn(mockResp).when(service).fetchAllLeaves(anyString(), anyString(), anyString());
+        doReturn(java.util.List.of(item))
+            .when(service).fetchAllLeavesPages(anyString(), anyString(), anyString());
 
         service.syncShow(1L, 10L);
 
