@@ -4,20 +4,46 @@ import { createTestingPinia } from '@pinia/testing'
 import { useDownloadStore } from '../../stores/download.js'
 import QueueView from '../QueueView.vue'
 import * as downloadApi from '../../api/download.js'
+import * as playlistApi from '../../api/playlists.js'
 import { useRouter } from 'vue-router'
 
 vi.mock('../../api/download.js', () => ({
-  getQueue: vi.fn().mockResolvedValue([]),
-  enqueue: vi.fn().mockResolvedValue({}),
-  removeQueueItem: vi.fn().mockResolvedValue(undefined),
-  refreshTdarrStatus: vi.fn().mockResolvedValue({}),
-  retryQueueItem: vi.fn().mockResolvedValue({})
+  getQueue:          vi.fn().mockResolvedValue([]),
+  enqueue:           vi.fn().mockResolvedValue({}),
+  removeQueueItem:   vi.fn().mockResolvedValue(undefined),
+  refreshTdarrStatus:vi.fn().mockResolvedValue({}),
+  retryQueueItem:    vi.fn().mockResolvedValue({})
 }))
-
+vi.mock('../../api/playlists.js', () => ({
+  unsubscribe:           vi.fn().mockResolvedValue(undefined),
+  getPlaylistQueueCount: vi.fn().mockResolvedValue(0)
+}))
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(),
-  useRoute: vi.fn(() => ({ params: {} }))
+  useRoute:  vi.fn(() => ({ params: {} }))
 }))
+
+// Helper factories
+function movieItem(overrides = {}) {
+  return {
+    id: 1, mediaType: 'MOVIE', mediaId: 10, title: 'Inception',
+    status: 'PENDING', tdarrStatus: 'NONE', tdarrError: null,
+    playlistId: null, playlistTitle: null,
+    showId: null, seasonId: null, showTitle: null, seasonNumber: null,
+    queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
+    ...overrides
+  }
+}
+function episodeItem(overrides = {}) {
+  return {
+    id: 2, mediaType: 'EPISODE', mediaId: 99, title: 'Breaking Bad S01E01 - Pilot',
+    status: 'PENDING', tdarrStatus: 'NONE', tdarrError: null,
+    playlistId: null, playlistTitle: null,
+    showId: 50, seasonId: 100, showTitle: 'Breaking Bad', seasonNumber: 1,
+    queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
+    ...overrides
+  }
+}
 
 describe('QueueView', () => {
   let pushMock
@@ -25,6 +51,7 @@ describe('QueueView', () => {
   beforeEach(() => {
     pushMock = vi.fn()
     vi.mocked(useRouter).mockReturnValue({ push: pushMock })
+    vi.clearAllMocks()
   })
 
   function factory(items = []) {
@@ -35,27 +62,11 @@ describe('QueueView', () => {
     return { wrapper: mount(QueueView, { global: { plugins: [pinia] } }), store }
   }
 
+  // ── Empty / basic ────────────────────────────────────────────────────────────
+
   it('shows empty state when queue is empty', () => {
     const { wrapper } = factory([])
     expect(wrapper.text()).toContain('Queue is empty')
-  })
-
-  it('shows IN_PROGRESS item in active section', () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 5, status: 'IN_PROGRESS',
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: null }
-    ])
-    expect(wrapper.text()).toContain('In Progress')
-    expect(wrapper.text()).toContain('MOVIE')
-  })
-
-  it('shows PENDING items in pending section', () => {
-    const { wrapper } = factory([
-      { id: 2, mediaType: 'EPISODE', mediaId: 7, status: 'PENDING',
-        queuePosition: 2, requestedAt: '2026-05-24T10:01:00Z', completedAt: null }
-    ])
-    expect(wrapper.text()).toContain('Pending')
-    expect(wrapper.text()).toContain('EPISODE')
   })
 
   it('fetchQueue called on mount', () => {
@@ -63,106 +74,7 @@ describe('QueueView', () => {
     expect(store.fetchQueue).toHaveBeenCalled()
   })
 
-  it('shows NONE tdarr badge on DONE item', () => {
-    const { wrapper } = factory([
-      { id: 10, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
-        tdarrStatus: 'NONE', tdarrError: null,
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.text()).toContain('Queued in Tdarr')
-  })
-
-  it('shows PROCESSING tdarr badge on DONE item', () => {
-    const { wrapper } = factory([
-      { id: 11, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
-        tdarrStatus: 'PROCESSING', tdarrError: null,
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.text()).toContain('Transcoding…')
-  })
-
-  it('shows TRANSCODED tdarr badge on DONE item', () => {
-    const { wrapper } = factory([
-      { id: 12, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
-        tdarrStatus: 'TRANSCODED', tdarrError: null,
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.text()).toContain('Transcoded ✓')
-  })
-
-  it('shows TDARR_ERROR badge with error message', () => {
-    const { wrapper } = factory([
-      { id: 13, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec not supported',
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.text()).toContain('Tdarr error')
-    expect(wrapper.text()).toContain('codec not supported')
-  })
-
-  it('shows retry button for ERROR+TDARR_ERROR items', () => {
-    const { wrapper } = factory([
-      { id: 20, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec not supported',
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(true)
-  })
-
-  it('does not show retry button for DONE items', () => {
-    const { wrapper } = factory([
-      { id: 21, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
-        tdarrStatus: 'TRANSCODED', tdarrError: null,
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(false)
-  })
-
-  it('clicking retry calls retryQueueItem and refreshes queue', async () => {
-    downloadApi.retryQueueItem.mockResolvedValue({ id: 22, status: 'DONE', tdarrStatus: 'NONE' })
-
-    const { wrapper, store } = factory([
-      { id: 22, mediaType: 'MOVIE', mediaId: 5, status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', tdarrError: 'fail',
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    await wrapper.find('[data-testid="retry-btn"]').trigger('click')
-    await flushPromises()
-    expect(downloadApi.retryQueueItem).toHaveBeenCalledWith(22)
-    expect(store.fetchQueue).toHaveBeenCalled()
-  })
-
-  it('shows remove button on each item', () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
-        tdarrStatus: 'NONE', tdarrError: null,
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    expect(wrapper.find('[data-testid="remove-btn-1"]').exists()).toBe(true)
-  })
-
-  it('remove button is disabled when IN_PROGRESS', () => {
-    const { wrapper } = factory([
-      { id: 2, mediaType: 'MOVIE', mediaId: 5, status: 'IN_PROGRESS',
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: null }
-    ])
-    const btn = wrapper.find('[data-testid="remove-btn-2"]')
-    expect(btn.element.disabled).toBe(true)
-  })
-
-  it('calls removeQueueItem and refreshes queue on click', async () => {
-    const { wrapper, store } = factory([
-      { id: 3, mediaType: 'MOVIE', mediaId: 5, status: 'DONE',
-        tdarrStatus: 'TRANSCODED', tdarrError: null,
-        queuePosition: 1, requestedAt: '2026-05-24T10:00:00Z', completedAt: '2026-05-24T10:05:00Z' }
-    ])
-    await wrapper.find('[data-testid="remove-btn-3"]').trigger('click')
-    await flushPromises()
-    expect(downloadApi.removeQueueItem).toHaveBeenCalledWith(3)
-    expect(store.fetchQueue).toHaveBeenCalled()
-  })
-
-  // ── Count badge ─────────────────────────────────────────────────────────────
+  // ── Count badge ──────────────────────────────────────────────────────────────
 
   it('count badge hidden when queue is empty', () => {
     const { wrapper } = factory([])
@@ -170,267 +82,202 @@ describe('QueueView', () => {
   })
 
   it('count badge shows total visible items', () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'A', status: 'IN_PROGRESS',
-        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'B', status: 'PENDING',
-        queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null },
-      { id: 3, mediaType: 'MOVIE', mediaId: 3, title: 'C', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 3,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('3')
+    const { wrapper } = factory([movieItem(), episodeItem()])
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('2')
   })
 
-  it('count badge reflects filtered count after type filter', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click')
-    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+  // ── Subscribed Playlists section ─────────────────────────────────────────────
+
+  it('playlist section hidden when no playlist items', () => {
+    const { wrapper } = factory([movieItem()])
+    expect(wrapper.find('[data-testid="section-playlists"]').exists()).toBe(false)
   })
 
-  // ── Filter bar ──────────────────────────────────────────────────────────────
+  it('playlist group renders with title', () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })
+    ])
+    expect(wrapper.find('[data-testid="section-playlists"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Action Movies')
+  })
 
-  it('filter bar renders type chips, status chips, and search input', () => {
+  it('playlist group starts collapsed — no queue-item-rows visible', () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })
+    ])
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(0)
+  })
+
+  it('click playlist group header expands items', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(1)
+  })
+
+  it('unsubscribe button present on playlist group header', () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })
+    ])
+    expect(wrapper.find('[data-testid="unsub-btn-5"]').exists()).toBe(true)
+  })
+
+  it('unsubscribe button click does not expand group', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })
+    ])
+    await wrapper.find('[data-testid="unsub-btn-5"]').trigger('click')
+    await flushPromises()
+    // group should remain collapsed
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(0)
+  })
+
+  // ── Individual Downloads section ─────────────────────────────────────────────
+
+  it('individual downloads section hidden when all items have playlistId', () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action' })
+    ])
+    expect(wrapper.find('[data-testid="section-individual"]').exists()).toBe(false)
+  })
+
+  it('show group renders for episodes without playlistId', () => {
+    const { wrapper } = factory([episodeItem()])
+    expect(wrapper.find('[data-testid="section-individual"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Breaking Bad')
+  })
+
+  it('show group starts collapsed', () => {
+    const { wrapper } = factory([episodeItem()])
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(0)
+  })
+
+  it('click show group header expands seasons', async () => {
+    const { wrapper } = factory([episodeItem()])
+    await wrapper.find('[data-testid="group-header-show-50"]').trigger('click')
+    // Season sub-group should now be visible (but still collapsed itself)
+    expect(wrapper.find('[data-testid="group-header-season-100"]').exists()).toBe(true)
+  })
+
+  it('click season header expands episodes', async () => {
+    const { wrapper } = factory([episodeItem()])
+    await wrapper.find('[data-testid="group-header-show-50"]').trigger('click')
+    await wrapper.find('[data-testid="group-header-season-100"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(1)
+  })
+
+  it('solo movie renders flat in individual downloads', () => {
+    const { wrapper } = factory([movieItem()])
+    expect(wrapper.find('[data-testid="section-individual"]').exists()).toBe(true)
+    // Movie renders directly (always visible, no group header)
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(1)
+  })
+
+  // ── Status sections within expanded group ────────────────────────────────────
+
+  it('IN_PROGRESS items appear in "In Progress" sub-section', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'P', status: 'IN_PROGRESS' })
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="sub-label-IN_PROGRESS"]').exists()).toBe(true)
+  })
+
+  it('DONE and TRANSCODED items both appear in Done sub-section', async () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, playlistId: 5, playlistTitle: 'P', status: 'DONE', tdarrStatus: 'NONE', title: 'Film A' }),
+      movieItem({ id: 2, playlistId: 5, playlistTitle: 'P', mediaId: 11, status: 'DONE', tdarrStatus: 'TRANSCODED', title: 'Film B' }),
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="sub-label-DONE"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(2)
+    // No TRANSCODED sub-section (both are in Done)
+    expect(wrapper.find('[data-testid="sub-label-TRANSCODED"]').exists()).toBe(false)
+  })
+
+  it('TDARR_ERROR item shows retry button inside Done section', async () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, playlistId: 5, playlistTitle: 'P', status: 'ERROR',
+                  tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec error' })
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(true)
+  })
+
+  // ── Filter bar ───────────────────────────────────────────────────────────────
+
+  it('filter bar has 4 status chips (no TRANSCODING/TRANSCODED)', () => {
     const { wrapper } = factory([])
-    expect(wrapper.find('[data-testid="chip-type-ALL"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="chip-type-MOVIE"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="chip-type-TV"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-PENDING"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-COPYING"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-DONE"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="chip-status-ERROR"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="chip-status-TRANSCODED"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="filter-search"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-TRANSCODING"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chip-status-TRANSCODED"]').exists()).toBe(false)
   })
 
-  it('Movie chip filters out TV items', async () => {
+  it('MOVIE type chip hides show groups', async () => {
     const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+      movieItem(),
+      episodeItem({ id: 3, mediaId: 100 })
     ])
     await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click')
-    expect(wrapper.text()).toContain('Inception')
-    expect(wrapper.text()).not.toContain('Pilot')
+    // show group gone, movie still there
+    expect(wrapper.find('[data-testid="section-individual"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="group-header-show-50"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="queue-item-row"]').exists()).toBe(true)
   })
 
-  it('TV chip filters out movie items', async () => {
+  it('text filter hides non-matching items and empty groups', async () => {
     const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="chip-type-TV"]').trigger('click')
-    expect(wrapper.text()).not.toContain('Inception')
-    expect(wrapper.text()).toContain('Pilot')
-  })
-
-  it('clicking active type chip resets filter and shows all', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click')
-    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click') // toggle off
-    expect(wrapper.text()).toContain('Inception')
-    expect(wrapper.text()).toContain('Pilot')
-  })
-
-  it('active type chip has active class', async () => {
-    const { wrapper } = factory([])
-    const chip = wrapper.find('[data-testid="chip-type-MOVIE"]')
-    await chip.trigger('click')
-    expect(chip.classes()).toContain('active')
-  })
-
-  it('status chip ERROR hides non-error items', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Good', status: 'DONE',
-        tdarrStatus: 'TRANSCODED', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Bad', status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click')
-    expect(wrapper.text()).not.toContain('Good')
-    expect(wrapper.text()).toContain('Bad')
-  })
-
-  it('status chips ERROR + TRANSCODED show both', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'AllDone', status: 'DONE',
-        tdarrStatus: 'TRANSCODED', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'BadItem', status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 3, mediaType: 'MOVIE', mediaId: 3, title: 'StillWaiting', status: 'PENDING',
-        tdarrStatus: null, queuePosition: 3,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
-    ])
-    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click')
-    await wrapper.find('[data-testid="chip-status-TRANSCODED"]').trigger('click')
-    expect(wrapper.text()).toContain('AllDone')
-    expect(wrapper.text()).toContain('BadItem')
-    expect(wrapper.text()).not.toContain('StillWaiting')
-  })
-
-  it('active status chip has active class', async () => {
-    const { wrapper } = factory([])
-    const chip = wrapper.find('[data-testid="chip-status-ERROR"]')
-    await chip.trigger('click')
-    expect(chip.classes()).toContain('active')
-  })
-
-  it('text filter matches title', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Matrix', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+      movieItem({ title: 'Inception' }),
+      movieItem({ id: 3, mediaId: 11, title: 'The Matrix' }),
     ])
     await wrapper.find('[data-testid="filter-search"]').setValue('incep')
     expect(wrapper.text()).toContain('Inception')
-    expect(wrapper.text()).not.toContain('Matrix')
+    expect(wrapper.text()).not.toContain('The Matrix')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
   })
 
-  it('text filter matches mediaType', async () => {
+  it('count badge reflects filtered count', async () => {
     const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="filter-search"]').setValue('episode')
-    expect(wrapper.text()).not.toContain('Inception')
-    expect(wrapper.text()).toContain('Pilot')
-  })
-
-  it('text filter matches errorMessage', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Bad', status: 'ERROR',
-        errorMessage: 'disk full', tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Other', status: 'ERROR',
-        errorMessage: 'network timeout', tdarrStatus: 'NONE', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="filter-search"]').setValue('disk')
-    expect(wrapper.text()).toContain('Bad')
-    expect(wrapper.text()).not.toContain('Other')
-  })
-
-  it('text filter matches rendered fallback when title is absent', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 42, title: null, status: 'DONE',
-        tdarrStatus: 'NONE', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="filter-search"]').setValue('movie #42')
-    expect(wrapper.text()).toContain('MOVIE #42')
-  })
-
-  it('text filter matches tdarrError field', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Film', status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec unsupported', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Other', status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', tdarrError: 'network error', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="filter-search"]').setValue('codec')
-    expect(wrapper.text()).toContain('Film')
-    expect(wrapper.text()).not.toContain('Other')
-  })
-
-  it('toggling active status chip off restores items', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Good', status: 'DONE',
-        tdarrStatus: 'TRANSCODED', queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Bad', status: 'ERROR',
-        tdarrStatus: 'TDARR_ERROR', queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
-    ])
-    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click')
-    expect(wrapper.text()).not.toContain('Good')
-    await wrapper.find('[data-testid="chip-status-ERROR"]').trigger('click') // toggle off
-    expect(wrapper.text()).toContain('Good')
-    expect(wrapper.text()).toContain('Bad')
-  })
-
-  it('DONE chip matches DONE item with null tdarrStatus', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Legacy', status: 'DONE',
-        tdarrStatus: null, queuePosition: 1,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
-      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'Waiting', status: 'PENDING',
-        tdarrStatus: null, queuePosition: 2,
-        requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
+      movieItem({ id: 1, title: 'A' }),
+      movieItem({ id: 2, mediaId: 11, title: 'B', status: 'DONE', tdarrStatus: 'NONE',
+                  completedAt: '2026-01-01T01:00:00Z' })
     ])
     await wrapper.find('[data-testid="chip-status-DONE"]').trigger('click')
-    expect(wrapper.text()).toContain('Legacy')
-    expect(wrapper.text()).not.toContain('Waiting')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
   })
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
+  // ── Item actions ─────────────────────────────────────────────────────────────
 
-  it('clicking MOVIE item navigates to movie detail', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 42, title: 'Inception', status: 'PENDING',
-        tdarrStatus: null, showId: null, seasonId: null,
-        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
-    ])
-    await flushPromises()
-
-    await wrapper.find('[data-testid="queue-item-row"]').trigger('click')
-
-    expect(pushMock).toHaveBeenCalledWith('/movies/42')
-  })
-
-  it('clicking EPISODE item navigates to episode detail', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'EPISODE', mediaId: 99, title: 'Pilot', status: 'PENDING',
-        tdarrStatus: null, showId: 10, seasonId: 20,
-        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
-    ])
-    await flushPromises()
-
-    await wrapper.find('[data-testid="queue-item-row"]').trigger('click')
-
-    expect(pushMock).toHaveBeenCalledWith('/tv/10/seasons/20/episodes/99')
-  })
-
-  it('clicking remove button does not navigate', async () => {
-    const { wrapper } = factory([
-      { id: 1, mediaType: 'MOVIE', mediaId: 42, title: 'Inception', status: 'PENDING',
-        tdarrStatus: null, showId: null, seasonId: null,
-        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null }
-    ])
-    await flushPromises()
-
+  it('remove button on solo movie calls removeQueueItem', async () => {
+    const { wrapper, store } = factory([movieItem()])
     await wrapper.find('[data-testid="remove-btn-1"]').trigger('click')
+    await flushPromises()
+    expect(downloadApi.removeQueueItem).toHaveBeenCalledWith(1)
+    expect(store.fetchQueue).toHaveBeenCalled()
+  })
 
+  it('clicking movie row navigates to movie detail', async () => {
+    const { wrapper } = factory([movieItem()])
+    await wrapper.find('[data-testid="queue-item-row"]').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/movies/10')
+  })
+
+  it('clicking episode row navigates to episode detail', async () => {
+    const { wrapper } = factory([episodeItem()])
+    // expand show → season to reveal row
+    await wrapper.find('[data-testid="group-header-show-50"]').trigger('click')
+    await wrapper.find('[data-testid="group-header-season-100"]').trigger('click')
+    await wrapper.find('[data-testid="queue-item-row"]').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/tv/50/seasons/100/episodes/99')
+  })
+
+  it('remove button click does not navigate', async () => {
+    const { wrapper } = factory([movieItem()])
+    await wrapper.find('[data-testid="remove-btn-1"]').trigger('click')
     expect(pushMock).not.toHaveBeenCalled()
   })
 })

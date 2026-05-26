@@ -25,109 +25,196 @@
              type="search" class="filter-search" placeholder="Search…" />
     </div>
 
-    <div v-if="allEmpty" class="empty">Queue is empty.</div>
+    <div v-if="dlStore.queueItems.length === 0" class="empty">Queue is empty.</div>
+    <div v-else-if="totalVisible === 0" class="empty">No items match filters.</div>
 
-    <section v-if="inProgress.length" class="section">
-      <h3>In Progress</h3>
-      <div v-for="item in inProgress" :key="item.id"
-           class="queue-item active clickable"
-           data-testid="queue-item-row"
-           @click="navigateToItem(item)">
-        <span class="spinner">⏳</span>
-        <div class="item-info">
-          <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
-          <span class="sub">Copying…</span>
-        </div>
-        <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
-          :disabled="true" title="Wait for copy to finish" @click.stop>✕</button>
-      </div>
-    </section>
+    <!-- ── Subscribed Playlists ── -->
+    <section v-if="playlistGroups.length" data-testid="section-playlists" class="tree-section">
+      <h3 class="section-label">SUBSCRIBED PLAYLISTS</h3>
 
-    <section v-if="pending.length" class="section">
-      <h3>Pending</h3>
-      <div v-for="item in pending" :key="item.id"
-           class="queue-item clickable"
-           data-testid="queue-item-row"
-           @click="navigateToItem(item)">
-        <span class="pos">#{{ item.queuePosition }}</span>
-        <div class="item-info">
-          <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
-          <span class="sub">Queued {{ formatDate(item.requestedAt) }}</span>
-        </div>
-        <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
-          :disabled="removing.has(item.id)" title="Remove"
-          @click.stop="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
-      </div>
-    </section>
-
-    <section v-if="done.length" class="section">
-      <h3>Completed</h3>
-      <div v-for="item in done" :key="item.id"
-           class="queue-item done clickable"
-           data-testid="queue-item-row"
-           @click="navigateToItem(item)">
-        <span class="done-icon">✓</span>
-        <div class="item-info">
-          <span class="type">{{ item.title || (item.mediaType + ' #' + item.mediaId) }}</span>
-          <span class="sub">{{ formatDate(item.completedAt) }}</span>
-          <span v-if="item.status === 'ERROR'" class="error-msg">{{ item.errorMessage }}</span>
-        </div>
-        <template v-if="item.status === 'DONE'">
-          <span v-if="!item.tdarrStatus || item.tdarrStatus === 'NONE'" class="tdarr-badge none">Queued in Tdarr</span>
-          <span v-else-if="item.tdarrStatus === 'PROCESSING'"  class="tdarr-badge processing">Transcoding…</span>
-          <span v-else-if="item.tdarrStatus === 'TRANSCODED'"  class="tdarr-badge transcoded">Transcoded ✓</span>
-          <button :data-testid="'tdarr-refresh-btn-' + item.id"
-                  class="btn-tdarr-refresh"
-                  :disabled="refreshing.has(item.id)"
-                  :title="refreshing.has(item.id) ? 'Refreshing…' : 'Check Tdarr status'"
-                  @click.stop="refreshTdarr(item.id)">
-            {{ refreshing.has(item.id) ? '…' : '↻' }}
+      <div v-for="group in playlistGroups" :key="group.playlistId" class="group">
+        <div class="group-header"
+             :data-testid="'group-header-playlist-' + group.playlistId"
+             @click="toggleGroup('playlist-' + group.playlistId)">
+          <span class="chevron">{{ isOpen('playlist-' + group.playlistId) ? '▼' : '▶' }}</span>
+          <span class="group-title">📋 {{ group.playlistTitle }}</span>
+          <span class="group-count">{{ group.items.length }}</span>
+          <button class="btn-unsub"
+                  :data-testid="'unsub-btn-' + group.playlistId"
+                  @click.stop="handleUnsubscribeClick(group.playlistId, group.playlistTitle)">
+            Unsubscribe
           </button>
-        </template>
-        <span v-if="item.status === 'ERROR' && item.tdarrStatus === 'TDARR_ERROR'" class="tdarr-badge tdarr-error">
-          Tdarr error<span v-if="item.tdarrError"> — {{ item.tdarrError }}</span>
-        </span>
-        <button v-if="item.status === 'ERROR' && item.tdarrStatus === 'TDARR_ERROR'"
-                type="button"
-                class="btn-retry"
-                data-testid="retry-btn"
-                :disabled="retrying.has(item.id)"
-                @click.stop="retryItem(item.id)">
-          {{ retrying.has(item.id) ? '…' : '⟳ Retry' }}
-        </button>
-        <button :data-testid="'remove-btn-' + item.id" class="btn-remove"
-          :disabled="removing.has(item.id)" title="Remove"
-          @click.stop="remove(item.id)">{{ removing.has(item.id) ? '…' : '✕' }}</button>
+        </div>
+
+        <div v-if="isOpen('playlist-' + group.playlistId)" class="group-body">
+          <template v-for="bucket in [buckets(group.items)]" :key="'b'">
+            <div v-if="bucket.inProgress.length" class="sub-section">
+              <p class="sub-label" data-testid="sub-label-IN_PROGRESS">IN PROGRESS</p>
+              <QueueItemRow v-for="item in bucket.inProgress" :key="item.id"
+                :item="item" :removing="removing" :retrying="retrying"
+                @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+            </div>
+            <div v-if="bucket.pending.length" class="sub-section">
+              <p class="sub-label" data-testid="sub-label-PENDING">PENDING</p>
+              <QueueItemRow v-for="item in bucket.pending" :key="item.id"
+                :item="item" :removing="removing" :retrying="retrying"
+                @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+            </div>
+            <div v-if="bucket.done.length" class="sub-section">
+              <p class="sub-label" data-testid="sub-label-DONE">DONE</p>
+              <QueueItemRow v-for="item in bucket.done" :key="item.id"
+                :item="item" :removing="removing" :retrying="retrying"
+                @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+            </div>
+          </template>
+        </div>
       </div>
     </section>
+
+    <!-- ── Individual Downloads ── -->
+    <section v-if="showGroups.length || soloMovies.length" data-testid="section-individual" class="tree-section">
+      <h3 class="section-label">INDIVIDUAL DOWNLOADS</h3>
+
+      <!-- Show groups -->
+      <div v-for="sg in showGroups" :key="sg.showId" class="group">
+        <div class="group-header"
+             :data-testid="'group-header-show-' + sg.showId"
+             @click="toggleGroup('show-' + sg.showId)">
+          <span class="chevron">{{ isOpen('show-' + sg.showId) ? '▼' : '▶' }}</span>
+          <span class="group-title">📺 {{ sg.showTitle }}</span>
+          <span class="group-count">{{ sg.seasons.reduce((n, s) => n + s.items.length, 0) }}</span>
+        </div>
+
+        <div v-if="isOpen('show-' + sg.showId)" class="group-body">
+          <div v-for="season in sg.seasons" :key="season.seasonId" class="sub-group">
+            <div class="sub-group-header"
+                 :data-testid="'group-header-season-' + season.seasonId"
+                 @click.stop="toggleGroup('season-' + season.seasonId)">
+              <span class="chevron">{{ isOpen('season-' + season.seasonId) ? '▼' : '▶' }}</span>
+              <span>Season {{ season.seasonNumber }}</span>
+              <span class="group-count">{{ season.items.length }}</span>
+            </div>
+
+            <div v-if="isOpen('season-' + season.seasonId)" class="sub-group-body">
+              <template v-for="bucket in [buckets(season.items)]" :key="'b'">
+                <div v-if="bucket.inProgress.length" class="sub-section">
+                  <p class="sub-label" data-testid="sub-label-IN_PROGRESS">IN PROGRESS</p>
+                  <QueueItemRow v-for="item in bucket.inProgress" :key="item.id"
+                    :item="item" :removing="removing" :retrying="retrying"
+                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                </div>
+                <div v-if="bucket.pending.length" class="sub-section">
+                  <p class="sub-label" data-testid="sub-label-PENDING">PENDING</p>
+                  <QueueItemRow v-for="item in bucket.pending" :key="item.id"
+                    :item="item" :removing="removing" :retrying="retrying"
+                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                </div>
+                <div v-if="bucket.done.length" class="sub-section">
+                  <p class="sub-label" data-testid="sub-label-DONE">DONE</p>
+                  <QueueItemRow v-for="item in bucket.done" :key="item.id"
+                    :item="item" :removing="removing" :retrying="retrying"
+                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Solo movies (always visible, no group wrapper) -->
+      <QueueItemRow v-for="item in soloMovies" :key="item.id"
+        :item="item" :removing="removing" :retrying="retrying"
+        @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+    </section>
+
+    <ConfirmModal
+      v-if="confirmState"
+      :message="confirmState.message"
+      confirmLabel="Yes, unsubscribe"
+      cancelLabel="Keep"
+      @confirm="confirmUnsubscribe"
+      @cancel="confirmState = null"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
 import { removeQueueItem, refreshTdarrStatus, retryQueueItem } from '@/api/download.js'
+import { unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 
-const router = useRouter()
-
+const router  = useRouter()
 const dlStore = useDownloadStore()
-const removing    = ref(new Set())
-const refreshing  = ref(new Set())
-const retrying    = ref(new Set())
+const removing  = ref(new Set())
+const retrying  = ref(new Set())
+const openGroups = ref(new Set())
+const confirmState = ref(null) // { playlistId, message } | null
 
-// ── Filter state ─────────────────────────────────────────────────────────────
-const typeFilter   = ref('ALL')      // 'ALL' | 'MOVIE' | 'TV'
-const statusFilter = ref(new Set())  // Set<string>
+// ── Inline QueueItemRow component ────────────────────────────────────────────
+const QueueItemRow = defineComponent({
+  props: ['item', 'removing', 'retrying'],
+  emits: ['remove', 'retry', 'navigate'],
+  setup(props, { emit }) {
+    return () => {
+      const item = props.item
+      const isRemoving = props.removing.has(item.id)
+      const isRetrying = props.retrying.has(item.id)
+      const isInProgress = item.status === 'IN_PROGRESS'
+      const isTdarrError = item.tdarrStatus === 'TDARR_ERROR'
+
+      let statusLabel = 'pending'
+      if (item.status === 'IN_PROGRESS') statusLabel = 'copying…'
+      else if (item.status === 'ERROR' || isTdarrError) statusLabel = 'error'
+      else if (item.status === 'DONE') statusLabel = 'done'
+
+      return h('div', {
+        class: ['queue-item', 'clickable', isInProgress ? 'active' : '', (item.status === 'DONE' || item.status === 'ERROR') ? 'done' : ''].filter(Boolean).join(' '),
+        'data-testid': 'queue-item-row',
+        onClick: () => emit('navigate', item)
+      }, [
+        h('div', { class: 'item-info' }, [
+          h('span', { class: 'type' }, item.title || `${item.mediaType} #${item.mediaId}`),
+          h('span', { class: 'sub' }, statusLabel),
+          item.status === 'ERROR' && item.errorMessage
+            ? h('span', { class: 'error-msg' }, item.errorMessage)
+            : null,
+          isTdarrError && item.tdarrError
+            ? h('span', { class: 'error-msg' }, item.tdarrError)
+            : null,
+        ].filter(Boolean)),
+        isTdarrError
+          ? h('button', {
+              class: 'btn-retry',
+              'data-testid': 'retry-btn',
+              disabled: isRetrying,
+              onClick: (e) => { e.stopPropagation(); emit('retry', item.id) }
+            }, isRetrying ? '…' : '⟳ Retry')
+          : null,
+        h('button', {
+          class: 'btn-remove',
+          'data-testid': `remove-btn-${item.id}`,
+          disabled: isRemoving || isInProgress,
+          title: isInProgress ? 'Wait for copy to finish' : 'Remove',
+          onClick: (e) => { e.stopPropagation(); emit('remove', item.id) }
+        }, isRemoving ? '…' : '✕'),
+      ].filter(Boolean))
+    }
+  }
+})
+
+// ── Filter state ──────────────────────────────────────────────────────────────
+const typeFilter   = ref('ALL')
+const statusFilter = ref(new Set())
 const textFilter   = ref('')
 
 const STATUS_CHIPS = [
-  { key: 'PENDING',     label: 'Pending' },
-  { key: 'COPYING',     label: 'Copying' },
-  { key: 'DONE',        label: 'Done' },
-  { key: 'TRANSCODING', label: 'Transcoding' },
-  { key: 'TRANSCODED',  label: 'Transcoded' },
-  { key: 'ERROR',       label: 'Error' },
+  { key: 'PENDING', label: 'Pending' },
+  { key: 'COPYING', label: 'Copying' },
+  { key: 'DONE',    label: 'Done'    },
+  { key: 'ERROR',   label: 'Error'   },
 ]
 
 function matchesType(item) {
@@ -136,38 +223,114 @@ function matchesType(item) {
   if (typeFilter.value === 'TV')    return ['EPISODE', 'SEASON', 'SHOW'].includes(item.mediaType)
   return true
 }
-
 function matchesStatus(item) {
   if (statusFilter.value.size === 0) return true
   const a = statusFilter.value
-  if (a.has('PENDING')     && item.status === 'PENDING') return true
-  if (a.has('COPYING')     && item.status === 'IN_PROGRESS') return true
-  if (a.has('DONE')        && item.status === 'DONE' && (!item.tdarrStatus || item.tdarrStatus === 'NONE')) return true
-  if (a.has('TRANSCODING') && item.tdarrStatus === 'PROCESSING') return true
-  if (a.has('TRANSCODED')  && item.tdarrStatus === 'TRANSCODED') return true
-  if (a.has('ERROR')       && (item.status === 'ERROR' || item.tdarrStatus === 'TDARR_ERROR')) return true
+  if (a.has('PENDING') && item.status === 'PENDING') return true
+  if (a.has('COPYING') && item.status === 'IN_PROGRESS') return true
+  if (a.has('DONE') && item.status === 'DONE' && item.tdarrStatus !== 'TDARR_ERROR') return true
+  if (a.has('ERROR') && (item.status === 'ERROR' || item.tdarrStatus === 'TDARR_ERROR')) return true
   return false
 }
-
 function matchesText(item) {
   const q = textFilter.value.trim().toLowerCase()
   if (!q) return true
-  const displayTitle = item.title || `${item.mediaType} #${item.mediaId}`
-  return [displayTitle, item.mediaType, item.errorMessage, item.tdarrError]
-    .filter(Boolean)
-    .some(s => s.toLowerCase().includes(q))
+  const display = item.title || `${item.mediaType} #${item.mediaId}`
+  return [display, item.mediaType, item.errorMessage, item.tdarrError, item.showTitle, item.playlistTitle]
+    .filter(Boolean).some(s => s.toLowerCase().includes(q))
 }
 
 function setTypeFilter(type) {
   typeFilter.value = typeFilter.value === type ? 'ALL' : type
 }
-
 function toggleStatusFilter(status) {
   const next = new Set(statusFilter.value)
   if (next.has(status)) next.delete(status)
   else next.add(status)
   statusFilter.value = next
 }
+
+// ── Tree computation ──────────────────────────────────────────────────────────
+const filteredItems = computed(() =>
+  dlStore.queueItems.filter(matchesType).filter(matchesStatus).filter(matchesText)
+)
+
+const totalVisible = computed(() => filteredItems.value.length)
+
+const playlistGroups = computed(() => {
+  const map = new Map()
+  for (const item of filteredItems.value) {
+    if (item.playlistId == null) continue
+    if (!map.has(item.playlistId)) {
+      map.set(item.playlistId, {
+        playlistId: item.playlistId,
+        playlistTitle: item.playlistTitle || `Playlist ${item.playlistId}`,
+        items: []
+      })
+    }
+    map.get(item.playlistId).items.push(item)
+  }
+  return [...map.values()].sort((a, b) =>
+    (a.playlistTitle || '').localeCompare(b.playlistTitle || ''))
+})
+
+const individualItems = computed(() =>
+  filteredItems.value.filter(i => i.playlistId == null)
+)
+
+const showGroups = computed(() => {
+  const map = new Map()
+  for (const item of individualItems.value) {
+    if (item.mediaType !== 'EPISODE') continue
+    if (!map.has(item.showId)) {
+      map.set(item.showId, {
+        showId: item.showId,
+        showTitle: item.showTitle || `Show ${item.showId}`,
+        seasonMap: new Map()
+      })
+    }
+    const sg = map.get(item.showId)
+    if (!sg.seasonMap.has(item.seasonId)) {
+      sg.seasonMap.set(item.seasonId, {
+        seasonId: item.seasonId,
+        seasonNumber: item.seasonNumber,
+        items: []
+      })
+    }
+    sg.seasonMap.get(item.seasonId).items.push(item)
+  }
+  return [...map.values()]
+    .map(sg => ({
+      ...sg,
+      seasons: [...sg.seasonMap.values()]
+        .sort((a, b) => (a.seasonNumber || 0) - (b.seasonNumber || 0))
+    }))
+    .sort((a, b) => (a.showTitle || '').localeCompare(b.showTitle || ''))
+})
+
+const soloMovies = computed(() =>
+  individualItems.value
+    .filter(i => i.mediaType === 'MOVIE')
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+)
+
+// ── Bucket helper ─────────────────────────────────────────────────────────────
+function buckets(items) {
+  return {
+    inProgress: items.filter(i => i.status === 'IN_PROGRESS'),
+    pending:    items.filter(i => i.status === 'PENDING'),
+    done:       items.filter(i => i.status === 'DONE' || i.status === 'ERROR'),
+  }
+}
+
+// ── Collapse / expand ─────────────────────────────────────────────────────────
+function toggleGroup(key) {
+  const next = new Set(openGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  openGroups.value = next
+}
+function isOpen(key) { return openGroups.value.has(key) }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 async function remove(id) {
@@ -176,21 +339,7 @@ async function remove(id) {
     await removeQueueItem(id)
     await dlStore.fetchQueue()
   } finally {
-    const next = new Set(removing.value)
-    next.delete(id)
-    removing.value = next
-  }
-}
-
-async function refreshTdarr(id) {
-  refreshing.value = new Set([...refreshing.value, id])
-  try {
-    await refreshTdarrStatus(id)
-    await dlStore.fetchQueue()
-  } finally {
-    const next = new Set(refreshing.value)
-    next.delete(id)
-    refreshing.value = next
+    const next = new Set(removing.value); next.delete(id); removing.value = next
   }
 }
 
@@ -202,9 +351,7 @@ async function retryItem(id) {
   } catch (e) {
     console.error('Retry failed', e)
   } finally {
-    const next = new Set(retrying.value)
-    next.delete(id)
-    retrying.value = next
+    const next = new Set(retrying.value); next.delete(id); retrying.value = next
   }
 }
 
@@ -216,47 +363,25 @@ function navigateToItem(item) {
   }
 }
 
-// ── Filtered section lists ────────────────────────────────────────────────────
-const inProgress = computed(() =>
-  dlStore.queueItems
-    .filter(i => i.status === 'IN_PROGRESS')
-    .filter(matchesType)
-    .filter(matchesText)
-    .filter(matchesStatus)
-)
-const pending = computed(() =>
-  dlStore.queueItems
-    .filter(i => i.status === 'PENDING')
-    .filter(matchesType)
-    .filter(matchesText)
-    .filter(matchesStatus)
-)
-const done = computed(() =>
-  dlStore.queueItems
-    .filter(i => i.status === 'DONE' || i.status === 'ERROR')
-    .filter(matchesType)
-    .filter(matchesText)
-    .filter(matchesStatus)
-)
-const allEmpty = computed(() =>
-  inProgress.value.length === 0 && pending.value.length === 0 && done.value.length === 0
-)
-const totalVisible = computed(() =>
-  inProgress.value.length + pending.value.length + done.value.length
-)
+// ── Unsubscribe ───────────────────────────────────────────────────────────────
+async function handleUnsubscribeClick(playlistId, playlistTitle) {
+  const count = await getPlaylistQueueCount(playlistId)
+  const message = count > 0
+    ? `Unsubscribe from "${playlistTitle}" and cancel ${count} queued download${count === 1 ? '' : 's'}?`
+    : `Unsubscribe from "${playlistTitle}"?`
+  confirmState.value = { playlistId, message }
+}
 
-function formatDate(iso) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleString()
+async function confirmUnsubscribe() {
+  const { playlistId } = confirmState.value
+  confirmState.value = null
+  await unsubscribe(playlistId)
+  await dlStore.fetchQueue()
 }
 
 let pollTimer = null
 onMounted(async () => {
-  try {
-    await dlStore.fetchQueue()
-  } catch (e) {
-    console.error('Initial queue fetch failed:', e)
-  }
+  try { await dlStore.fetchQueue() } catch (e) { console.error('Initial queue fetch failed:', e) }
   pollTimer = setInterval(() => dlStore.fetchQueue(), 2000)
 })
 onUnmounted(() => clearInterval(pollTimer))
@@ -275,42 +400,54 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
 .chip:hover:not(.active) { border-color: var(--accent-blue); color: var(--text); }
 .chip.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
 .filter-search { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
-                 border-radius: 16px; padding: 4px 12px; font-size: .8rem; outline: none;
-                 min-width: 160px; }
+                 border-radius: 16px; padding: 4px 12px; font-size: .8rem; outline: none; min-width: 160px; }
 .filter-search:focus { border-color: var(--accent-blue); }
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
-.section { margin-bottom: 32px; }
-h3 { font-size: 1rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
-     letter-spacing: .05em; margin-bottom: 12px; padding-bottom: 8px;
-     border-bottom: 1px solid var(--border); }
-.queue-item { display: flex; align-items: center; gap: 16px; padding: 12px 16px;
-              background: var(--surface2); border-radius: 8px; margin-bottom: 8px; }
+
+.tree-section { margin-bottom: 32px; }
+.section-label { font-size: .75rem; font-weight: 700; color: var(--text-muted); letter-spacing: .08em;
+                 text-transform: uppercase; margin-bottom: 8px; padding-bottom: 6px;
+                 border-bottom: 1px solid var(--border); }
+.group { margin-bottom: 4px; }
+.group-header { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+                background: var(--surface2); border-radius: 8px; cursor: pointer;
+                user-select: none; }
+.group-header:hover { background: color-mix(in srgb, var(--surface2) 85%, var(--text) 15%); }
+.chevron { font-size: .75rem; color: var(--text-muted); width: 12px; }
+.group-title { font-weight: 600; flex: 1; }
+.group-count { font-size: .75rem; color: var(--text-muted); background: var(--surface);
+               border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px; }
+.group-body { padding-left: 20px; margin-top: 2px; }
+
+.sub-group { margin-bottom: 2px; }
+.sub-group-header { display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+                    background: var(--surface); border-radius: 6px; cursor: pointer;
+                    font-size: .9rem; color: var(--text-muted); user-select: none; }
+.sub-group-header:hover { color: var(--text); }
+.sub-group-body { padding-left: 16px; margin-top: 2px; }
+
+.sub-section { margin-bottom: 8px; }
+.sub-label { font-size: .68rem; font-weight: 700; color: var(--text-muted); letter-spacing: .07em;
+             text-transform: uppercase; margin: 6px 0 4px 0; padding-left: 4px; }
+
+.queue-item { display: flex; align-items: center; gap: 12px; padding: 9px 12px;
+              background: var(--surface2); border-radius: 6px; margin-bottom: 4px; }
 .queue-item.active { border-left: 3px solid var(--accent-blue); }
 .queue-item.done   { opacity: 0.65; }
 .queue-item.clickable { cursor: pointer; }
 .queue-item.clickable:hover { background: color-mix(in srgb, var(--surface2) 85%, var(--text) 15%); }
-.spinner, .done-icon { font-size: 1.2rem; }
-.pos { font-size: 1rem; color: var(--text-muted); min-width: 28px; }
-.item-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-.type { font-weight: 500; }
-.sub  { font-size: .8rem; color: var(--text-muted); }
-.error-msg { font-size: .8rem; color: var(--red); }
-.tdarr-badge { font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-               white-space: nowrap; }
-.tdarr-badge.none       { background: var(--surface); color: var(--text-muted);
-                           border: 1px solid var(--border); }
-.tdarr-badge.processing { background: rgba(52,152,219,.15); color: var(--accent-blue); }
-.tdarr-badge.transcoded { background: rgba(39,174,96,.15); color: var(--green); }
-.tdarr-badge.tdarr-error { background: rgba(231,76,60,.15); color: var(--red); }
+.item-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.type { font-weight: 500; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub  { font-size: .78rem; color: var(--text-muted); }
+.error-msg { font-size: .78rem; color: var(--red); }
 .btn-remove { background: none; border: none; color: var(--text-muted); cursor: pointer;
-              font-size: 1rem; padding: 4px 8px; border-radius: 4px; margin-left: auto; }
+              font-size: 1rem; padding: 4px 8px; border-radius: 4px; }
 .btn-remove:hover:not(:disabled) { color: var(--red); background: rgba(231,76,60,.1); }
 .btn-remove:disabled { opacity: 0.3; cursor: not-allowed; }
-.btn-tdarr-refresh { background: none; border: none; color: var(--text-muted); cursor: pointer;
-                     font-size: .85rem; padding: 2px 6px; border-radius: 4px; }
-.btn-tdarr-refresh:hover:not(:disabled) { color: var(--accent-blue); background: rgba(52,152,219,.1); }
-.btn-tdarr-refresh:disabled { opacity: 0.3; cursor: not-allowed; }
 .btn-retry { background: none; border: 1px solid var(--red); color: var(--red); cursor: pointer;
              font-size: .8rem; padding: 2px 8px; border-radius: 4px; }
 .btn-retry:hover { background: rgba(231,76,60,.1); }
+.btn-unsub { background: none; border: 1px solid var(--accent); color: var(--accent); cursor: pointer;
+             font-size: .75rem; padding: 2px 10px; border-radius: 4px; white-space: nowrap; }
+.btn-unsub:hover { background: rgba(var(--accent-rgb, 52,152,219),.1); }
 </style>
