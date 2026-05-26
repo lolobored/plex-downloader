@@ -3,17 +3,22 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useWatchedStore } from '../watched.js'
 
 vi.mock('../../api/watched.js', () => ({
-  getWatched:       vi.fn(),
-  getSubscriptions: vi.fn(),
-  subscribe:        vi.fn(),
-  unsubscribe:      vi.fn(),
-  syncNow:          vi.fn(),
-  enqueueUnwatched: vi.fn()
+  getWatched:              vi.fn(),
+  getSubscriptions:        vi.fn(),
+  getSeasonSubscriptions:  vi.fn(),
+  subscribe:               vi.fn(),
+  unsubscribe:             vi.fn(),
+  subscribeSeason:         vi.fn(),
+  unsubscribeSeasonSub:    vi.fn(),
+  syncNow:                 vi.fn(),
 }))
 
 import {
-  getWatched, getSubscriptions, subscribe as apiSubscribe,
-  unsubscribe as apiUnsubscribe, syncNow as apiSyncNow
+  getWatched, getSubscriptions, getSeasonSubscriptions,
+  subscribe as apiSubscribe, unsubscribe as apiUnsubscribe,
+  subscribeSeason as apiSubscribeSeason,
+  unsubscribeSeasonSub as apiUnsubscribeSeasonSub,
+  syncNow as apiSyncNow
 } from '../../api/watched.js'
 
 describe('watched store', () => {
@@ -30,14 +35,19 @@ describe('watched store', () => {
     expect(store.isWatched(10, 99)).toBe(false)
   })
 
-  it('fetchSubscriptions populates subscriptions map', async () => {
+  it('fetchSubscriptions populates show and season subscription maps', async () => {
     getSubscriptions.mockResolvedValue([
       { showId: 10, targetCount: 5, id: 1, updatedAt: '2026-01-01' }
+    ])
+    getSeasonSubscriptions.mockResolvedValue([
+      { seasonId: 100, showId: 10, targetCount: 10, id: 2, updatedAt: '2026-01-01' }
     ])
     const store = useWatchedStore()
     await store.fetchSubscriptions()
     expect(store.getSubscription(10)).toBe(5)
     expect(store.getSubscription(99)).toBeNull()
+    expect(store.getSeasonSubscription(100)).toBe(10)
+    expect(store.getSeasonSubscription(999)).toBeNull()
   })
 
   it('subscribe calls API and updates map', async () => {
@@ -52,10 +62,27 @@ describe('watched store', () => {
   it('unsubscribe calls API and removes from map', async () => {
     apiUnsubscribe.mockResolvedValue({})
     const store = useWatchedStore()
-    store.subscriptions.set(10, 5) // seed
+    store.subscriptions.set(10, 5)
     await store.unsubscribe(10)
     expect(apiUnsubscribe).toHaveBeenCalledWith(10)
     expect(store.getSubscription(10)).toBeNull()
+  })
+
+  it('subscribeSeason calls API and updates seasonSubscriptions map', async () => {
+    apiSubscribeSeason.mockResolvedValue({ seasonId: 100, showId: 10, targetCount: 5, id: 2, updatedAt: '2026-01-01' })
+    const store = useWatchedStore()
+    await store.subscribeSeason(100, 5)
+    expect(apiSubscribeSeason).toHaveBeenCalledWith(100, 5)
+    expect(store.getSeasonSubscription(100)).toBe(5)
+  })
+
+  it('unsubscribeSeason calls API and removes from map', async () => {
+    apiUnsubscribeSeasonSub.mockResolvedValue({})
+    const store = useWatchedStore()
+    store.seasonSubscriptions.set(100, 5)
+    await store.unsubscribeSeason(100)
+    expect(apiUnsubscribeSeasonSub).toHaveBeenCalledWith(100)
+    expect(store.getSeasonSubscription(100)).toBeNull()
   })
 
   it('syncNow updates watchedByShow', async () => {

@@ -1,17 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
-  getWatched       as apiGetWatched,
-  getSubscriptions as apiGetSubscriptions,
-  subscribe        as apiSubscribe,
-  unsubscribe      as apiUnsubscribe,
-  syncNow          as apiSyncNow,
-  enqueueUnwatched as apiEnqueueUnwatched
+  getWatched            as apiGetWatched,
+  getSubscriptions      as apiGetSubscriptions,
+  getSeasonSubscriptions as apiGetSeasonSubscriptions,
+  subscribe             as apiSubscribe,
+  unsubscribe           as apiUnsubscribe,
+  subscribeSeason       as apiSubscribeSeason,
+  unsubscribeSeasonSub  as apiUnsubscribeSeasonSub,
+  syncNow               as apiSyncNow
 } from '@/api/watched.js'
 
 export const useWatchedStore = defineStore('watched', () => {
-  const watchedByShow = ref(new Map())   // Map<showId, Set<episodeId>>
-  const subscriptions = ref(new Map())   // Map<showId, targetCount>
+  const watchedByShow       = ref(new Map())   // Map<showId, Set<episodeId>>
+  const subscriptions       = ref(new Map())   // Map<showId, targetCount>
+  const seasonSubscriptions = ref(new Map())   // Map<seasonId, targetCount>
 
   async function fetchWatched(showId) {
     const data = await apiGetWatched(showId)
@@ -19,8 +22,12 @@ export const useWatchedStore = defineStore('watched', () => {
   }
 
   async function fetchSubscriptions() {
-    const list = await apiGetSubscriptions()
-    subscriptions.value = new Map(list.map(s => [s.showId, s.targetCount]))
+    const [showSubs, seasonSubs] = await Promise.all([
+      apiGetSubscriptions(),
+      apiGetSeasonSubscriptions()
+    ])
+    subscriptions.value       = new Map(showSubs.map(s => [s.showId, s.targetCount]))
+    seasonSubscriptions.value = new Map(seasonSubs.map(s => [s.seasonId, s.targetCount]))
   }
 
   async function subscribe(showId, targetCount) {
@@ -34,13 +41,19 @@ export const useWatchedStore = defineStore('watched', () => {
     subscriptions.value.delete(showId)
   }
 
+  async function subscribeSeason(seasonId, targetCount) {
+    await apiSubscribeSeason(seasonId, targetCount)
+    seasonSubscriptions.value.set(seasonId, targetCount)
+  }
+
+  async function unsubscribeSeason(seasonId) {
+    await apiUnsubscribeSeasonSub(seasonId)
+    seasonSubscriptions.value.delete(seasonId)
+  }
+
   async function syncNow(showId) {
     const data = await apiSyncNow(showId)
     watchedByShow.value.set(showId, new Set(data.watchedEpisodeIds))
-  }
-
-  async function enqueueUnwatched(showId, limit) {
-    return apiEnqueueUnwatched(showId, limit)
   }
 
   function isWatched(showId, episodeId) {
@@ -51,9 +64,16 @@ export const useWatchedStore = defineStore('watched', () => {
     return subscriptions.value.get(showId) ?? null
   }
 
+  function getSeasonSubscription(seasonId) {
+    return seasonSubscriptions.value.get(seasonId) ?? null
+  }
+
   return {
-    watchedByShow, subscriptions,
-    fetchWatched, fetchSubscriptions, subscribe, unsubscribe,
-    syncNow, enqueueUnwatched, isWatched, getSubscription
+    watchedByShow, subscriptions, seasonSubscriptions,
+    fetchWatched, fetchSubscriptions,
+    subscribe, unsubscribe,
+    subscribeSeason, unsubscribeSeason,
+    syncNow, isWatched,
+    getSubscription, getSeasonSubscription
   }
 })
