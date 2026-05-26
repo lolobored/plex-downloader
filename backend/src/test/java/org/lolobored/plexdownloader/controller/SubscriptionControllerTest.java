@@ -2,10 +2,13 @@ package org.lolobored.plexdownloader.controller;
 
 import tools.jackson.databind.ObjectMapper;
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
+import org.lolobored.plexdownloader.dto.SeasonSubscriptionRequest;
+import org.lolobored.plexdownloader.dto.SeasonSubscriptionResponse;
 import org.lolobored.plexdownloader.dto.SubscriptionRequest;
 import org.lolobored.plexdownloader.dto.SubscriptionResponse;
 import org.lolobored.plexdownloader.dto.WatchedResponse;
 import org.lolobored.plexdownloader.model.User;
+import org.lolobored.plexdownloader.repository.SeasonSubscriptionRepository;
 import org.lolobored.plexdownloader.repository.ShowSubscriptionRepository;
 import org.lolobored.plexdownloader.repository.UserRepository;
 import org.lolobored.plexdownloader.service.*;
@@ -48,6 +51,7 @@ class SubscriptionControllerTest {
     @MockitoBean SubscriptionService subscriptionService;
     @MockitoBean WatchedSyncService watchedSyncService;
     @MockitoBean ShowSubscriptionRepository showSubscriptionRepository;
+    @MockitoBean SeasonSubscriptionRepository seasonSubscriptionRepository;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
@@ -140,5 +144,59 @@ class SubscriptionControllerTest {
         mockMvc.perform(post("/api/subscriptions/10/sync"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.watchedEpisodeIds").isArray());
+    }
+
+    @Test
+    void getSeasonSubscriptions_returnsList() throws Exception {
+        when(subscriptionService.listSeasonSubscriptions(1L))
+            .thenReturn(List.of(new SeasonSubscriptionResponse(1L, 100L, 10L, 5, Instant.now())));
+
+        mockMvc.perform(get("/api/subscriptions/seasons"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].seasonId").value(100))
+            .andExpect(jsonPath("$[0].targetCount").value(5));
+    }
+
+    @Test
+    void subscribeSeason_createsSubscription() throws Exception {
+        SeasonSubscriptionRequest req = new SeasonSubscriptionRequest(100L, 5);
+        when(subscriptionService.upsertSeason(1L, 100L, 5))
+            .thenReturn(new SeasonSubscriptionResponse(1L, 100L, 10L, 5, Instant.now()));
+        when(seasonSubscriptionRepository.findByUserIdAndSeasonId(1L, 100L))
+            .thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/api/subscriptions/seasons")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.seasonId").value(100))
+            .andExpect(jsonPath("$.targetCount").value(5));
+    }
+
+    @Test
+    void subscribeSeason_returns400ForInvalidTargetCount() throws Exception {
+        SeasonSubscriptionRequest req = new SeasonSubscriptionRequest(100L, 7);
+
+        mockMvc.perform(post("/api/subscriptions/seasons")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void unsubscribeSeason_returns204() throws Exception {
+        doNothing().when(subscriptionService).cancelSeason(1L, 100L);
+
+        mockMvc.perform(delete("/api/subscriptions/seasons/100"))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void getSeasonQueueCount_returnsCount() throws Exception {
+        when(subscriptionService.getSeasonQueueCount(1L, 100L)).thenReturn(3);
+
+        mockMvc.perform(get("/api/subscriptions/seasons/100/queue-count"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(3));
     }
 }

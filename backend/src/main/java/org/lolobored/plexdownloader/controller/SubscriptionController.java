@@ -3,6 +3,8 @@ package org.lolobored.plexdownloader.controller;
 import org.lolobored.plexdownloader.dto.*;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.service.*;
+import org.lolobored.plexdownloader.dto.SeasonSubscriptionResponse;
+import org.lolobored.plexdownloader.dto.SeasonSubscriptionRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -58,5 +60,39 @@ public class SubscriptionController {
         watchedSyncService.syncShow(user.getId(), showId);
         subscriptionService.replenishIfSubscribed(user.getId(), showId);
         return new WatchedResponse(watchedSyncService.getWatchedEpisodeIds(user.getId(), showId));
+    }
+
+    // ── Season subscriptions ──────────────────────────────────────────────────
+
+    @GetMapping("/seasons")
+    public List<SeasonSubscriptionResponse> getSeasonSubscriptions(@AuthenticationPrincipal User user) {
+        return subscriptionService.listSeasonSubscriptions(user.getId());
+    }
+
+    @PostMapping("/seasons")
+    public SeasonSubscriptionResponse subscribeSeason(@RequestBody SeasonSubscriptionRequest req,
+                                                       @AuthenticationPrincipal User user) {
+        if (req.targetCount() == null || !List.of(5, 10, 15, 20).contains(req.targetCount())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "targetCount must be 5, 10, 15, or 20");
+        }
+        SeasonSubscriptionResponse resp = subscriptionService.upsertSeason(
+            user.getId(), req.seasonId(), req.targetCount());
+        watchedSyncService.syncShow(user.getId(), resp.showId());
+        subscriptionService.replenishIfSubscribedSeason(user.getId(), req.seasonId());
+        return resp;
+    }
+
+    @DeleteMapping("/seasons/{seasonId}")
+    public ResponseEntity<Void> unsubscribeSeason(@PathVariable Long seasonId,
+                                                    @AuthenticationPrincipal User user) {
+        subscriptionService.cancelSeason(user.getId(), seasonId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/seasons/{seasonId}/queue-count")
+    public Map<String, Integer> getSeasonQueueCount(@PathVariable Long seasonId,
+                                                     @AuthenticationPrincipal User user) {
+        return Map.of("count", subscriptionService.getSeasonQueueCount(user.getId(), seasonId));
     }
 }

@@ -7,7 +7,6 @@ import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import org.lolobored.plexdownloader.service.DownloadService;
 import org.lolobored.plexdownloader.service.JwtService;
-import org.lolobored.plexdownloader.service.SubscriptionService;
 import org.lolobored.plexdownloader.service.TdarrSyncScheduler;
 import org.lolobored.plexdownloader.repository.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -45,7 +44,6 @@ class DownloadControllerTest {
     MockMvc mockMvc;
     @Autowired WebApplicationContext webApplicationContext;
     @MockitoBean DownloadService downloadService;
-    @MockitoBean SubscriptionService subscriptionService;
     @MockitoBean TdarrSyncScheduler tdarrSync;
     @MockitoBean DownloadQueueRepository queueRepo;
     @MockitoBean JwtService jwtService;
