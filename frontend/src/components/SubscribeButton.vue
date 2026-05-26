@@ -16,11 +16,9 @@
         </button>
       </div>
       <div class="picker-section">
-        <p class="picker-label">One-time download</p>
-        <button v-for="n in COUNTS" :key="`once-${n}`"
-                class="picker-opt"
-                @click="doOneTime(n)">
-          ⬇ Download {{ n }}
+        <p class="picker-label">Download</p>
+        <button class="picker-opt" data-testid="download-all-btn" @click="doDownloadAll">
+          ⬇ Download all
         </button>
       </div>
       <div v-if="current" class="picker-section">
@@ -42,14 +40,16 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useWatchedStore } from '@/stores/watched.js'
-import { getShowQueueCount } from '@/api/watched.js'
+import { getShowQueueCount, getSeasonQueueCount } from '@/api/watched.js'
+import { enqueue } from '@/api/download.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 
 const COUNTS = [5, 10, 15, 20]
 
 const props = defineProps({
-  showId: { type: Number, required: true },
-  small:  { type: Boolean, default: false }
+  showId:   { type: Number, required: true },
+  seasonId: { type: Number, default: null },
+  small:    { type: Boolean, default: false }
 })
 
 const watchedStore = useWatchedStore()
@@ -59,7 +59,11 @@ const loading = ref(false)
 const showConfirm    = ref(false)
 const confirmMessage = ref('')
 
-const current    = computed(() => watchedStore.getSubscription(props.showId))
+const current = computed(() =>
+  props.seasonId
+    ? watchedStore.getSeasonSubscription(props.seasonId)
+    : watchedStore.getSubscription(props.showId)
+)
 const statusClass = computed(() => current.value ? 'active-sub' : 'idle')
 
 function toggle() { open.value = !open.value }
@@ -67,31 +71,50 @@ function toggle() { open.value = !open.value }
 async function doSubscribe(n) {
   open.value = false
   loading.value = true
-  try { await watchedStore.subscribe(props.showId, n) }
-  finally { loading.value = false }
+  try {
+    if (props.seasonId) {
+      await watchedStore.subscribeSeason(props.seasonId, n)
+    } else {
+      await watchedStore.subscribe(props.showId, n)
+    }
+  } finally { loading.value = false }
 }
 
-async function doOneTime(n) {
+async function doDownloadAll() {
   open.value = false
   loading.value = true
-  try { await watchedStore.enqueueUnwatched(props.showId, n) }
-  finally { loading.value = false }
+  try {
+    if (props.seasonId) {
+      await enqueue('SEASON', props.seasonId)
+    } else {
+      await enqueue('SHOW', props.showId)
+    }
+  } finally { loading.value = false }
 }
 
 async function handleUnsubscribeClick() {
   open.value = false
-  const count = await getShowQueueCount(props.showId)
+  const count = props.seasonId
+    ? await getSeasonQueueCount(props.seasonId)
+    : await getShowQueueCount(props.showId)
   confirmMessage.value = count > 0
     ? `This will remove your subscription and cancel ${count} queued download${count === 1 ? '' : 's'}. Continue?`
-    : 'Remove subscription for this show?'
+    : props.seasonId
+      ? 'Remove subscription for this season?'
+      : 'Remove subscription for this show?'
   showConfirm.value = true
 }
 
 async function confirmUnsubscribe() {
   showConfirm.value = false
   loading.value = true
-  try { await watchedStore.unsubscribe(props.showId) }
-  finally { loading.value = false }
+  try {
+    if (props.seasonId) {
+      await watchedStore.unsubscribeSeason(props.seasonId)
+    } else {
+      await watchedStore.unsubscribe(props.showId)
+    }
+  } finally { loading.value = false }
 }
 
 function cancelUnsubscribe() {

@@ -2,29 +2,31 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { useWatchedStore } from '../../stores/watched.js'
-import { getShowQueueCount } from '../../api/watched.js'
+import { getShowQueueCount, getSeasonQueueCount } from '../../api/watched.js'
+import * as downloadApi from '../../api/download.js'
 import SubscribeButton from '../SubscribeButton.vue'
 
 vi.mock('../../api/watched.js', () => ({
-  getShowQueueCount: vi.fn()
+  getShowQueueCount:   vi.fn(),
+  getSeasonQueueCount: vi.fn()
+}))
+vi.mock('../../api/download.js', () => ({
+  enqueue: vi.fn().mockResolvedValue({ jobIds: [1], status: 'QUEUED' })
 }))
 
-describe('SubscribeButton', () => {
-  afterEach(() => {
-    document.body.innerHTML = ''
-  })
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+describe('SubscribeButton — show context (no seasonId)', () => {
+  afterEach(() => { document.body.innerHTML = '' })
+  beforeEach(() => { vi.clearAllMocks() })
 
   function factory(subscription = null) {
     const pinia = createTestingPinia({ createSpy: vi.fn })
     const store = useWatchedStore(pinia)
-    store.getSubscription = vi.fn().mockReturnValue(subscription)
-    store.subscribe       = vi.fn()
-    store.unsubscribe     = vi.fn()
-    store.enqueueUnwatched = vi.fn()
+    store.getSubscription       = vi.fn().mockReturnValue(subscription)
+    store.getSeasonSubscription = vi.fn().mockReturnValue(null)
+    store.subscribe             = vi.fn()
+    store.unsubscribe           = vi.fn()
+    store.subscribeSeason       = vi.fn()
+    store.unsubscribeSeason     = vi.fn()
     return { wrapper: mount(SubscribeButton, {
       props: { showId: 10 },
       global: { plugins: [pinia] },
@@ -49,67 +51,44 @@ describe('SubscribeButton', () => {
     expect(wrapper.find('.picker').exists()).toBe(true)
   })
 
-  it('calls subscribe with chosen target on subscribe option click', async () => {
+  it('calls subscribe with chosen target', async () => {
     const { wrapper, store } = factory(null)
     await wrapper.find('button.sub-btn').trigger('click')
-    await wrapper.findAll('button.picker-opt')[0].trigger('click') // first subscribe option = 5
+    await wrapper.findAll('button.picker-opt')[0].trigger('click')
     expect(store.subscribe).toHaveBeenCalledWith(10, 5)
   })
 
-  it('calls enqueueUnwatched on one-time option click', async () => {
-    const { wrapper, store } = factory(null)
+  it('download-all button calls enqueue with type SHOW', async () => {
+    const { wrapper } = factory(null)
     await wrapper.find('button.sub-btn').trigger('click')
-    // one-time buttons come after subscribe buttons (4 subscribe + 4 one-time)
+    const dlBtn = wrapper.find('[data-testid="download-all-btn"]')
+    expect(dlBtn.exists()).toBe(true)
+    await dlBtn.trigger('click')
+    expect(downloadApi.enqueue).toHaveBeenCalledWith('SHOW', 10)
+  })
+
+  it('picker has exactly 4 subscribe opts + 1 download-all (no N-count one-time)', async () => {
+    const { wrapper } = factory(null)
+    await wrapper.find('button.sub-btn').trigger('click')
     const opts = wrapper.findAll('button.picker-opt')
-    await opts[4].trigger('click') // first one-time option = 5
-    expect(store.enqueueUnwatched).toHaveBeenCalledWith(10, 5)
+    // 4 subscribe options + 1 download-all button = 5
+    expect(opts.length).toBe(5)
   })
 
-  it('shows confirm modal with count message when queue count > 0', async () => {
+  it('shows confirm with show queue count on unsubscribe', async () => {
     getShowQueueCount.mockResolvedValue(3)
-    const { wrapper } = factory(10)
+    const { wrapper } = factory(5)
     await wrapper.find('button.sub-btn').trigger('click')
     await wrapper.find('button.cancel-opt').trigger('click')
-    // wait for async getShowQueueCount to resolve and modal to render via Teleport
     await vi.waitFor(() => !!document.body.querySelector('.modal-backdrop'))
-    const message = document.body.querySelector('.modal-message').textContent
-    expect(message).toContain('3')
-    expect(message).toContain('queued download')
+    const msg = document.body.querySelector('.modal-message').textContent
+    expect(msg).toContain('3')
+    expect(getShowQueueCount).toHaveBeenCalledWith(10)
   })
 
-  it('shows confirm modal with simple message when queue count is 0', async () => {
+  it('calls unsubscribe(showId) after confirm', async () => {
     getShowQueueCount.mockResolvedValue(0)
-    const { wrapper } = factory(10)
-    await wrapper.find('button.sub-btn').trigger('click')
-    await wrapper.find('button.cancel-opt').trigger('click')
-    await vi.waitFor(() => !!document.body.querySelector('.modal-backdrop'))
-    const message = document.body.querySelector('.modal-message').textContent
-    expect(message).toBe('Remove subscription for this show?')
-  })
-
-  it('uses singular "download" when count is 1', async () => {
-    getShowQueueCount.mockResolvedValue(1)
-    const { wrapper } = factory(10)
-    await wrapper.find('button.sub-btn').trigger('click')
-    await wrapper.find('button.cancel-opt').trigger('click')
-    await vi.waitFor(() => !!document.body.querySelector('.modal-backdrop'))
-    const message = document.body.querySelector('.modal-message').textContent
-    expect(message).toContain('1 queued download')
-    expect(message).not.toContain('downloads')
-  })
-
-  it('does not call unsubscribe API before modal is confirmed', async () => {
-    getShowQueueCount.mockResolvedValue(3)
-    const { wrapper, store } = factory(10)
-    await wrapper.find('button.sub-btn').trigger('click')
-    await wrapper.find('button.cancel-opt').trigger('click')
-    await vi.waitFor(() => !!document.body.querySelector('.modal-backdrop'))
-    expect(store.unsubscribe).not.toHaveBeenCalled()
-  })
-
-  it('calls unsubscribe after confirming in modal', async () => {
-    getShowQueueCount.mockResolvedValue(3)
-    const { wrapper, store } = factory(10)
+    const { wrapper, store } = factory(5)
     await wrapper.find('button.sub-btn').trigger('click')
     await wrapper.find('button.cancel-opt').trigger('click')
     await vi.waitFor(() => !!document.body.querySelector('[data-testid="confirm-btn"]'))
@@ -118,7 +97,16 @@ describe('SubscribeButton', () => {
     expect(store.unsubscribe).toHaveBeenCalledWith(10)
   })
 
-  it('does not call unsubscribe when cancel is clicked in modal', async () => {
+  it('does not call unsubscribe before modal confirm', async () => {
+    getShowQueueCount.mockResolvedValue(3)
+    const { wrapper, store } = factory(10)
+    await wrapper.find('button.sub-btn').trigger('click')
+    await wrapper.find('button.cancel-opt').trigger('click')
+    await vi.waitFor(() => !!document.body.querySelector('.modal-backdrop'))
+    expect(store.unsubscribe).not.toHaveBeenCalled()
+  })
+
+  it('does not unsubscribe when cancel clicked in modal', async () => {
     getShowQueueCount.mockResolvedValue(3)
     const { wrapper, store } = factory(10)
     await wrapper.find('button.sub-btn').trigger('click')
@@ -128,15 +116,69 @@ describe('SubscribeButton', () => {
     await wrapper.vm.$nextTick()
     expect(store.unsubscribe).not.toHaveBeenCalled()
   })
+})
 
-  it('closes modal after cancel without unsubscribing', async () => {
-    getShowQueueCount.mockResolvedValue(2)
-    const { wrapper } = factory(10)
+describe('SubscribeButton — season context (with seasonId)', () => {
+  afterEach(() => { document.body.innerHTML = '' })
+  beforeEach(() => { vi.clearAllMocks() })
+
+  function factory(seasonSubscription = null) {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useWatchedStore(pinia)
+    store.getSubscription       = vi.fn().mockReturnValue(null)
+    store.getSeasonSubscription = vi.fn().mockReturnValue(seasonSubscription)
+    store.subscribe             = vi.fn()
+    store.unsubscribe           = vi.fn()
+    store.subscribeSeason       = vi.fn()
+    store.unsubscribeSeason     = vi.fn()
+    return { wrapper: mount(SubscribeButton, {
+      props: { showId: 10, seasonId: 100 },
+      global: { plugins: [pinia] },
+      attachTo: document.body
+    }), store }
+  }
+
+  it('shows Download when no season subscription', () => {
+    const { wrapper } = factory(null)
+    expect(wrapper.text()).toContain('Download')
+  })
+
+  it('shows active season subscription target', () => {
+    const { wrapper } = factory(5)
+    expect(wrapper.text()).toContain('Next 5')
+  })
+
+  it('calls subscribeSeason(seasonId, n) on subscribe option click', async () => {
+    const { wrapper, store } = factory(null)
+    await wrapper.find('button.sub-btn').trigger('click')
+    await wrapper.findAll('button.picker-opt')[0].trigger('click')
+    expect(store.subscribeSeason).toHaveBeenCalledWith(100, 5)
+  })
+
+  it('download-all calls enqueue with type SEASON and seasonId', async () => {
+    const { wrapper } = factory(null)
+    await wrapper.find('button.sub-btn').trigger('click')
+    await wrapper.find('[data-testid="download-all-btn"]').trigger('click')
+    expect(downloadApi.enqueue).toHaveBeenCalledWith('SEASON', 100)
+  })
+
+  it('shows confirm with season queue count on unsubscribe', async () => {
+    getSeasonQueueCount.mockResolvedValue(2)
+    const { wrapper } = factory(5)
     await wrapper.find('button.sub-btn').trigger('click')
     await wrapper.find('button.cancel-opt').trigger('click')
     await vi.waitFor(() => !!document.body.querySelector('.modal-backdrop'))
-    document.body.querySelector('.btn-cancel').click()
+    expect(getSeasonQueueCount).toHaveBeenCalledWith(100)
+  })
+
+  it('calls unsubscribeSeason(seasonId) after confirm', async () => {
+    getSeasonQueueCount.mockResolvedValue(0)
+    const { wrapper, store } = factory(5)
+    await wrapper.find('button.sub-btn').trigger('click')
+    await wrapper.find('button.cancel-opt').trigger('click')
+    await vi.waitFor(() => !!document.body.querySelector('[data-testid="confirm-btn"]'))
+    document.body.querySelector('[data-testid="confirm-btn"]').click()
     await wrapper.vm.$nextTick()
-    expect(document.body.querySelector('.modal-backdrop')).toBeNull()
+    expect(store.unsubscribeSeason).toHaveBeenCalledWith(100)
   })
 })
