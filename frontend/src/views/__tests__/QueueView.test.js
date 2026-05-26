@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { useDownloadStore } from '../../stores/download.js'
@@ -52,6 +52,14 @@ describe('QueueView', () => {
     pushMock = vi.fn()
     vi.mocked(useRouter).mockReturnValue({ push: pushMock })
     vi.clearAllMocks()
+    // Re-apply useRouter mock after clearAllMocks (clearAllMocks clears call history only,
+    // but mockReturnValue must be set before each test so the mock is ready)
+    vi.mocked(useRouter).mockReturnValue({ push: pushMock })
+  })
+
+  afterEach(() => {
+    // Clean up any DOM that Teleport injected into document.body
+    document.body.innerHTML = ''
   })
 
   function factory(items = []) {
@@ -279,5 +287,73 @@ describe('QueueView', () => {
     const { wrapper } = factory([movieItem()])
     await wrapper.find('[data-testid="remove-btn-1"]').trigger('click')
     expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  // ── Unsubscribe flow ─────────────────────────────────────────────────────────
+  // ConfirmModal uses <Teleport to="body">, so its DOM lives outside the wrapper.
+  // Tests that inspect modal content must mount with { attachTo: document.body }
+  // and query document.body directly.
+
+  it('unsubscribe button calls getPlaylistQueueCount', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })
+    ])
+    await wrapper.find('[data-testid="unsub-btn-5"]').trigger('click')
+    await flushPromises()
+    expect(playlistApi.getPlaylistQueueCount).toHaveBeenCalledWith(5)
+    wrapper.unmount()
+  })
+
+  it('unsubscribe button shows confirm modal', async () => {
+    vi.mocked(playlistApi.getPlaylistQueueCount).mockResolvedValue(3)
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.queueItems = [movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })]
+    store.fetchQueue = vi.fn()
+    const wrapper = mount(QueueView, { global: { plugins: [pinia] }, attachTo: document.body })
+    await wrapper.find('[data-testid="unsub-btn-5"]').trigger('click')
+    // Modal is teleported to body — wait for it and read from document.body
+    await vi.waitFor(() => !!document.body.querySelector('.modal-message'))
+    const msg = document.body.querySelector('.modal-message')
+    expect(msg.textContent).toContain('3')
+    expect(msg.textContent).toContain('Action Movies')
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('confirming unsubscribe calls unsubscribe and fetchQueue', async () => {
+    vi.mocked(playlistApi.getPlaylistQueueCount).mockResolvedValue(0)
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.queueItems = [movieItem({ playlistId: 5, playlistTitle: 'Action Movies' })]
+    store.fetchQueue = vi.fn()
+    const wrapper = mount(QueueView, { global: { plugins: [pinia] }, attachTo: document.body })
+    await wrapper.find('[data-testid="unsub-btn-5"]').trigger('click')
+    await flushPromises()
+    // ConfirmModal renders a confirm button with data-testid="confirm-btn" (teleported to body)
+    await vi.waitFor(() => !!document.body.querySelector('[data-testid="confirm-btn"]'))
+    document.body.querySelector('[data-testid="confirm-btn"]').click()
+    await flushPromises()
+    expect(playlistApi.unsubscribe).toHaveBeenCalledWith(5)
+    expect(store.fetchQueue).toHaveBeenCalled()
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('unsubscribe with 0 queued items shows message without count', async () => {
+    vi.mocked(playlistApi.getPlaylistQueueCount).mockResolvedValue(0)
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.queueItems = [movieItem({ playlistId: 5, playlistTitle: 'My Playlist' })]
+    store.fetchQueue = vi.fn()
+    const wrapper = mount(QueueView, { global: { plugins: [pinia] }, attachTo: document.body })
+    await wrapper.find('[data-testid="unsub-btn-5"]').trigger('click')
+    await flushPromises()
+    const msg = document.body.querySelector('.modal-message')
+    expect(msg).not.toBeNull()
+    expect(msg.textContent).toContain('My Playlist')
+    expect(msg.textContent).not.toContain('download')
+    wrapper.unmount()
+    document.body.innerHTML = ''
   })
 })

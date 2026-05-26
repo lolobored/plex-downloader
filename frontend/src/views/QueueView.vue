@@ -142,7 +142,7 @@
 import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
-import { removeQueueItem, refreshTdarrStatus, retryQueueItem } from '@/api/download.js'
+import { removeQueueItem, retryQueueItem } from '@/api/download.js'
 import { unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 
@@ -278,6 +278,9 @@ const individualItems = computed(() =>
   filteredItems.value.filter(i => i.playlistId == null)
 )
 
+// Note: only EPISODE mediaType goes into show groups. MOVIE goes to soloMovies.
+// SEASON and SHOW mediaTypes are not individually enqueued by the backend (bulk only),
+// so no catch-all bucket is needed here.
 const showGroups = computed(() => {
   const map = new Map()
   for (const item of individualItems.value) {
