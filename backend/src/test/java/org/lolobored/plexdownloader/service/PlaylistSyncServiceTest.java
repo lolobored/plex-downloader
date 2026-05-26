@@ -58,7 +58,7 @@ class PlaylistSyncServiceTest {
         Playlist local = localPlaylist(10L, "pl1");
         when(playlistRepo.findByPlexId("pl1")).thenReturn(Optional.of(local));
         when(playlistRepo.save(any())).thenReturn(local);
-        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of()); // nothing old
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of());
         when(plexClient.getPlaylistItems("pl1")).thenReturn(List.of(plexItem("m1", "movie")));
 
         User user = new User(); user.setId(1L);
@@ -67,13 +67,36 @@ class PlaylistSyncServiceTest {
 
         Movie m = new Movie(); m.setId(100L);
         when(movieRepo.findByPlexId("m1")).thenReturn(Optional.of(m));
-        when(queueRepo.existsByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.MOVIE, 100L)).thenReturn(false);
-        when(downloadService.enqueueMovie(100L, user)).thenReturn(List.of(1L));
+        when(queueRepo.existsByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.MOVIE, 100L))
+            .thenReturn(false);
+        when(downloadService.enqueueMovie(100L, user, 10L)).thenReturn(List.of(1L));
+        when(playlistRepo.findAll()).thenReturn(List.of(local));
 
         service.syncAll();
 
-        verify(downloadService).enqueueMovie(100L, user);
+        verify(downloadService).enqueueMovie(100L, user, 10L);
         verify(itemRepo).save(argThat(i -> "m1".equals(i.getPlexId()) && "MOVIE".equals(i.getMediaType())));
+    }
+
+    @Test
+    void enqueueForSubscription_passesPlaylistIdToEnqueue() {
+        PlaylistItem pi = new PlaylistItem();
+        pi.setPlexId("ep1");
+        pi.setMediaType("EPISODE");
+
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of(pi));
+
+        Episode ep = new Episode(); ep.setId(200L);
+        when(episodeRepo.findByPlexId("ep1")).thenReturn(Optional.of(ep));
+        when(queueRepo.existsByUser_IdAndMediaTypeAndMediaId(anyLong(),
+            eq(DownloadQueueItem.MediaType.EPISODE), eq(200L))).thenReturn(false);
+
+        User user = new User(); user.setId(1L);
+        when(downloadService.enqueueEpisode(200L, user, 10L)).thenReturn(List.of(5L));
+
+        service.enqueueForSubscription(10L, user);
+
+        verify(downloadService).enqueueEpisode(200L, user, 10L);
     }
 
     @Test
@@ -125,10 +148,11 @@ class PlaylistSyncServiceTest {
         Movie m = new Movie(); m.setId(100L);
         when(movieRepo.findByPlexId("m1")).thenReturn(Optional.of(m));
         when(queueRepo.existsByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.MOVIE, 100L)).thenReturn(true);
+        when(playlistRepo.findAll()).thenReturn(List.of(local));
 
         service.syncAll();
 
-        verify(downloadService, never()).enqueueMovie(anyLong(), any());
+        verify(downloadService, never()).enqueueMovie(anyLong(), any(), any());
     }
 
     @Test
@@ -144,10 +168,11 @@ class PlaylistSyncServiceTest {
         PlaylistSubscription sub = new PlaylistSubscription(); sub.setUser(user);
         when(subRepo.findByPlaylistIdWithUser(10L)).thenReturn(List.of(sub));
         when(movieRepo.findByPlexId("unknown")).thenReturn(Optional.empty());
+        when(playlistRepo.findAll()).thenReturn(List.of(local));
 
         service.syncAll();
 
-        verify(downloadService, never()).enqueueMovie(anyLong(), any());
+        verify(downloadService, never()).enqueueMovie(anyLong(), any(), any());
     }
 
     @Test
@@ -195,13 +220,13 @@ class PlaylistSyncServiceTest {
         when(episodeRepo.findByPlexId("e1")).thenReturn(Optional.of(ep));
         when(queueRepo.existsByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.MOVIE, 100L)).thenReturn(false);
         when(queueRepo.existsByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.EPISODE, 200L)).thenReturn(false);
-        when(downloadService.enqueueMovie(100L, user)).thenReturn(List.of(1L));
-        when(downloadService.enqueueEpisode(200L, user)).thenReturn(List.of(2L));
+        when(downloadService.enqueueMovie(100L, user, 10L)).thenReturn(List.of(1L));
+        when(downloadService.enqueueEpisode(200L, user, 10L)).thenReturn(List.of(2L));
 
         service.enqueueForSubscription(10L, user);
 
-        verify(downloadService).enqueueMovie(100L, user);
-        verify(downloadService).enqueueEpisode(200L, user);
+        verify(downloadService).enqueueMovie(100L, user, 10L);
+        verify(downloadService).enqueueEpisode(200L, user, 10L);
     }
 
     @Test

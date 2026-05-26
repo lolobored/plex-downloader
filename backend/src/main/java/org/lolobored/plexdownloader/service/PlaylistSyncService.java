@@ -136,7 +136,7 @@ public class PlaylistSyncService {
                 PlexItem pi = fetchedByKey.get(plexId);
                 if (pi != null) {
                     String mt = mapMediaType(pi.getType());
-                    if (mt != null) enqueueItem(user, pi.getRatingKey(), mt);
+                    if (mt != null) enqueueItem(user, pi.getRatingKey(), mt, local.getId());
                 }
             }
             for (String plexId : removed) {
@@ -150,17 +150,17 @@ public class PlaylistSyncService {
     public void enqueueForSubscription(Long playlistId, User user) {
         List<PlaylistItem> items = itemRepo.findByPlaylistIdOrderByOrdinalAsc(playlistId);
         for (PlaylistItem pi : items) {
-            enqueueItem(user, pi.getPlexId(), pi.getMediaType());
+            enqueueItem(user, pi.getPlexId(), pi.getMediaType(), playlistId);
         }
     }
 
     // Package-private for testing
-    void enqueueItem(User user, String plexId, String mediaType) {
+    void enqueueItem(User user, String plexId, String mediaType, Long playlistId) {
         if ("MOVIE".equals(mediaType)) {
             movieRepo.findByPlexId(plexId).ifPresent(m -> {
                 if (!queueRepo.existsByUser_IdAndMediaTypeAndMediaId(
                         user.getId(), DownloadQueueItem.MediaType.MOVIE, m.getId())) {
-                    try { downloadService.enqueueMovie(m.getId(), user); }
+                    try { downloadService.enqueueMovie(m.getId(), user, playlistId); }
                     catch (Exception e) { log.warn("Failed to enqueue movie {}: {}", m.getId(), e.getMessage()); }
                 }
             });
@@ -168,7 +168,7 @@ public class PlaylistSyncService {
             episodeRepo.findByPlexId(plexId).ifPresent(ep -> {
                 if (!queueRepo.existsByUser_IdAndMediaTypeAndMediaId(
                         user.getId(), DownloadQueueItem.MediaType.EPISODE, ep.getId())) {
-                    try { downloadService.enqueueEpisode(ep.getId(), user); }
+                    try { downloadService.enqueueEpisode(ep.getId(), user, playlistId); }
                     catch (Exception e) { log.warn("Failed to enqueue episode {}: {}", ep.getId(), e.getMessage()); }
                 }
             });
