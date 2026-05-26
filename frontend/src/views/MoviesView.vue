@@ -1,7 +1,7 @@
 <template>
   <div class="movies-root">
     <div class="toolbar">
-      <h2>Movies</h2>
+      <h2>Movies <span v-if="totalElements > 0" class="count-badge" data-testid="count-badge">{{ totalElements }}</span></h2>
       <SearchFilter v-model:search="search" v-model:year="year" />
     </div>
 
@@ -66,12 +66,13 @@ defineOptions({ name: 'MoviesView' })
 const router   = useRouter()
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
-const allMovies    = ref([])
-const loading      = ref(false)
-const page         = ref(0)
-const hasMore      = ref(true)
-const search       = ref('')
-const year         = ref(null)
+const allMovies      = ref([])
+const loading        = ref(false)
+const page           = ref(0)
+const hasMore        = ref(true)
+const totalElements  = ref(0)
+const search         = ref('')
+const year           = ref(null)
 const sentinel     = ref(null)
 const activeLetter = ref('')
 const sectionRefs  = {}   // plain object — DOM refs only, no reactivity needed
@@ -123,6 +124,7 @@ async function loadMore() {
     })
     allMovies.value.push(...data.content)
     hasMore.value = page.value < data.totalPages - 1
+    totalElements.value = data.totalElements ?? 0
     page.value++
     await nextTick()
     updateActiveLetter()
@@ -141,6 +143,7 @@ function reset() {
   allMovies.value = []
   page.value = 0
   hasMore.value = true
+  totalElements.value = 0
   activeLetter.value = ''
   Object.keys(sectionRefs).forEach(k => delete sectionRefs[k])
 }
@@ -214,6 +217,9 @@ h2 { font-size: 1.5rem; font-weight: 600; }
 .loading, .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
 .loading-more { color: var(--text-muted); text-align: center; padding: 20px 0; font-size: .85rem; }
 .sentinel { height: 1px; }
+.count-badge { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+               font-size: .75rem; font-weight: 600; border-radius: 10px; padding: 2px 8px;
+               margin-left: 8px; vertical-align: middle; }
 
 /* Alphabet sidebar */
 .alpha-sidebar {

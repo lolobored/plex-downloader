@@ -18,7 +18,7 @@ describe('TvView', () => {
         { id: 1, plexId: 'tv1', title: 'Breaking Bad', year: 2008, totalSeasons: 5 },
         { id: 2, plexId: 'tv2', title: 'The Wire',     year: 2002, totalSeasons: 5 }
       ],
-      totalPages: 1, number: 0
+      totalPages: 1, totalElements: 2, number: 0
     })
   })
 
@@ -33,5 +33,24 @@ describe('TvView', () => {
 
   it('has name TvView for keep-alive', () => {
     expect(TvView.name ?? TvView.__name).toBe('TvView')
+  })
+
+  it('shows count badge with totalElements', async () => {
+    const w = mount(TvView, { global: { plugins: [createTestingPinia()],
+      stubs: { PosterCard: { template: '<div class="pc">{{ title }}</div>', props: ['title','plexId','subtitle'] },
+               SearchFilter: true } } })
+    await flushPromises()
+    const badge = w.find('[data-testid="count-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('2')
+  })
+
+  it('count badge hidden when no results', async () => {
+    getShows.mockResolvedValue({ content: [], totalPages: 0, totalElements: 0, number: 0 })
+    const w = mount(TvView, { global: { plugins: [createTestingPinia()],
+      stubs: { PosterCard: { template: '<div class="pc">{{ title }}</div>', props: ['title','plexId','subtitle'] },
+               SearchFilter: true } } })
+    await flushPromises()
+    expect(w.find('[data-testid="count-badge"]').exists()).toBe(false)
   })
 })

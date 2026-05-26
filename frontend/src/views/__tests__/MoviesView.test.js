@@ -19,7 +19,7 @@ const fakeMovies = {
     { id: 2, plexId: 'pk2', title: 'The Matrix',     year: 1999, watched: false },
     { id: 3, plexId: 'pk3', title: 'Interstellar',   year: 2014, watched: false },
   ],
-  totalPages: 1, number: 0
+  totalPages: 1, totalElements: 3, number: 0
 }
 
 // Stub passes through fallthrough attrs (including `id`) to root element
@@ -63,5 +63,22 @@ describe('MoviesView', () => {
 
   it('has name MoviesView for keep-alive', () => {
     expect(MoviesView.name ?? MoviesView.__name).toBe('MoviesView')
+  })
+
+  it('shows count badge with totalElements', async () => {
+    const w = mount(MoviesView, { global: { plugins: [createTestingPinia()],
+      stubs: { PosterCard: PcStub, SearchFilter: true, DownloadButton: true } } })
+    await flushPromises()
+    const badge = w.find('[data-testid="count-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('3')
+  })
+
+  it('count badge hidden when no results', async () => {
+    getMovies.mockResolvedValue({ content: [], totalPages: 0, totalElements: 0, number: 0 })
+    const w = mount(MoviesView, { global: { plugins: [createTestingPinia()],
+      stubs: { PosterCard: PcStub, SearchFilter: true, DownloadButton: true } } })
+    await flushPromises()
+    expect(w.find('[data-testid="count-badge"]').exists()).toBe(false)
   })
 })

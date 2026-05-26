@@ -177,6 +177,18 @@ describe('PlaylistDetailView', () => {
     expect(document.body.querySelector('.modal-backdrop')).toBeNull()
   })
 
+  it('shows count badge with item count', async () => {
+    getPlaylist.mockResolvedValue(fakePlaylist)
+    const w = mount(PlaylistDetailView, {
+      global: { plugins: [createTestingPinia()] },
+      attachTo: document.body
+    })
+    await flushPromises()
+    const badge = w.find('[data-testid="count-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toBe('3')
+  })
+
   it('item row with mediaId has clickable class', async () => {
     getPlaylist.mockResolvedValue(fakePlaylist)
     const w = mount(PlaylistDetailView, {

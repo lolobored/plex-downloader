@@ -5,8 +5,8 @@
 
     <div class="detail-header">
       <div>
-        <h1>{{ playlist.title }}</h1>
-        <p class="meta">{{ playlist.items.length }} items · {{ playlist.playlistType }}</p>
+        <h1>{{ playlist.title }} <span class="count-badge" data-testid="count-badge">{{ playlist.items.length }}</span></h1>
+        <p class="meta">{{ playlist.playlistType }}</p>
       </div>
       <button
         class="btn-subscribe"
@@ -151,6 +151,9 @@ function statusLabel(item) {
 }
 h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
 .meta { color: var(--text-muted); font-size: .9rem; }
+.count-badge { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+               font-size: .75rem; font-weight: 600; border-radius: 10px; padding: 2px 8px;
+               margin-left: 8px; vertical-align: middle; }
 
 .btn-subscribe {
   padding: 8px 20px; border-radius: 6px; font-size: .9rem; font-weight: 600;

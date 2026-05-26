@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="toolbar">
-      <h2>TV Shows</h2>
+      <h2>TV Shows <span v-if="totalElements > 0" class="count-badge" data-testid="count-badge">{{ totalElements }}</span></h2>
       <SearchFilter v-model:search="search" v-model:year="year" />
     </div>
 
@@ -37,19 +37,21 @@ import SearchFilter from '@/components/SearchFilter.vue'
 defineOptions({ name: 'TvView' })
 
 const router     = useRouter()
-const shows      = ref([])
-const loading    = ref(false)
-const page       = ref(0)
-const totalPages = ref(0)
-const search     = ref('')
-const year       = ref(null)
+const shows         = ref([])
+const loading       = ref(false)
+const page          = ref(0)
+const totalPages    = ref(0)
+const totalElements = ref(0)
+const search        = ref('')
+const year          = ref(null)
 
 async function load() {
   loading.value = true
   try {
     const data = await getShows({ search: search.value || undefined, year: year.value || undefined, page: page.value })
-    shows.value      = data.content
-    totalPages.value = data.totalPages
+    shows.value         = data.content
+    totalPages.value    = data.totalPages
+    totalElements.value = data.totalElements ?? 0
   } finally {
     loading.value = false
   }
@@ -69,4 +71,7 @@ h2 { font-size: 1.5rem; font-weight: 600; }
 .pagination button { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
                      border-radius: 6px; padding: 6px 16px; }
 .pagination button:disabled { opacity: 0.4; }
+.count-badge { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+               font-size: .75rem; font-weight: 600; border-radius: 10px; padding: 2px 8px;
+               margin-left: 8px; vertical-align: middle; }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h2>Download Queue</h2>
+    <h2>Download Queue <span v-if="totalVisible > 0" class="count-badge" data-testid="count-badge">{{ totalVisible }}</span></h2>
 
     <div class="filter-bar">
       <div class="filter-group">
@@ -241,6 +241,9 @@ const done = computed(() =>
 const allEmpty = computed(() =>
   inProgress.value.length === 0 && pending.value.length === 0 && done.value.length === 0
 )
+const totalVisible = computed(() =>
+  inProgress.value.length + pending.value.length + done.value.length
+)
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -261,6 +264,9 @@ onUnmounted(() => clearInterval(pollTimer))
 
 <style scoped>
 h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
+.count-badge { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+               font-size: .75rem; font-weight: 600; border-radius: 10px; padding: 2px 8px;
+               margin-left: 8px; vertical-align: middle; }
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 24px; }
 .filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);

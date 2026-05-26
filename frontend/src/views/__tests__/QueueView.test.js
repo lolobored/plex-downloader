@@ -162,6 +162,39 @@ describe('QueueView', () => {
     expect(store.fetchQueue).toHaveBeenCalled()
   })
 
+  // ── Count badge ─────────────────────────────────────────────────────────────
+
+  it('count badge hidden when queue is empty', () => {
+    const { wrapper } = factory([])
+    expect(wrapper.find('[data-testid="count-badge"]').exists()).toBe(false)
+  })
+
+  it('count badge shows total visible items', () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'A', status: 'IN_PROGRESS',
+        queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null },
+      { id: 2, mediaType: 'MOVIE', mediaId: 2, title: 'B', status: 'PENDING',
+        queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null },
+      { id: 3, mediaType: 'MOVIE', mediaId: 3, title: 'C', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 3,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('3')
+  })
+
+  it('count badge reflects filtered count after type filter', async () => {
+    const { wrapper } = factory([
+      { id: 1, mediaType: 'MOVIE', mediaId: 1, title: 'Inception', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 1,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' },
+      { id: 2, mediaType: 'EPISODE', mediaId: 2, title: 'Pilot', status: 'DONE',
+        tdarrStatus: 'NONE', queuePosition: 2,
+        requestedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T01:00:00Z' }
+    ])
+    await wrapper.find('[data-testid="chip-type-MOVIE"]').trigger('click')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+  })
+
   // ── Filter bar ──────────────────────────────────────────────────────────────
 
   it('filter bar renders type chips, status chips, and search input', () => {
