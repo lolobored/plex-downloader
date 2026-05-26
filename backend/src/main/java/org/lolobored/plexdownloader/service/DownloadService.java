@@ -4,7 +4,7 @@ import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
-import org.lolobored.plexdownloader.repository.PlaylistRepository;
+import java.util.HashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -131,7 +131,7 @@ public class DownloadService {
             .filter(i -> i.getMediaType() == DownloadQueueItem.MediaType.EPISODE)
             .map(DownloadQueueItem::getMediaId)
             .collect(Collectors.toSet());
-        Map<Long, EpisodeMeta> episodeMeta = new java.util.HashMap<>();
+        Map<Long, EpisodeMeta> episodeMeta = new HashMap<>();
         if (!episodeIds.isEmpty()) {
             episodeRepo.findWithSeasonAndShowByIdIn(episodeIds).forEach(ep ->
                 episodeMeta.put(ep.getId(), new EpisodeMeta(
@@ -148,7 +148,7 @@ public class DownloadService {
             .filter(i -> i.getPlaylistId() != null)
             .map(DownloadQueueItem::getPlaylistId)
             .collect(Collectors.toSet());
-        Map<Long, String> playlistTitles = new java.util.HashMap<>();
+        Map<Long, String> playlistTitles = new HashMap<>();
         if (!playlistIds.isEmpty()) {
             playlistRepo.findAllById(playlistIds)
                 .forEach(p -> playlistTitles.put(p.getId(), p.getTitle()));
