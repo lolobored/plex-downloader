@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -22,9 +23,14 @@ class WatchedSyncServiceTest {
 
     @Mock UserRepository userRepo;
     @Mock UserEpisodeWatchedRepository watchedRepo;
+    @Mock UserMovieWatchedRepository movieWatchedRepo;
     @Mock EpisodeRepository episodeRepo;
+    @Mock MovieRepository movieRepo;
     @Mock TvShowRepository showRepo;
     @Mock SettingsService settings;
+    @Mock ShowSubscriptionRepository showSubscriptionRepo;
+    @Mock SeasonSubscriptionRepository seasonSubRepo;
+    @Mock SubscriptionService subscriptionService;
     @Spy @InjectMocks WatchedSyncService service;
 
     User user;
@@ -129,5 +135,24 @@ class WatchedSyncServiceTest {
         Set<Long> result = service.getWatchedEpisodeIds(1L, 10L);
 
         assertThat(result).containsExactlyInAnyOrder(5L, 6L);
+    }
+
+    @Test
+    void syncAll_replenishesSeasonSubscriptions() {
+        TvShow show = new TvShow(); show.setId(10L);
+        Season season = new Season(); season.setId(100L); season.setShow(show);
+        User u = new User(); u.setId(1L);
+
+        SeasonSubscription sub = new SeasonSubscription();
+        sub.setUser(u);
+        sub.setSeason(season);
+
+        when(showSubscriptionRepo.findAllWithUserAndShow()).thenReturn(List.of());
+        when(seasonSubRepo.findAllWithUserAndSeason()).thenReturn(List.of(sub));
+        doNothing().when(service).syncShow(1L, 10L);
+
+        service.syncAll();
+
+        verify(subscriptionService).replenishSeason(sub);
     }
 }

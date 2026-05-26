@@ -31,6 +31,7 @@ public class WatchedSyncService {
     private final TvShowRepository showRepo;
     private final SettingsService settings;
     private final ShowSubscriptionRepository showSubscriptionRepo;
+    private final SeasonSubscriptionRepository seasonSubscriptionRepo;
     private final SubscriptionService subscriptionService;
 
     /**
@@ -46,6 +47,16 @@ public class WatchedSyncService {
             } catch (Exception e) {
                 log.error("Watched sync failed for user={} show={}: {}",
                     sub.getUser().getId(), sub.getShow().getId(), e.getMessage());
+            }
+        });
+        seasonSubscriptionRepo.findAllWithUserAndSeason().forEach(sub -> {
+            try {
+                Long showId = sub.getSeason().getShow().getId();
+                syncShow(sub.getUser().getId(), showId);
+                subscriptionService.replenishSeason(sub);
+            } catch (Exception e) {
+                log.error("Season watched sync failed for user={} season={}: {}",
+                    sub.getUser().getId(), sub.getSeason().getId(), e.getMessage());
             }
         });
         userRepo.findAllByPlexTokenIsNotNull().forEach(user -> {
