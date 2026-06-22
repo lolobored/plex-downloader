@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class FfmpegCommandBuilderTest {
 
-    private final TranscodeConfig config = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128");
+    private final TranscodeConfig config = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128", "/tmp");
     private final FfmpegCommandBuilder builder = new FfmpegCommandBuilder(config);
 
     private QualityProfile profile(QualityProfile.Codec codec, QualityProfile.AudioMode audio,

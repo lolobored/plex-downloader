@@ -67,6 +67,7 @@ class TranscodeQueueRunnerTest {
         queued.setId(2L); queued.setStatus(DownloadQueueItem.Status.QUEUED);
 
         when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of(stuck));
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of());
         when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
             .thenReturn(List.of(stuck, queued));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -77,5 +78,25 @@ class TranscodeQueueRunnerTest {
         assertThat(stuck.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
         verify(transcodeService, timeout(2000)).transcode(1L);
         verify(transcodeService, timeout(2000)).transcode(2L);
+    }
+
+    @Test
+    void recover_resetsCopyingToQueuedAndResubmits() {
+        DownloadQueueItem copying = new DownloadQueueItem();
+        copying.setId(10L); copying.setStatus(DownloadQueueItem.Status.COPYING);
+        copying.setProgressPercent(100);
+
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of());
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of(copying));
+        when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
+            .thenReturn(List.of(copying));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        TranscodeQueueRunner r = runner();
+        r.recover();
+
+        assertThat(copying.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        assertThat(copying.getProgressPercent()).isNull();
+        verify(transcodeService, timeout(2000)).transcode(10L);
     }
 }

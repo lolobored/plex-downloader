@@ -59,5 +59,5 @@ public class DownloadQueueItem {
     private Double compressionRatio;
 
     public enum MediaType { MOVIE, EPISODE }
-    public enum Status { QUEUED, TRANSCODING, DONE, ERROR }
+    public enum Status { QUEUED, TRANSCODING, COPYING, DONE, ERROR }
 }

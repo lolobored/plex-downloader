@@ -78,6 +78,12 @@ class TranscodeServiceIntegrationTest {
             Consumer<String> out = inv.getArgument(1);
             out.accept("out_time_us=60000000");
             out.accept("progress=end");
+            // Simulate ffmpeg writing the output to the temp path (first element of cmd is "ffmpeg",
+            // last element is the output file path)
+            java.util.List<String> cmd = inv.getArgument(0);
+            java.nio.file.Path tempOut = java.nio.file.Path.of(cmd.get(cmd.size() - 1));
+            java.nio.file.Files.createDirectories(tempOut.getParent());
+            java.nio.file.Files.write(tempOut, new byte[]{1, 2, 3});
             return new RunningTranscode() {
                 public int waitForExit() { return 0; }
                 public void cancel() {}

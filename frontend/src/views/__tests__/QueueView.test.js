@@ -265,7 +265,7 @@ describe('QueueView', () => {
 
   // ── Filter bar ───────────────────────────────────────────────────────────────
 
-  it('filter bar has 4 status chips: QUEUED/TRANSCODING/DONE/ERROR', () => {
+  it('filter bar has 4 status chips: QUEUED/TRANSCODING/DONE/ERROR (no COPYING chip)', () => {
     const { wrapper } = factory([])
     expect(wrapper.find('[data-testid="chip-status-QUEUED"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="chip-status-TRANSCODING"]').exists()).toBe(true)
@@ -273,6 +273,47 @@ describe('QueueView', () => {
     expect(wrapper.find('[data-testid="chip-status-ERROR"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="chip-status-PENDING"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="chip-status-COPYING"]').exists()).toBe(false)
+  })
+
+  // ── COPYING status ────────────────────────────────────────────────────────────
+
+  it('COPYING item shows copying badge', () => {
+    const { wrapper } = factory([movieItem({ status: 'COPYING' })])
+    expect(wrapper.find('.badge-copying').exists()).toBe(true)
+    expect(wrapper.find('.badge-copying').text()).toBe('copying…')
+  })
+
+  it('COPYING item is in the in-progress group (not pending or done)', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'P', status: 'COPYING' })
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="sub-label-TRANSCODING"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sub-label-QUEUED"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sub-label-DONE"]').exists()).toBe(false)
+  })
+
+  it('COPYING item has remove button disabled', () => {
+    const { wrapper } = factory([movieItem({ id: 1, status: 'COPYING' })])
+    const removeBtn = wrapper.find('[data-testid="remove-btn-1"]')
+    expect(removeBtn.exists()).toBe(true)
+    expect(removeBtn.element.disabled).toBe(true)
+  })
+
+  it('COPYING item is shown when Transcoding filter chip is active', async () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, title: 'Inception', status: 'QUEUED' }),
+      movieItem({ id: 2, mediaId: 11, title: 'The Matrix', status: 'COPYING' }),
+    ])
+    await wrapper.find('[data-testid="chip-status-TRANSCODING"]').trigger('click')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+    expect(wrapper.text()).toContain('The Matrix')
+    expect(wrapper.text()).not.toContain('Inception')
+  })
+
+  it('COPYING item does not show progress bar', () => {
+    const { wrapper } = factory([movieItem({ status: 'COPYING' })])
+    expect(wrapper.find('[data-testid="progress-bar"]').exists()).toBe(false)
   })
 
   it('MOVIE type chip hides show groups', async () => {

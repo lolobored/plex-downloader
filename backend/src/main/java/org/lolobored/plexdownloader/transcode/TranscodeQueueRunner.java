@@ -83,6 +83,13 @@ public class TranscodeQueueRunner {
             queueRepo.save(stuck);
             log.info("Recovered interrupted transcode: item={}", stuck.getId());
         }
+        // COPYING items also re-queue: temp dir is wiped on restart, move must re-transcode
+        for (DownloadQueueItem copying : queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)) {
+            copying.setStatus(DownloadQueueItem.Status.QUEUED);
+            copying.setProgressPercent(null);
+            queueRepo.save(copying);
+            log.info("Recovered interrupted copy (re-queuing transcode): item={}", copying.getId());
+        }
         for (DownloadQueueItem q : queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED)) {
             submit(q.getId());
         }

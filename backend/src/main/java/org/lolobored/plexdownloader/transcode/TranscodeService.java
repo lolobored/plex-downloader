@@ -7,8 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -30,6 +32,7 @@ public class TranscodeService {
     private final FfmpegCommandBuilder commandBuilder;
     private final ProgressParser progressParser;
     private final ProcessRunner processRunner;
+    private final TranscodeConfig transcodeConfig;
 
     private final ConcurrentHashMap<Long, RunningTranscode> running = new ConcurrentHashMap<>();
 
@@ -44,15 +47,21 @@ public class TranscodeService {
         queueRepo.save(item);
 
         MediaInfo info = mediaProbe.probe(item.getSourceFilePath());
-        List<String> cmd = commandBuilder.build(item.getQualityProfile(),
-            item.getSourceFilePath(), item.getDestFilePath(), info);
+
+        // Compute temp output path: <tempDir>/plex-downloader/<itemId>/<outName>
+        String outName = Path.of(item.getDestFilePath()).getFileName().toString();
+        Path tempItemDir = Path.of(transcodeConfig.tempDir(), "plex-downloader", itemId.toString());
+        Path tempFile = tempItemDir.resolve(outName);
 
         try {
-            Files.createDirectories(Path.of(item.getDestFilePath()).getParent());
+            Files.createDirectories(tempItemDir);
         } catch (IOException e) {
-            failItem(item, "Could not create output dir: " + e.getMessage());
+            failItem(item, "Could not create temp dir: " + e.getMessage());
             return;
         }
+
+        List<String> cmd = commandBuilder.build(item.getQualityProfile(),
+            item.getSourceFilePath(), tempFile.toString(), info);
 
         Deque<String> stderrTail = new ArrayDeque<>();
         AtomicInteger lastPct = new AtomicInteger(-1);
@@ -86,18 +95,37 @@ public class TranscodeService {
         }
 
         DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
-        if (fresh == null) return; // cancelled + deleted
+        if (fresh == null) {
+            // cancelled + deleted — clean up temp
+            deleteTempDir(tempItemDir);
+            return;
+        }
+
         if (exit == 0) {
-            fresh.setStatus(DownloadQueueItem.Status.DONE);
-            fresh.setProgressPercent(100);
-            fresh.setCompletedAt(Instant.now());
-            fresh.setCompressionRatio(compressionRatio(fresh.getSourceFilePath(), fresh.getDestFilePath()));
+            // Move temp file → final destination
+            Path destPath = Path.of(fresh.getDestFilePath());
+            fresh.setStatus(DownloadQueueItem.Status.COPYING);
             queueRepo.save(fresh);
-            log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
+
+            try {
+                Files.createDirectories(destPath.getParent());
+                moveFile(tempFile, destPath);
+                fresh.setStatus(DownloadQueueItem.Status.DONE);
+                fresh.setProgressPercent(100);
+                fresh.setCompletedAt(Instant.now());
+                fresh.setCompressionRatio(compressionRatio(fresh.getSourceFilePath(), destPath.toString()));
+                queueRepo.save(fresh);
+                log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
+            } catch (IOException e) {
+                deletePartial(destPath.toString());
+                failItem(fresh, "Move to destination failed: " + e.getMessage());
+            } finally {
+                deleteTempDir(tempItemDir);
+            }
         } else {
             String tail;
             synchronized (stderrTail) { tail = String.join("\n", stderrTail); }
-            deletePartial(fresh.getDestFilePath());
+            deleteTempDir(tempItemDir);
             failItem(fresh, "ffmpeg exit " + exit + (tail.isBlank() ? "" : ": " + tail));
         }
     }
@@ -144,6 +172,35 @@ public class TranscodeService {
             Files.deleteIfExists(Path.of(dest));
         } catch (IOException e) {
             log.warn("Could not delete partial output {}: {}", dest, e.getMessage());
+        }
+    }
+
+    private void deleteTempDir(Path tempItemDir) {
+        try {
+            // Delete all files in the temp dir, then the dir itself
+            if (Files.exists(tempItemDir)) {
+                try (var stream = Files.list(tempItemDir)) {
+                    for (Path f : stream.toList()) {
+                        Files.deleteIfExists(f);
+                    }
+                }
+                Files.deleteIfExists(tempItemDir);
+            }
+        } catch (IOException e) {
+            log.warn("Could not clean up temp dir {}: {}", tempItemDir, e.getMessage());
+        }
+    }
+
+    /**
+     * Moves src to dest. Tries ATOMIC_MOVE first (same filesystem); falls back to
+     * REPLACE_EXISTING (copy + delete) for cross-filesystem moves (e.g. local → NAS).
+     */
+    private void moveFile(Path src, Path dest) throws IOException {
+        try {
+            Files.move(src, dest, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            log.debug("Atomic move not supported (cross-filesystem?), falling back to copy+delete: {}", e.getMessage());
+            Files.move(src, dest, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }
