@@ -56,6 +56,27 @@ class QualityProfileServiceTest {
     }
 
     @Test
+    void delete_defaultProfile_throwsConflict() {
+        QualityProfile def = profile(1L, true);
+        when(repo.findById(1L)).thenReturn(Optional.of(def));
+
+        assertThatThrownBy(() -> service.delete(1L))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("409");
+        verify(repo, never()).deleteById(any());
+    }
+
+    @Test
+    void delete_nonDefaultProfile_deletes() {
+        QualityProfile p = profile(2L, false);
+        when(repo.findById(2L)).thenReturn(Optional.of(p));
+
+        service.delete(2L);
+
+        verify(repo).deleteById(2L);
+    }
+
+    @Test
     void setDefault_clearsOthersAndSetsTarget() {
         QualityProfile a = profile(1L, true);
         QualityProfile b = profile(2L, false);

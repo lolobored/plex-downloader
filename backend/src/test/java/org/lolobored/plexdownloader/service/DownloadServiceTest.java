@@ -276,21 +276,20 @@ class DownloadServiceTest {
     }
 
     @Test
-    void cancelAllForShow_flagsTranscodingForDeferredCancel() {
+    void cancelAllForShow_cancelsInFlightTranscode() {
         DownloadQueueItem active = new DownloadQueueItem();
         active.setId(21L);
         active.setStatus(DownloadQueueItem.Status.TRANSCODING);
         active.setDestFilePath("/conv/libraries/ep.mkv");
 
         when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(active));
-        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         int count = service.cancelAllForShow(1L, 10L);
 
         assertThat(count).isEqualTo(1);
-        assertThat(active.isCancellationRequested()).isTrue();
-        verify(queueRepo).save(active);
-        verify(queueRepo, never()).delete(any());
+        verify(transcodeService).cancel(21L);
+        verify(queueRepo).delete(active);
+        assertThat(active.isCancellationRequested()).isFalse();
     }
 
     @Test
@@ -319,16 +318,14 @@ class DownloadServiceTest {
         active.setDestFilePath("/conv/libraries/ep2.mkv");
 
         when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(queued, active));
-        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         int count = service.cancelAllForShow(1L, 10L);
 
         assertThat(count).isEqualTo(2);
         verify(queueRepo).delete(queued);         // QUEUED cancelled immediately
         assertThat(outFile).doesNotExist();
-        assertThat(active.isCancellationRequested()).isTrue(); // TRANSCODING deferred
-        verify(queueRepo).save(active);
-        verify(queueRepo, never()).delete(active);
+        verify(transcodeService).cancel(23L);     // TRANSCODING killed in-flight
+        verify(queueRepo).delete(active);         // then row deleted
     }
 
     @Test
@@ -346,7 +343,7 @@ class DownloadServiceTest {
     }
 
     @Test
-    void cancelAllForSeason_setsFlag_forTranscodingItems() {
+    void cancelAllForSeason_cancelsInFlightTranscode() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(2L);
         item.setStatus(DownloadQueueItem.Status.TRANSCODING);
@@ -355,8 +352,9 @@ class DownloadServiceTest {
 
         service.cancelAllForSeason(1L, 100L);
 
-        assertThat(item.isCancellationRequested()).isTrue();
-        verify(queueRepo).save(item);
+        verify(transcodeService).cancel(2L);
+        verify(queueRepo).delete(item);
+        assertThat(item.isCancellationRequested()).isFalse();
     }
 
     @Test

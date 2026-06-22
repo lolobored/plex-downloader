@@ -5,10 +5,9 @@ import { useDownloadStore } from '../download.js'
 vi.mock('../../api/download.js', () => ({
   getQueue:           vi.fn(),
   enqueue:            vi.fn(),
-  retryQueueItem:     vi.fn(),
   getQualityProfiles: vi.fn()
 }))
-import { getQueue, enqueue, retryQueueItem, getQualityProfiles } from '../../api/download.js'
+import { getQueue, enqueue, getQualityProfiles } from '../../api/download.js'
 
 describe('download store', () => {
   beforeEach(() => {

@@ -233,11 +233,9 @@ public class DownloadService {
         int cancelled = 0;
         for (DownloadQueueItem item : items) {
             if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
-                item.setCancellationRequested(true);
-                queueRepo.save(item);
-            } else {
-                doCancelItem(item);
+                transcodeService.cancel(item.getId());
             }
+            doCancelItem(item);
             cancelled++;
         }
         return cancelled;
@@ -249,11 +247,9 @@ public class DownloadService {
         int cancelled = 0;
         for (DownloadQueueItem item : items) {
             if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
-                item.setCancellationRequested(true);
-                queueRepo.save(item);
-            } else {
-                doCancelItem(item);
+                transcodeService.cancel(item.getId());
             }
+            doCancelItem(item);
             cancelled++;
         }
         return cancelled;

@@ -51,6 +51,7 @@ class TranscodeServiceTest {
     void success_setsDoneAndFullProgress(@TempDir Path tmp) throws Exception {
         Path dest = tmp.resolve("x.mkv");
         DownloadQueueItem it = item(1L, dest.toString());
+        when(queueRepo.findByIdWithProfile(1L)).thenReturn(Optional.of(it));
         when(queueRepo.findById(1L)).thenReturn(Optional.of(it));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(mediaProbe.probe("/movies/x.avi")).thenReturn(new MediaInfo(60, 1920, 1080));
@@ -76,6 +77,7 @@ class TranscodeServiceTest {
         Path dest = tmp.resolve("y.mkv");
         Files.writeString(dest, "partial");
         DownloadQueueItem it = item(2L, dest.toString());
+        when(queueRepo.findByIdWithProfile(2L)).thenReturn(Optional.of(it));
         when(queueRepo.findById(2L)).thenReturn(Optional.of(it));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
@@ -104,6 +106,7 @@ class TranscodeServiceTest {
     void cancel_registeredItem_returnsTrue(@TempDir Path tmp) throws Exception {
         Path dest = tmp.resolve("z.mkv");
         DownloadQueueItem it = item(3L, dest.toString());
+        when(queueRepo.findByIdWithProfile(3L)).thenReturn(Optional.of(it));
         when(queueRepo.findById(3L)).thenReturn(Optional.of(it));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));

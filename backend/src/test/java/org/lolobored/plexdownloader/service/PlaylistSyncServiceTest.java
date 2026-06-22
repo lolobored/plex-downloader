@@ -32,6 +32,7 @@ class PlaylistSyncServiceTest {
     @Mock EpisodeRepository episodeRepo;
     @Mock DownloadQueueRepository queueRepo;
     @Mock DownloadService downloadService;
+    @Mock org.lolobored.plexdownloader.transcode.TranscodeService transcodeService;
     @InjectMocks PlaylistSyncService service;
 
     private PlexPlaylist plexPlaylist(String key) {
@@ -251,16 +252,16 @@ class PlaylistSyncServiceTest {
     }
 
     @Test
-    void cancelAllForUser_flagsTranscodingForDeferredCancel() {
+    void cancelAllForUser_cancelsInFlightTranscode() {
         DownloadQueueItem transcoding = new DownloadQueueItem();
         transcoding.setId(2L); transcoding.setStatus(DownloadQueueItem.Status.TRANSCODING);
         when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(transcoding));
 
         service.cancelAllForUser(1L, 5L);
 
-        verify(queueRepo).save(transcoding);
-        assertThat(transcoding.isCancellationRequested()).isTrue();
-        verify(downloadService, never()).doCancelItem(any());
+        verify(transcodeService).cancel(2L);
+        verify(downloadService).doCancelItem(transcoding);
+        assertThat(transcoding.isCancellationRequested()).isFalse();
     }
 
     @Test

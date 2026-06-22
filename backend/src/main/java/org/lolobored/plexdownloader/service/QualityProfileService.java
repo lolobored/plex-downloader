@@ -48,6 +48,13 @@ public class QualityProfileService {
     }
 
     public void delete(Long id) {
+        repo.findById(id).ifPresent(p -> {
+            if (p.isDefault()) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Cannot delete the default profile; set another default first");
+            }
+        });
         repo.deleteById(id);
     }
 

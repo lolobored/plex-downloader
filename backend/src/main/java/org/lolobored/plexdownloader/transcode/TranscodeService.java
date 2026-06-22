@@ -34,7 +34,7 @@ public class TranscodeService {
     private final ConcurrentHashMap<Long, RunningTranscode> running = new ConcurrentHashMap<>();
 
     public void transcode(Long itemId) {
-        DownloadQueueItem item = queueRepo.findById(itemId).orElse(null);
+        DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
         if (item == null) { log.warn("Transcode skipped, item {} gone", itemId); return; }
 
         item.setStatus(DownloadQueueItem.Status.TRANSCODING);

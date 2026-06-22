@@ -32,6 +32,7 @@ public class PlaylistSyncService {
     private final EpisodeRepository episodeRepo;
     private final DownloadQueueRepository queueRepo;
     private final DownloadService downloadService;
+    private final org.lolobored.plexdownloader.transcode.TranscodeService transcodeService;
 
     @Autowired
     @Lazy
@@ -206,11 +207,9 @@ public class PlaylistSyncService {
         int cancelled = 0;
         for (DownloadQueueItem item : items) {
             if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
-                item.setCancellationRequested(true);
-                queueRepo.save(item);
-            } else {
-                downloadService.doCancelItem(item);
+                transcodeService.cancel(item.getId());
             }
+            downloadService.doCancelItem(item);
             cancelled++;
         }
         return cancelled;

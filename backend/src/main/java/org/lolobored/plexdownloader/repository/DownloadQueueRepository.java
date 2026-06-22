@@ -8,6 +8,9 @@ import java.util.*;
 
 public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem, Long> {
 
+    @Query("SELECT i FROM DownloadQueueItem i LEFT JOIN FETCH i.qualityProfile WHERE i.id = :id")
+    Optional<DownloadQueueItem> findByIdWithProfile(@Param("id") Long id);
+
     List<DownloadQueueItem> findAllByOrderByQueuePositionAsc();
 
     List<DownloadQueueItem> findAllByUserIdOrderByQueuePositionAsc(Long userId);
