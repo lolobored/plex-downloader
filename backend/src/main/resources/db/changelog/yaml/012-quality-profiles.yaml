@@ -1,0 +1,37 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-quality-profiles
+      author: plexdownloader
+      changes:
+        - createTable:
+            tableName: quality_profile
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column: { name: codec,          type: VARCHAR(32),  defaultValue: "HEVC_QSV", constraints: { nullable: false } }
+              - column: { name: container,       type: VARCHAR(16),  defaultValue: "MKV",      constraints: { nullable: false } }
+              - column: { name: quality_level,   type: INT,          defaultValueNumeric: 23,  constraints: { nullable: false } }
+              - column: { name: resolution_cap,  type: VARCHAR(16),  defaultValue: "KEEP",     constraints: { nullable: false } }
+              - column: { name: audio_mode,      type: VARCHAR(16),  defaultValue: "COPY",     constraints: { nullable: false } }
+              - column: { name: is_default,      type: BOOLEAN,      defaultValueBoolean: false, constraints: { nullable: false } }
+        - insert:
+            tableName: quality_profile
+            columns:
+              - column: { name: name,           value: "Default" }
+              - column: { name: codec,          value: "HEVC_QSV" }
+              - column: { name: container,      value: "MKV" }
+              - column: { name: quality_level,  valueNumeric: 23 }
+              - column: { name: resolution_cap, value: "KEEP" }
+              - column: { name: audio_mode,     value: "COPY" }
+              - column: { name: is_default,     valueBoolean: true }
