@@ -18,6 +18,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -44,6 +45,30 @@ public class TranscodeService {
 
     /** Tracks in-flight prefetch futures keyed by itemId. At most one entry at a time. */
     private final ConcurrentHashMap<Long, Future<?>> prefetches = new ConcurrentHashMap<>();
+
+    /**
+     * Per-task cancel flags keyed by itemId.
+     * Set by cancelPrefetch so the task can detect cancellation after Files.copy returns
+     * (Files.copy is not interruptible, so interrupt alone is insufficient).
+     */
+    private final ConcurrentHashMap<Long, AtomicBoolean> prefetchCancelFlags = new ConcurrentHashMap<>();
+
+    /**
+     * Injectable copy strategy seam — defaults to Files.copy with REPLACE_EXISTING.
+     * Tests can substitute a blocking implementation to race cancel against a copy in progress.
+     */
+    @FunctionalInterface
+    interface CopyStrategy {
+        void copy(Path source, Path target) throws IOException;
+    }
+
+    private CopyStrategy copyStrategy = (src, dst) ->
+        Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+
+    /** Package-private: lets tests inject a blocking copy seam. */
+    void setCopyStrategy(CopyStrategy strategy) {
+        this.copyStrategy = strategy;
+    }
 
     private final ExecutorService prefetchPool = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "prefetch-worker");
@@ -84,8 +109,11 @@ public class TranscodeService {
      * Begins copying {@code item.sourceFilePath} → the item's temp src path asynchronously.
      * One-ahead only: if a prefetch is already in flight, this is a no-op.
      * Does NOT change the item's DB status (item stays QUEUED).
+     *
+     * Synchronized so the isEmpty check + put are atomic: two concurrent callers
+     * cannot both pass the guard and double-stage.
      */
-    public void prefetchSource(Long itemId) {
+    public synchronized void prefetchSource(Long itemId) {
         if (!prefetches.isEmpty()) {
             log.debug("Prefetch already in flight, skipping prefetch for item={}", itemId);
             return;
@@ -98,31 +126,64 @@ public class TranscodeService {
 
         String sourceFilePath = item.getSourceFilePath();
         Path tempSrc = tempSrcFile(itemId, sourceFilePath);
+        Path partPath = tempSrc.resolveSibling(tempSrc.getFileName() + ".part");
         Path tempSrcDir = tempSrc.getParent();
 
+        // Per-task cancel flag stored in shared map so cancelPrefetch can set it
+        // even though Files.copy is not interruptible by Thread.interrupt().
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        prefetchCancelFlags.put(itemId, cancelled);
+
         Future<?> future = prefetchPool.submit(() -> {
+            boolean renamed = false;
             try {
                 log.info("Prefetching source for item={} src={}", itemId, sourceFilePath);
                 Files.createDirectories(tempSrcDir);
-                Files.copy(Path.of(sourceFilePath), tempSrc, StandardCopyOption.REPLACE_EXISTING);
-                log.info("Prefetch complete: item={} bytes={}", itemId, Files.size(tempSrc));
+                // Copy to .part first so the final path only ever contains a complete file
+                copyStrategy.copy(Path.of(sourceFilePath), partPath);
+                // Only rename to final path if we were not cancelled
+                if (!cancelled.get() && !Thread.currentThread().isInterrupted()) {
+                    try {
+                        Files.move(partPath, tempSrc, StandardCopyOption.ATOMIC_MOVE);
+                    } catch (AtomicMoveNotSupportedException e) {
+                        Files.move(partPath, tempSrc, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    renamed = true;
+                    log.info("Prefetch complete: item={} bytes={}", itemId, Files.size(tempSrc));
+                }
             } catch (Exception e) {
                 log.warn("Prefetch failed for item={}: {}", itemId, e.getMessage());
-                deleteTempDir(tempItemDir(itemId));
-                prefetches.remove(itemId);
+            } finally {
+                // Task-owned cleanup: if we did NOT successfully rename (cancelled, failed,
+                // or interrupted), delete the whole temp dir and remove the map entry.
+                if (!renamed) {
+                    deleteTempDir(tempItemDir(itemId));
+                    prefetches.remove(itemId);
+                    log.debug("Prefetch task cleaned up temp dir for item={}", itemId);
+                }
+                prefetchCancelFlags.remove(itemId);
             }
         });
         prefetches.put(itemId, future);
     }
 
     /**
-     * Cancels an in-flight prefetch and cleans up the item's temp dir.
+     * Cancels an in-flight prefetch and requests cleanup.
+     * Sets the per-task cancel flag BEFORE cancel(true) so the task skips the rename
+     * after Files.copy returns (Files.copy is not interruptible).
+     * The task's own finally block is the authoritative cleanup.
+     * A best-effort deleteTempDir is attempted here too for fast cleanup.
      * No-op if no prefetch is registered for the item.
      */
     public void cancelPrefetch(Long itemId) {
         Future<?> future = prefetches.remove(itemId);
         if (future == null) return;
+        // Set the cancel flag first so the task skips the rename even if the copy
+        // has already finished by the time the interrupt is delivered.
+        AtomicBoolean flag = prefetchCancelFlags.get(itemId);
+        if (flag != null) flag.set(true);
         future.cancel(true);
+        // Best-effort delete: races with the task's finally, but deleteTempDir is idempotent.
         deleteTempDir(tempItemDir(itemId));
         log.info("Prefetch cancelled for item={}", itemId);
     }
@@ -155,21 +216,24 @@ public class TranscodeService {
         try {
             Future<?> prefetchFuture = prefetches.remove(itemId);
             if (prefetchFuture != null) {
-                // Await the prefetch — if it failed/was cancelled, fall through to a normal copy
+                // Await the prefetch — if it was cancelled or failed, fall through to a normal copy
                 boolean prefetchOk = false;
                 try {
                     prefetchFuture.get();
                     prefetchOk = true;
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
+                } catch (CancellationException ce) {
+                    log.warn("Prefetch for item={} was cancelled, will re-copy source", itemId);
                 } catch (ExecutionException ee) {
                     log.warn("Prefetch for item={} failed ({}), will re-copy source", itemId, ee.getCause().getMessage());
                 }
+                // Only use the staged file if the rename completed (final path exists and is non-empty)
                 if (prefetchOk && Files.exists(tempSrcFile) && Files.size(tempSrcFile) > 0) {
                     log.info("Prefetch hit: skipping source copy for item={} bytes={}", itemId, Files.size(tempSrcFile));
                     // Source already staged — skip the copy
                 } else {
-                    // Prefetch failed or produced an empty file — fall back to a normal copy
+                    // Prefetch was cancelled/failed, or staged file missing/empty — fall back to normal copy
                     Files.createDirectories(tempSrcDir);
                     log.info("Prefetch miss: re-copying source for item={}", itemId);
                     Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);

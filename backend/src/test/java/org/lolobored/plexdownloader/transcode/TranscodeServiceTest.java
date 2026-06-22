@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -818,6 +819,212 @@ class TranscodeServiceTest {
         TranscodeService service = serviceWithTempDir(tempBase.toString());
         // Should not throw
         service.cancelPrefetch(999L);
+        assertThat(service.getPrefetchCount()).isEqualTo(0);
+    }
+
+    // ── Concurrency fix tests (C1 / C2) ──────────────────────────────────────
+
+    /**
+     * C1: Two threads call prefetchSource simultaneously.
+     * Only ONE prefetch future must be registered — the second is a no-op.
+     * Uses a CyclicBarrier to align both threads at the guard so they race
+     * the check-and-put atomically.
+     */
+    @Test
+    void prefetchSource_concurrentCalls_onlyOnePrefetchSubmitted(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3, 4, 5});
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        // Latch that blocks the prefetch task INSIDE the copy so both callers
+        // finish their synchronized call before the first task completes.
+        CountDownLatch copyBlocked = new CountDownLatch(1);
+        CountDownLatch firstCopyStarted = new CountDownLatch(1);
+
+        DownloadQueueItem it1 = item(500L, src.toString(), tmp.resolve("dest/out.mkv").toString());
+        it1.setStatus(DownloadQueueItem.Status.QUEUED);
+        DownloadQueueItem it2 = item(501L, src.toString(), tmp.resolve("dest2/out.mkv").toString());
+        it2.setStatus(DownloadQueueItem.Status.QUEUED);
+
+        when(queueRepo.findByIdWithProfile(500L)).thenReturn(Optional.of(it1));
+        when(queueRepo.findByIdWithProfile(501L)).thenReturn(Optional.of(it2));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        // Inject a blocking copy seam: signals firstCopyStarted then waits on copyBlocked
+        service.setCopyStrategy((s, d) -> {
+            firstCopyStarted.countDown();
+            try { copyBlocked.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            Files.copy(s, d, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        });
+
+        // CyclicBarrier so both threads enter prefetchSource at the same moment
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        AtomicInteger submitted = new AtomicInteger(0);
+
+        Thread t1 = new Thread(() -> {
+            try { barrier.await(); } catch (Exception ignored) {}
+            service.prefetchSource(500L);
+            submitted.incrementAndGet();
+        });
+        Thread t2 = new Thread(() -> {
+            try { barrier.await(); } catch (Exception ignored) {}
+            service.prefetchSource(501L);
+            submitted.incrementAndGet();
+        });
+
+        t1.start();
+        t2.start();
+        t1.join(3_000);
+        t2.join(3_000);
+
+        // Wait until the copy task is actually running (proves one prefetch was submitted)
+        assertThat(firstCopyStarted.await(3, TimeUnit.SECONDS)).isTrue();
+
+        // Only ONE prefetch must be registered (the key assertion for C1)
+        assertThat(service.getPrefetchCount()).isEqualTo(1);
+
+        // Unblock the copy and wait for it to complete
+        copyBlocked.countDown();
+
+        // Either item 500 or 501 was the winner — poll until one of them has a staged file
+        Path tempSrc500 = tempBase.resolve("plex-downloader/500/src/source.avi");
+        Path tempSrc501 = tempBase.resolve("plex-downloader/501/src/source.avi");
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (!Files.exists(tempSrc500) && !Files.exists(tempSrc501)
+               && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+
+        // Exactly one of the two staged files must exist (one winner, one no-op)
+        boolean exists500 = Files.exists(tempSrc500);
+        boolean exists501 = Files.exists(tempSrc501);
+        assertThat(exists500 ^ exists501)
+            .as("Exactly one of the two items must have been prefetched (XOR), but exists500=%b exists501=%b",
+                exists500, exists501)
+            .isTrue();
+    }
+
+    /**
+     * C2: Cancel during actual copy — the dangerous leak path.
+     * The copy is blocked inside the copy seam (not before it), then cancelPrefetch
+     * is called. After unblocking, the temp dir must be fully cleaned and the map empty.
+     */
+    @Test
+    void cancelPrefetch_duringActualCopy_cleansUpTempDirAfterCopyCompletes(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3, 4, 5});
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        CountDownLatch copyStarted = new CountDownLatch(1);
+        CountDownLatch copyRelease = new CountDownLatch(1);
+
+        DownloadQueueItem it = item(600L, src.toString(), tmp.resolve("dest/out.mkv").toString());
+        it.setStatus(DownloadQueueItem.Status.QUEUED);
+        when(queueRepo.findByIdWithProfile(600L)).thenReturn(Optional.of(it));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        // Inject copy seam that blocks INSIDE the copy region
+        service.setCopyStrategy((s, d) -> {
+            copyStarted.countDown();                         // signal: copy is in progress
+            try { copyRelease.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            Files.copy(s, d, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        });
+
+        service.prefetchSource(600L);
+
+        // Wait until the copy task is genuinely inside the copy region
+        assertThat(copyStarted.await(3, TimeUnit.SECONDS)).isTrue();
+
+        // Cancel while the copy is in progress
+        service.cancelPrefetch(600L);
+        assertThat(service.getPrefetchCount()).isEqualTo(0);
+
+        // Release the blocked copy — it will complete, then the task's finally runs cleanup
+        copyRelease.countDown();
+
+        // Wait for the task's finally to run (poll for dir disappearance)
+        Path itemDir = tempBase.resolve("plex-downloader/600");
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (Files.exists(itemDir) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+
+        // Temp dir (including any .part file and the src subdir) must be gone
+        assertThat(itemDir).doesNotExist();
+        // Map entry must be gone
+        assertThat(service.getPrefetchCount()).isEqualTo(0);
+        // The FINAL staged path must NOT exist (rename was skipped due to cancel flag)
+        assertThat(tempBase.resolve("plex-downloader/600/src/source.avi")).doesNotExist();
+    }
+
+    /**
+     * C2 consume: prefetch is cancelled before transcode() runs → transcode()
+     * falls back to a normal copy and still completes with DONE.
+     */
+    @Test
+    void transcode_afterPrefetchCancelled_fallsBackToNormalCopyAndReachesDone(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3, 4, 5});
+        Path destDir = tmp.resolve("dest");
+        Files.createDirectories(destDir);
+        Path dest = destDir.resolve("source.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(700L, src.toString(), dest.toString());
+        it.setStatus(DownloadQueueItem.Status.QUEUED);
+        when(queueRepo.findByIdWithProfile(700L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(700L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+
+        CountDownLatch copyStarted = new CountDownLatch(1);
+        CountDownLatch copyRelease = new CountDownLatch(1);
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        // Block inside copy so we can cancel while it's running
+        service.setCopyStrategy((s, d) -> {
+            copyStarted.countDown();
+            try { copyRelease.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            Files.copy(s, d, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        });
+
+        service.prefetchSource(700L);
+        assertThat(copyStarted.await(3, TimeUnit.SECONDS)).isTrue();
+
+        // Cancel the prefetch while copy is in progress
+        service.cancelPrefetch(700L);
+        // Release the copy — the task's finally will clean up
+        copyRelease.countDown();
+
+        // Wait for cleanup to finish (temp dir gone)
+        Path itemDir = tempBase.resolve("plex-downloader/700");
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (Files.exists(itemDir) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+
+        // Reset copy strategy to default (so transcode's normal copy works)
+        service.setCopyStrategy((s, d) -> Files.copy(s, d, java.nio.file.StandardCopyOption.REPLACE_EXISTING));
+
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            List<String> cmd = inv.getArgument(0);
+            Path tempFile = Path.of(cmd.get(cmd.size() - 1));
+            Files.createDirectories(tempFile.getParent());
+            Files.write(tempFile, new byte[]{9, 8, 7});
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        // transcode() must fall back to a normal copy (the NAS src still exists) and reach DONE
+        service.transcode(700L);
+
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
+        assertThat(dest).exists();
         assertThat(service.getPrefetchCount()).isEqualTo(0);
     }
 }
