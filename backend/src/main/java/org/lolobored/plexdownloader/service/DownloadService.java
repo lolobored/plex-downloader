@@ -4,6 +4,7 @@ import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
 import org.lolobored.plexdownloader.transcode.TranscodeRequestedEvent;
+import org.lolobored.plexdownloader.transcode.TranscodeService;
 import java.util.HashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class DownloadService {
     private final QualityProfileService qualityProfileService;
     private final ApplicationEventPublisher events;
     private final PlaylistRepository playlistRepo;
+    private final TranscodeService transcodeService;
 
     public List<Long> enqueueMovie(Long movieId, User user) {
         return enqueueMovie(movieId, user, null, null);
@@ -220,8 +222,7 @@ public class DownloadService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
         }
         if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Transcode in progress, cancel via the worker");
+            transcodeService.cancel(itemId);
         }
         doCancelItem(item);
     }

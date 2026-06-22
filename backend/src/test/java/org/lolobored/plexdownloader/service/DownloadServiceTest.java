@@ -6,6 +6,7 @@ import org.lolobored.plexdownloader.model.Season;
 import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
 import org.lolobored.plexdownloader.transcode.TranscodeRequestedEvent;
+import org.lolobored.plexdownloader.transcode.TranscodeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,6 +41,7 @@ class DownloadServiceTest {
     @Mock QualityProfileService qualityProfileService;
     @Mock org.springframework.context.ApplicationEventPublisher events;
     @Mock PlaylistRepository playlistRepo;
+    @Mock TranscodeService transcodeService;
     @InjectMocks DownloadService service;
 
     @TempDir Path tempDir;
@@ -193,20 +195,21 @@ class DownloadServiceTest {
     }
 
     @Test
-    void cancel_throws409WhenTranscoding() {
+    void cancel_transcoding_callsTranscodeServiceCancelAndDeletesRow() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(13L);
         item.setStatus(DownloadQueueItem.Status.TRANSCODING);
-        item.setDestFilePath("/conversion/libraries/films/film.mkv");
+        item.setDestFilePath(null);
         User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
         item.setUser(owner);
 
         when(queueRepo.findById(13L)).thenReturn(Optional.of(item));
 
         User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
-        assertThatThrownBy(() -> service.cancel(13L, caller))
-            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
-            .hasMessageContaining("409");
+        service.cancel(13L, caller);
+
+        verify(transcodeService).cancel(13L);
+        verify(queueRepo).delete(item);
     }
 
     @Test
