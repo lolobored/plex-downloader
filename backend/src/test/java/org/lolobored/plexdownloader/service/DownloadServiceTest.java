@@ -60,7 +60,7 @@ class DownloadServiceTest {
         movie.setFilePath("/plex/movies/The Dark Knight (2008)/dark.avi");
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of("/conv/libraries/movies"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(2L); return i; });
 
@@ -96,7 +96,7 @@ class DownloadServiceTest {
 
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
             DownloadQueueItem item = inv.getArgument(0);
@@ -137,7 +137,7 @@ class DownloadServiceTest {
         when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
         when(showRepo.findById(100L)).thenReturn(Optional.of(show));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/conv/libraries/tvshows"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
             DownloadQueueItem i = inv.getArgument(0);
@@ -165,7 +165,7 @@ class DownloadServiceTest {
 
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conversion"));
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of("/conversion/libraries/movies"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(1L); return i; });
 
@@ -410,7 +410,7 @@ class DownloadServiceTest {
         movie.setFilePath("/movies/Inception (2010)/inception.mkv");
 
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         ArgumentCaptor<DownloadQueueItem> captor = ArgumentCaptor.forClass(DownloadQueueItem.class);
@@ -433,7 +433,7 @@ class DownloadServiceTest {
         movie.setFilePath("/movies/The Matrix (1999)/matrix.mkv");
 
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(movieRepo.findById(2L)).thenReturn(Optional.of(movie));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         ArgumentCaptor<DownloadQueueItem> captor = ArgumentCaptor.forClass(DownloadQueueItem.class);
@@ -550,5 +550,68 @@ class DownloadServiceTest {
 
         assertThat(count).isEqualTo(1);
         verify(queueRepo, times(1)).save(errorItem);
+    }
+
+    @Test
+    void buildItem_usesConfiguredMoviesDirFromSettings() {
+        Movie movie = new Movie();
+        movie.setId(1L); movie.setTitle("Blade Runner");
+        movie.setFilePath("/plex/movies/Blade Runner (1982)/blade.mkv");
+        when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of("/custom/movies"));
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(9L); return i; });
+
+        service.enqueueMovie(1L, new User());
+
+        verify(queueRepo).save(argThat(item ->
+            item.getDestFilePath().replace('\\', '/').startsWith("/custom/movies/")
+            && item.getDestFilePath().contains("blade.mkv")
+        ));
+    }
+
+    @Test
+    void buildItem_defaultMoviesDirProducesSamePathAsLegacy() {
+        Movie movie = new Movie();
+        movie.setId(1L); movie.setTitle("Dunkirk");
+        movie.setFilePath("/plex/movies/Dunkirk (2017)/dunkirk.mkv");
+        when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("output.movies.dir")).thenReturn(Optional.empty()); // use default
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(10L); return i; });
+
+        service.enqueueMovie(1L, new User());
+
+        // Default = /plex-conversion/libraries/movies
+        verify(queueRepo).save(argThat(item ->
+            item.getDestFilePath().replace('\\', '/').startsWith("/plex-conversion/libraries/movies/")
+            && item.getDestFilePath().contains("dunkirk.mkv")
+        ));
+    }
+
+    @Test
+    void buildItem_usesConfiguredTvShowsDirFromSettings() {
+        TvShow show = new TvShow(); show.setId(100L); show.setTitle("Chernobyl");
+        Season season = new Season(); season.setId(10L); season.setSeasonNumber(1); season.setShow(show);
+        Episode ep = new Episode(); ep.setId(1L);
+        ep.setFilePath("/plex/tv/Chernobyl/Season 01/s01e01.mkv");
+        ep.setSeason(season);
+
+        when(episodeRepo.findById(1L)).thenReturn(Optional.of(ep));
+        when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
+        when(showRepo.findById(100L)).thenReturn(Optional.of(show));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/custom/tv"));
+        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
+        when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(11L); return i; });
+
+        service.enqueueEpisode(1L, new User());
+
+        verify(queueRepo).save(argThat(item ->
+            item.getDestFilePath().replace('\\', '/').startsWith("/custom/tv/")
+            && item.getDestFilePath().contains("s01e01.mkv")
+        ));
     }
 }

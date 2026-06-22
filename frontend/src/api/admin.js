@@ -42,3 +42,14 @@ export async function setDefaultQualityProfile(id) {
   const { data } = await http.put(`/api/admin/quality-profiles/${id}/default`)
   return data  // updated QualityProfile
 }
+
+export async function fsList(path) {
+  const params = path ? { path } : {}
+  const { data } = await http.get('/api/admin/fs/list', { params })
+  return data  // { path, parent, entries: [{name, path}] }
+}
+
+export async function fsMkdir(path) {
+  const { data } = await http.post('/api/admin/fs/mkdir', { path })
+  return data  // { path }
+}

@@ -8,6 +8,7 @@ import org.lolobored.plexdownloader.dto.SyncStatusResponse;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.UserRepository;
 import org.lolobored.plexdownloader.service.*;
+import org.lolobored.plexdownloader.transcode.FileBrowserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -49,6 +50,7 @@ class AdminControllerTest {
     @MockitoBean LibrarySyncService syncService;
     @MockitoBean LibrarySyncScheduler syncScheduler;
     @MockitoBean PlexMediaServerClient plexClient;
+    @MockitoBean FileBrowserService fileBrowserService;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
@@ -156,5 +158,25 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/api/admin/sync"))
             .andExpect(status().isConflict());
+    }
+
+    @Test
+    void putSettings_rejectsInvalidOutputDir() throws Exception {
+        when(fileBrowserService.isWritableWithinRoot("/etc")).thenReturn(false);
+
+        mockMvc.perform(put("/api/admin/settings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("output.movies.dir", "/etc"))))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void putSettings_acceptsValidOutputDir() throws Exception {
+        when(fileBrowserService.isWritableWithinRoot("/plex-conversion/libraries/movies")).thenReturn(true);
+
+        mockMvc.perform(put("/api/admin/settings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("output.movies.dir", "/plex-conversion/libraries/movies"))))
+            .andExpect(status().isNoContent());
     }
 }

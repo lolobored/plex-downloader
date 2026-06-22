@@ -12,7 +12,9 @@ vi.mock('../../api/admin.js', () => ({
   createQualityProfile:     vi.fn(),
   updateQualityProfile:     vi.fn(),
   deleteQualityProfile:     vi.fn(),
-  setDefaultQualityProfile: vi.fn()
+  setDefaultQualityProfile: vi.fn(),
+  fsList:                   vi.fn(),
+  fsMkdir:                  vi.fn()
 }))
 vi.mock('../../api/download.js', () => ({
   getQualityProfiles: vi.fn()
@@ -20,7 +22,8 @@ vi.mock('../../api/download.js', () => ({
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 import { getSettings, getSyncStatus, triggerSync, putSettings, getPlexLibraries,
-         createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile } from '../../api/admin.js'
+         createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile,
+         fsList, fsMkdir } from '../../api/admin.js'
 import { getQualityProfiles } from '../../api/download.js'
 
 beforeEach(() => {
@@ -32,6 +35,8 @@ function fullSettings(overrides = {}) {
     'plex.server.url':           'http://localhost:32400',
     'plex.sync.cron':            '0 0 */6 * * *',
     'plex.sync.libraries':       '1',
+    'output.movies.dir':         '/plex-conversion/libraries/movies',
+    'output.tvshows.dir':        '/plex-conversion/libraries/tvshows',
     ...overrides
   }
 }
@@ -52,6 +57,8 @@ describe('SettingsView', () => {
       { key: '2', title: 'TV Shows', type: 'show' }
     ])
     putSettings.mockResolvedValue(undefined)
+    fsList.mockResolvedValue({ path: '/plex-conversion', parent: null, entries: [] })
+    fsMkdir.mockResolvedValue({})
     getQualityProfiles.mockResolvedValue(sampleProfiles)
     createQualityProfile.mockResolvedValue({ id: 3, name: 'New', codec: 'HEVC_QSV', container: 'MKV', qualityLevel: 23, resolutionCap: 'KEEP', audioMode: 'COPY', isDefault: false })
     updateQualityProfile.mockResolvedValue({})
@@ -231,5 +238,57 @@ describe('SettingsView', () => {
     await flushPromises()
 
     expect(deleteQualityProfile).toHaveBeenCalled()
+  })
+
+  // ── Output Folders section ───────────────────────────────────────────────────
+
+  it('renders Output Folders section', async () => {
+    const w = factory()
+    await flushPromises()
+    expect(w.text()).toContain('Output Folders')
+  })
+
+  it('renders movies output dir input with loaded value', async () => {
+    const w = factory()
+    await flushPromises()
+    const input = w.find('input[name="moviesDir"]')
+    expect(input.element.value).toBe('/plex-conversion/libraries/movies')
+  })
+
+  it('renders tvshows output dir input with loaded value', async () => {
+    const w = factory()
+    await flushPromises()
+    const input = w.find('input[name="tvshowsDir"]')
+    expect(input.element.value).toBe('/plex-conversion/libraries/tvshows')
+  })
+
+  it('browse movies button opens folder picker', async () => {
+    fsList.mockResolvedValue({ path: '/plex-conversion', parent: null, entries: [] })
+    const w = factory()
+    await flushPromises()
+    await w.find('[data-testid="browse-movies-btn"]').trigger('click')
+    await flushPromises()
+    // FolderPicker modal should appear
+    expect(w.find('.folder-picker-overlay').exists()).toBe(true)
+  })
+
+  it('browse tvshows button opens folder picker', async () => {
+    fsList.mockResolvedValue({ path: '/plex-conversion', parent: null, entries: [] })
+    const w = factory()
+    await flushPromises()
+    await w.find('[data-testid="browse-tvshows-btn"]').trigger('click')
+    await flushPromises()
+    expect(w.find('.folder-picker-overlay').exists()).toBe(true)
+  })
+
+  it('save output dirs calls putSettings with output dir keys', async () => {
+    const w = factory()
+    await flushPromises()
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    expect(putSettings).toHaveBeenCalledWith(expect.objectContaining({
+      'output.movies.dir':  '/plex-conversion/libraries/movies',
+      'output.tvshows.dir': '/plex-conversion/libraries/tvshows'
+    }))
   })
 })

@@ -75,6 +75,36 @@
     </section>
 
     <section class="card-section">
+      <h3>Output Folders</h3>
+      <div class="field">
+        <label>Movies output directory</label>
+        <div class="dir-field-row">
+          <input name="moviesDir" v-model="form.moviesDir" type="text" placeholder="/plex-conversion/libraries/movies" />
+          <button class="btn-browse" @click="openPicker('movies')" data-testid="browse-movies-btn">Browse</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>TV shows output directory</label>
+        <div class="dir-field-row">
+          <input name="tvshowsDir" v-model="form.tvshowsDir" type="text" placeholder="/plex-conversion/libraries/tvshows" />
+          <button class="btn-browse" @click="openPicker('tvshows')" data-testid="browse-tvshows-btn">Browse</button>
+        </div>
+      </div>
+      <p v-if="outputDirError" class="error-inline">{{ outputDirError }}</p>
+      <button class="btn-save" data-testid="save-output-dirs-btn" @click="saveOutputDirs" :disabled="saving">
+        {{ saving ? 'Saving…' : 'Save' }}
+      </button>
+      <p v-if="saveOk" class="ok">Saved.</p>
+
+      <FolderPicker
+        v-if="pickerOpen"
+        :initial-path="pickerInitialPath"
+        @select="onPickerSelect"
+        @close="pickerOpen = false"
+      />
+    </section>
+
+    <section class="card-section">
       <h3>Transcoding</h3>
 
       <hr class="section-divider" />
@@ -156,6 +186,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries,
          createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile } from '@/api/admin.js'
 import { getQualityProfiles } from '@/api/download.js'
+import FolderPicker from '@/components/FolderPicker.vue'
 
 const SYNC_OPTIONS = [
   { label: 'Every hour',     cron: '0 0 * * * *'    },
@@ -261,9 +292,16 @@ async function removeProfile(id) {
 }
 
 const form = reactive({
-  plexUrl:  '',
-  syncCron: ''
+  plexUrl:    '',
+  syncCron:   '',
+  moviesDir:  '',
+  tvshowsDir: ''
 })
+
+const outputDirError = ref(null)
+const pickerOpen = ref(false)
+const pickerField = ref(null)
+const pickerInitialPath = ref(null)
 
 onMounted(async () => {
   try {
@@ -272,6 +310,8 @@ onMounted(async () => {
     form.syncCron     = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
     const storedLibs = s['plex.sync.libraries'] ?? ''
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
+    form.moviesDir  = s['output.movies.dir']  ?? '/plex-conversion/libraries/movies'
+    form.tvshowsDir = s['output.tvshows.dir'] ?? '/plex-conversion/libraries/tvshows'
     syncStatus.value = ss
     // Resume progress bar if sync was already running when page loaded
     if (ss.state === 'RUNNING') resumePolling()
@@ -338,6 +378,41 @@ async function sync() {
     await resumePolling()
   } catch (e) {
     if (!destroyed) syncing.value = false
+  }
+}
+
+function openPicker(field) {
+  pickerField.value = field
+  pickerInitialPath.value = field === 'movies' ? form.moviesDir : form.tvshowsDir
+  pickerOpen.value = true
+}
+
+function onPickerSelect(path) {
+  if (pickerField.value === 'movies') {
+    form.moviesDir = path
+  } else {
+    form.tvshowsDir = path
+  }
+  pickerOpen.value = false
+}
+
+async function saveOutputDirs() {
+  saving.value = true
+  saveOk.value = false
+  outputDirError.value = null
+  const payload = {
+    'output.movies.dir':  form.moviesDir,
+    'output.tvshows.dir': form.tvshowsDir,
+  }
+  try {
+    await putSettings(payload)
+    saveOk.value = true
+    clearTimeout(saveOkTimer)
+    saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
+  } catch (e) {
+    outputDirError.value = e?.response?.data?.message ?? 'Save failed.'
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -417,4 +492,9 @@ input.readonly { opacity: 0.6; cursor: default; }
 .no-profiles { font-size: .85rem; color: var(--text-muted); margin-bottom: 16px; }
 .profile-form { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
 .profile-form-actions { display: flex; gap: 12px; align-items: center; }
+.dir-field-row { display: flex; gap: 8px; align-items: center; }
+.dir-field-row input { flex: 1; }
+.btn-browse { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+              border-radius: 6px; padding: 8px 14px; font-size: .85rem; cursor: pointer; white-space: nowrap; }
+.btn-browse:hover { border-color: var(--accent-blue); }
 </style>

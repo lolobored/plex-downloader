@@ -192,11 +192,25 @@ public class DownloadService {
     private DownloadQueueItem buildItem(User user, DownloadQueueItem.MediaType type,
                                         Long mediaId, String plexFilePath, String subDir,
                                         String title, QualityProfile profile) {
-        String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
         String srcName = Path.of(plexFilePath).getFileName().toString();
         String stem = srcName.replaceFirst("\\.[^.]+$", "");
         String outName = stem + profile.getContainer().extension();
-        String destPath = Path.of(conversionDir, "libraries", subDir, outName).toString();
+
+        // subDir starts with "movies/" or "tvshows/" — pick configured root, strip the type prefix
+        String destPath;
+        if (subDir.startsWith("movies/")) {
+            String root = settings.get("output.movies.dir").orElse("/plex-conversion/libraries/movies");
+            String relative = subDir.substring("movies/".length());
+            destPath = Path.of(root, relative, outName).toString();
+        } else if (subDir.startsWith("tvshows/")) {
+            String root = settings.get("output.tvshows.dir").orElse("/plex-conversion/libraries/tvshows");
+            String relative = subDir.substring("tvshows/".length());
+            destPath = Path.of(root, relative, outName).toString();
+        } else {
+            // fallback: use legacy plex.conversion.dir behaviour
+            String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
+            destPath = Path.of(conversionDir, "libraries", subDir, outName).toString();
+        }
 
         int nextPos = queueRepo.findMaxQueuePosition().orElse(0) + 1;
 
