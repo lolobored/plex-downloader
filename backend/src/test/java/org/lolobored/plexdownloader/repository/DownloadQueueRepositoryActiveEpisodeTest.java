@@ -4,8 +4,8 @@ import org.lolobored.plexdownloader.model.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Set;
@@ -16,10 +16,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Regression tests for Fix 2: findActiveEpisodeIdsForShow / findActiveEpisodeIdsForSeason
  * must include FETCHING and COPYING statuses so mid-fetch/mid-copy episodes are not
  * re-enqueued by subscription sync.
+ *
+ * {@code @Transactional} rolls back each test so persisted users/items don't pollute the
+ * shared H2 database (which would break count-based tests in other classes).
  */
 @SpringBootTest
 @ActiveProfiles("test")
-@DirtiesContext
+@Transactional
 class DownloadQueueRepositoryActiveEpisodeTest {
 
     @Autowired DownloadQueueRepository queueRepo;
