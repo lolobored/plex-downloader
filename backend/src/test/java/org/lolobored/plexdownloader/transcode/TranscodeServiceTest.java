@@ -396,6 +396,59 @@ class TranscodeServiceTest {
     }
 
     @Test
+    void processRunnerStartThrows_setsErrorAndDeletesTempDir(@TempDir Path tmp) throws Exception {
+        // Simulate ffmpeg missing / not startable: processRunner.start throws UncheckedIOException
+        Path src = tmp.resolve("a.avi");
+        Files.write(src, new byte[50]);
+        Path dest = tmp.resolve("dest/a.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(20L, src.toString(), dest.toString());
+        when(queueRepo.findByIdWithProfile(20L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(20L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+        when(processRunner.start(anyList(), any(), any()))
+            .thenThrow(new java.io.UncheckedIOException("ffmpeg not found",
+                new java.io.IOException("No such file or directory")));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.transcode(20L);
+
+        // Item must end in ERROR, not stuck in TRANSCODING/FETCHING
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.ERROR);
+        assertThat(it.getTranscodeError()).contains("Transcode setup failed");
+        // Temp dir must be cleaned up (no leaked GBs)
+        assertThat(tempBase.resolve("plex-downloader/20")).doesNotExist();
+        // Final dest must not exist
+        assertThat(dest).doesNotExist();
+    }
+
+    @Test
+    void mediaProbeThrows_setsErrorAndDeletesTempDir(@TempDir Path tmp) throws Exception {
+        // Simulate mediaProbe throwing (e.g. ffprobe not found)
+        Path src = tmp.resolve("b.avi");
+        Files.write(src, new byte[50]);
+        Path dest = tmp.resolve("dest/b.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(21L, src.toString(), dest.toString());
+        when(queueRepo.findByIdWithProfile(21L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(21L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenThrow(new RuntimeException("ffprobe not found"));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.transcode(21L);
+
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.ERROR);
+        assertThat(it.getTranscodeError()).contains("Transcode setup failed");
+        assertThat(tempBase.resolve("plex-downloader/21")).doesNotExist();
+    }
+
+    @Test
     void cancel_unknownItem_returnsFalse() {
         TranscodeConfig cfg = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128", "/tmp");
         TranscodeService service = new TranscodeService(queueRepo, mediaProbe,

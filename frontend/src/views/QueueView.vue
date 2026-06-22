@@ -324,7 +324,7 @@ const QueueItemRow = defineComponent({
           class: 'btn-remove',
           'data-testid': `remove-btn-${item.id}`,
           disabled: isRemoving || isInProgress,
-          title: isInProgress ? 'Wait for transcoding to finish' : 'Remove',
+          title: isInProgress ? 'Wait for the current operation to finish' : 'Remove',
           onClick: (e) => { e.stopPropagation(); emit('remove', item.id) }
         }, isRemoving ? '…' : '✕'),
       ].filter(Boolean))

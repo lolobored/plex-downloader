@@ -70,81 +70,93 @@ public class TranscodeService {
         }
 
         // ── TRANSCODING: probe local copy, build cmd, run ffmpeg ─────────────
-        item.setStatus(DownloadQueueItem.Status.TRANSCODING);
-        queueRepo.save(item);
-
-        MediaInfo info = mediaProbe.probe(tempSrcFile.toString());
-
-        List<String> cmd = commandBuilder.build(item.getQualityProfile(),
-            tempSrcFile.toString(), tempFile.toString(), info);
-
-        Deque<String> stderrTail = new ArrayDeque<>();
-        AtomicInteger lastPct = new AtomicInteger(-1);
-
-        RunningTranscode rt = processRunner.start(cmd,
-            line -> {
-                OptionalInt pct = progressParser.percentFor(line, info.durationSeconds());
-                if (pct.isPresent()) {
-                    int p = pct.getAsInt();
-                    if (lastPct.getAndSet(p) != p) {
-                        persistProgress(itemId, p);
-                    }
-                }
-            },
-            line -> {
-                synchronized (stderrTail) {
-                    stderrTail.addLast(line);
-                    while (stderrTail.size() > STDERR_TAIL) stderrTail.removeFirst();
-                }
-            });
-
-        running.put(itemId, rt);
-        int exit;
+        // Any unexpected exception here (UncheckedIOException from processRunner.start,
+        // RuntimeException from mediaProbe/commandBuilder, etc.) must clean up temp and
+        // mark the item ERROR rather than leaving it stuck in TRANSCODING/FETCHING.
         try {
-            exit = rt.waitForExit();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            exit = -1;
-        } finally {
-            running.remove(itemId);
-        }
+            item.setStatus(DownloadQueueItem.Status.TRANSCODING);
+            queueRepo.save(item);
 
-        DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
-        if (fresh == null) {
-            // cancelled + deleted — clean up temp
-            deleteTempDir(tempItemDir);
-            return;
-        }
+            MediaInfo info = mediaProbe.probe(tempSrcFile.toString());
 
-        if (exit == 0) {
-            // Move temp file → final destination
-            Path destPath = Path.of(fresh.getDestFilePath());
-            fresh.setStatus(DownloadQueueItem.Status.COPYING);
-            queueRepo.save(fresh);
+            List<String> cmd = commandBuilder.build(item.getQualityProfile(),
+                tempSrcFile.toString(), tempFile.toString(), info);
 
+            Deque<String> stderrTail = new ArrayDeque<>();
+            AtomicInteger lastPct = new AtomicInteger(-1);
+
+            RunningTranscode rt = processRunner.start(cmd,
+                line -> {
+                    OptionalInt pct = progressParser.percentFor(line, info.durationSeconds());
+                    if (pct.isPresent()) {
+                        int p = pct.getAsInt();
+                        if (lastPct.getAndSet(p) != p) {
+                            persistProgress(itemId, p);
+                        }
+                    }
+                },
+                line -> {
+                    synchronized (stderrTail) {
+                        stderrTail.addLast(line);
+                        while (stderrTail.size() > STDERR_TAIL) stderrTail.removeFirst();
+                    }
+                });
+
+            running.put(itemId, rt);
+            int exit;
             try {
-                Files.createDirectories(destPath.getParent());
-                moveFile(tempFile, destPath);
-                fresh.setStatus(DownloadQueueItem.Status.DONE);
-                fresh.setProgressPercent(100);
-                fresh.setCompletedAt(Instant.now());
-                FileSizeStats stats = fileSizeStats(fresh.getSourceFilePath(), destPath.toString());
-                fresh.setSourceSizeBytes(stats.srcSize());
-                fresh.setOutputSizeBytes(stats.destSize());
-                fresh.setCompressionRatio(stats.ratio());
-                queueRepo.save(fresh);
-                log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
-            } catch (IOException e) {
-                deletePartial(destPath.toString());
-                failItem(fresh, "Move to destination failed: " + e.getMessage());
+                exit = rt.waitForExit();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                exit = -1;
             } finally {
-                deleteTempDir(tempItemDir);
+                running.remove(itemId);
             }
-        } else {
-            String tail;
-            synchronized (stderrTail) { tail = String.join("\n", stderrTail); }
+
+            DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
+            if (fresh == null) {
+                // cancelled + deleted — clean up temp
+                deleteTempDir(tempItemDir);
+                return;
+            }
+
+            if (exit == 0) {
+                // Move temp file → final destination
+                Path destPath = Path.of(fresh.getDestFilePath());
+                fresh.setStatus(DownloadQueueItem.Status.COPYING);
+                queueRepo.save(fresh);
+
+                try {
+                    Files.createDirectories(destPath.getParent());
+                    // Capture sizes from LOCAL temp files before the move (Fix 3)
+                    FileSizeStats stats = fileSizeStats(tempSrcFile.toString(), tempFile.toString());
+                    moveFile(tempFile, destPath);
+                    fresh.setStatus(DownloadQueueItem.Status.DONE);
+                    fresh.setProgressPercent(100);
+                    fresh.setCompletedAt(Instant.now());
+                    fresh.setSourceSizeBytes(stats.srcSize());
+                    fresh.setOutputSizeBytes(stats.destSize());
+                    fresh.setCompressionRatio(stats.ratio());
+                    queueRepo.save(fresh);
+                    log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
+                } catch (IOException e) {
+                    deletePartial(destPath.toString());
+                    failItem(fresh, "Move to destination failed: " + e.getMessage());
+                } finally {
+                    deleteTempDir(tempItemDir);
+                }
+            } else {
+                String tail;
+                synchronized (stderrTail) { tail = String.join("\n", stderrTail); }
+                deleteTempDir(tempItemDir);
+                failItem(fresh, "ffmpeg exit " + exit + (tail.isBlank() ? "" : ": " + tail));
+            }
+        } catch (Exception e) {
+            // Unexpected exception (e.g. UncheckedIOException from processRunner.start,
+            // RuntimeException from mediaProbe/commandBuilder) — clean up and fail the item.
             deleteTempDir(tempItemDir);
-            failItem(fresh, "ffmpeg exit " + exit + (tail.isBlank() ? "" : ": " + tail));
+            DownloadQueueItem freshOnError = queueRepo.findById(itemId).orElse(item);
+            failItem(freshOnError, "Transcode setup failed: " + e.getMessage());
         }
     }
 
