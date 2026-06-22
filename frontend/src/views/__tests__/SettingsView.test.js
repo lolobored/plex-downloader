@@ -4,15 +4,24 @@ import { createTestingPinia } from '@pinia/testing'
 import SettingsView from '../SettingsView.vue'
 
 vi.mock('../../api/admin.js', () => ({
-  getSettings:      vi.fn(),
-  putSettings:      vi.fn(),
-  getSyncStatus:    vi.fn(),
-  triggerSync:      vi.fn(),
-  getPlexLibraries: vi.fn()
+  getSettings:              vi.fn(),
+  putSettings:              vi.fn(),
+  getSyncStatus:            vi.fn(),
+  triggerSync:              vi.fn(),
+  getPlexLibraries:         vi.fn(),
+  createQualityProfile:     vi.fn(),
+  updateQualityProfile:     vi.fn(),
+  deleteQualityProfile:     vi.fn(),
+  setDefaultQualityProfile: vi.fn()
+}))
+vi.mock('../../api/download.js', () => ({
+  getQualityProfiles: vi.fn()
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
-import { getSettings, getSyncStatus, triggerSync, putSettings, getPlexLibraries } from '../../api/admin.js'
+import { getSettings, getSyncStatus, triggerSync, putSettings, getPlexLibraries,
+         createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile } from '../../api/admin.js'
+import { getQualityProfiles } from '../../api/download.js'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -20,14 +29,18 @@ beforeEach(() => {
 
 function fullSettings(overrides = {}) {
   return {
-    'plex.server.url':     'http://localhost:32400',
-    'plex.sync.cron':      '0 0 */6 * * *',
-    'plex.sync.libraries': '1',
-    'tdarr.server.url':    '',
-    'tdarr.sync.cron':     '',
+    'plex.server.url':           'http://localhost:32400',
+    'plex.sync.cron':            '0 0 */6 * * *',
+    'plex.sync.libraries':       '1',
+    'transcode.max.concurrent':  '3',
     ...overrides
   }
 }
+
+const sampleProfiles = [
+  { id: 1, name: 'HD Default', codec: 'HEVC_QSV', container: 'MKV', qualityLevel: 23, resolutionCap: 'P1080', audioMode: 'COPY', isDefault: true },
+  { id: 2, name: 'SD Encode',  codec: 'H264_QSV', container: 'MP4', qualityLevel: 28, resolutionCap: 'P720',  audioMode: 'AAC',  isDefault: false }
+]
 
 describe('SettingsView', () => {
   function factory(role = 'ADMIN') {
@@ -40,6 +53,11 @@ describe('SettingsView', () => {
       { key: '2', title: 'TV Shows', type: 'show' }
     ])
     putSettings.mockResolvedValue(undefined)
+    getQualityProfiles.mockResolvedValue(sampleProfiles)
+    createQualityProfile.mockResolvedValue({ id: 3, name: 'New', codec: 'HEVC_QSV', container: 'MKV', qualityLevel: 23, resolutionCap: 'KEEP', audioMode: 'COPY', isDefault: false })
+    updateQualityProfile.mockResolvedValue({})
+    deleteQualityProfile.mockResolvedValue(undefined)
+    setDefaultQualityProfile.mockResolvedValue({})
     return mount(SettingsView, { global: { plugins: [pinia] } })
   }
 
@@ -64,23 +82,9 @@ describe('SettingsView', () => {
     expect(triggerSync).toHaveBeenCalled()
   })
 
-  it('renders tdarr URL field', async () => {
-    getSettings.mockResolvedValue(fullSettings({ 'tdarr.server.url': 'http://tdarr:8265', 'tdarr.sync.cron': '0 */30 * * * *' }))
-    getSyncStatus.mockResolvedValue({ state: 'IDLE', lastSyncAt: null, itemsSynced: 0, error: null })
-    getPlexLibraries.mockResolvedValue([])
-    const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { auth: { role: 'ADMIN' } } })
-    const w = mount(SettingsView, { global: { plugins: [pinia] } })
-    await flushPromises()
-    const input = w.find('input[name="tdarrUrl"]')
-    expect(input.exists()).toBe(true)
-    expect(input.element.value).toBe('http://tdarr:8265')
-  })
-
   it('has no plex token field', async () => {
     const w = factory()
     await flushPromises()
-    expect(w.find('input[name="plexToken"]').exists()).toBe(false)
-    // Tdarr API key field is password type; no Plex token field should exist
     expect(w.find('input[name="plexToken"]').exists()).toBe(false)
   })
 
@@ -133,5 +137,119 @@ describe('SettingsView', () => {
     await flushPromises()
     const payload = putSettings.mock.calls[0][0]
     expect(payload['plex.sync.libraries']).toBe('1,2')
+  })
+
+  // ── Transcoding section ──────────────────────────────────────────────────────
+
+  it('renders Transcoding section heading', async () => {
+    const w = factory()
+    await flushPromises()
+    expect(w.text()).toContain('Transcoding')
+  })
+
+  it('max-concurrent input reflects transcode.max.concurrent from settings', async () => {
+    const w = factory()
+    await flushPromises()
+    const input = w.find('input[name="maxConcurrent"]')
+    expect(input.exists()).toBe(true)
+    expect(input.element.value).toBe('3')
+  })
+
+  it('save payload includes transcode.max.concurrent and only expected keys', async () => {
+    const w = factory()
+    await flushPromises()
+    await w.find('.btn-save').trigger('click')
+    await flushPromises()
+    const payload = putSettings.mock.calls[0][0]
+    expect(payload).toHaveProperty('transcode.max.concurrent', '3')
+    const expectedKeys = ['plex.server.url', 'plex.sync.cron', 'plex.sync.libraries', 'transcode.max.concurrent']
+    expect(Object.keys(payload).sort()).toEqual(expectedKeys.sort())
+  })
+
+  it('renders quality profile list from getQualityProfiles', async () => {
+    const w = factory()
+    await flushPromises()
+    expect(getQualityProfiles).toHaveBeenCalled()
+    expect(w.text()).toContain('HD Default')
+    expect(w.text()).toContain('SD Encode')
+  })
+
+  it('marks the default profile with a default badge', async () => {
+    const w = factory()
+    await flushPromises()
+    const badges = w.findAll('.default-badge')
+    expect(badges.length).toBe(1)
+    expect(badges[0].text()).toBe('default')
+  })
+
+  it('create profile calls createQualityProfile with exact enum strings', async () => {
+    getQualityProfiles
+      .mockResolvedValueOnce(sampleProfiles)  // initial load
+      .mockResolvedValueOnce([...sampleProfiles, { id: 3, name: 'My Profile', codec: 'HEVC_QSV', container: 'MKV', qualityLevel: 23, resolutionCap: 'KEEP', audioMode: 'COPY', isDefault: false }])
+    const w = factory()
+    await flushPromises()
+
+    await w.find('input[name="profileName"]').setValue('My Profile')
+    // codec, container, resolutionCap, audioMode already default to correct enum values
+    await w.find('[data-testid="save-profile-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(createQualityProfile).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'My Profile',
+      codec: 'HEVC_QSV',
+      container: 'MKV',
+      resolutionCap: 'KEEP',
+      audioMode: 'COPY'
+    }))
+  })
+
+  it('edit profile calls updateQualityProfile with correct id', async () => {
+    getQualityProfiles
+      .mockResolvedValueOnce(sampleProfiles)
+      .mockResolvedValueOnce(sampleProfiles)
+    const w = factory()
+    await flushPromises()
+
+    // Click the first Edit button (profile id=1)
+    await w.findAll('.btn-sm')[0].trigger('click')
+    await flushPromises()
+
+    // Change name
+    await w.find('input[name="profileName"]').setValue('Renamed Profile')
+    await w.find('[data-testid="save-profile-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(updateQualityProfile).toHaveBeenCalledWith(1, expect.objectContaining({ name: 'Renamed Profile' }))
+  })
+
+  it('set default calls setDefaultQualityProfile', async () => {
+    getQualityProfiles
+      .mockResolvedValueOnce(sampleProfiles)
+      .mockResolvedValueOnce(sampleProfiles)
+    const w = factory()
+    await flushPromises()
+
+    // "Set default" buttons: first profile (id=1) is already default so its button is disabled;
+    // the second profile (id=2) has an enabled Set default button
+    const setDefaultBtns = w.findAll('.btn-sm').filter(b => b.text() === 'Set default')
+    const enabledBtn = setDefaultBtns.find(b => !b.element.disabled)
+    await enabledBtn.trigger('click')
+    await flushPromises()
+
+    expect(setDefaultQualityProfile).toHaveBeenCalledWith(2)
+  })
+
+  it('delete profile calls deleteQualityProfile', async () => {
+    getQualityProfiles
+      .mockResolvedValueOnce(sampleProfiles)
+      .mockResolvedValueOnce([sampleProfiles[0]])
+    const w = factory()
+    await flushPromises()
+
+    const deleteBtns = w.findAll('.btn-danger')
+    await deleteBtns[0].trigger('click')
+    await flushPromises()
+
+    expect(deleteQualityProfile).toHaveBeenCalled()
   })
 })

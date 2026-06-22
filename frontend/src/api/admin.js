@@ -24,14 +24,6 @@ export async function getPlexLibraries(url) {
   return data  // [{ key, title, type, agent }, ...]
 }
 
-export async function testTdarr(url, apiKey) {
-  const params = {}
-  if (url)    params.url    = url
-  if (apiKey) params.apiKey = apiKey
-  const { data } = await http.get('/api/admin/tdarr/test', { params })
-  return data  // { ok: true } or { ok: false, error: '...' }
-}
-
 export async function createQualityProfile(profile) {
   const { data } = await http.post('/api/admin/quality-profiles', profile)
   return data  // created QualityProfile

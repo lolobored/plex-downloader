@@ -75,29 +75,90 @@
     </section>
 
     <section class="card-section">
-      <h3>Tdarr</h3>
+      <h3>Transcoding</h3>
+
       <div class="field">
-        <label>Tdarr server URL</label>
-        <div class="url-row">
-          <input name="tdarrUrl" v-model="form.tdarrUrl" type="url" placeholder="http://192.168.1.10:8265" />
-          <button class="btn-load" data-testid="test-tdarr-btn" @click="testTdarrConnection" :disabled="testingTdarr">
-            {{ testingTdarr ? 'Testing…' : '↻ Test' }}
-          </button>
-        </div>
-        <p v-if="tdarrTestOk === true"  class="ok tdarr-status">✓ {{ tdarrTestError || 'Connected' }}</p>
-        <p v-if="tdarrTestOk === false" class="error-inline tdarr-status">✗ {{ tdarrTestError }}</p>
-      </div>
-      <div class="field">
-        <label>Tdarr API key <span class="hint">(required when auth is enabled on Tdarr)</span></label>
-        <input name="tdarrApiKey" v-model="form.tdarrApiKey" type="password" placeholder="tapi_…" autocomplete="off" />
-      </div>
-      <div class="field">
-        <label>Sync Tdarr status every</label>
-        <select name="tdarrSyncCron" v-model="form.tdarrSyncCron" class="select-field">
-          <option v-for="o in TDARR_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
-        </select>
+        <label>Max concurrent transcodes</label>
+        <input
+          name="maxConcurrent"
+          v-model.number="form.maxConcurrent"
+          type="number"
+          min="1"
+          placeholder="2"
+        />
       </div>
       <button class="btn-save" @click="save" :disabled="saving">Save</button>
+      <p v-if="saveOk" class="ok">Saved.</p>
+
+      <hr class="section-divider" />
+
+      <h4 class="sub-heading">Quality Profiles</h4>
+
+      <div v-if="profiles.length" class="profile-list">
+        <div
+          v-for="p in profiles"
+          :key="p.id"
+          :class="['profile-row', { 'profile-default': p.isDefault }]"
+        >
+          <span class="profile-name">{{ p.name }}<span v-if="p.isDefault" class="default-badge">default</span></span>
+          <span class="profile-meta">{{ p.codec }} · {{ p.container }} · Q{{ p.qualityLevel }} · {{ p.resolutionCap }} · {{ p.audioMode }}</span>
+          <div class="profile-actions">
+            <button class="btn-sm" @click="editProfile(p)">Edit</button>
+            <button class="btn-sm" @click="setDefault(p.id)" :disabled="p.isDefault">Set default</button>
+            <button class="btn-sm btn-danger" @click="removeProfile(p.id)">Delete</button>
+          </div>
+        </div>
+      </div>
+      <p v-else class="no-profiles">No quality profiles yet.</p>
+
+      <div class="profile-form">
+        <h4 class="sub-heading">{{ editingProfile.id ? 'Edit Profile' : 'New Profile' }}</h4>
+        <div class="field">
+          <label>Name</label>
+          <input name="profileName" v-model="editingProfile.name" type="text" placeholder="e.g. HD HEVC" />
+        </div>
+        <div class="field">
+          <label>Codec</label>
+          <select name="profileCodec" v-model="editingProfile.codec" class="select-field">
+            <option value="HEVC_QSV">HEVC (QuickSync)</option>
+            <option value="H264_QSV">H.264 (QuickSync)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Container</label>
+          <select name="profileContainer" v-model="editingProfile.container" class="select-field">
+            <option value="MKV">MKV</option>
+            <option value="MP4">MP4</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Quality level <span class="hint">(lower = better; e.g. 18–30)</span></label>
+          <input name="profileQuality" v-model.number="editingProfile.qualityLevel" type="number" min="1" max="51" placeholder="23" />
+        </div>
+        <div class="field">
+          <label>Resolution cap</label>
+          <select name="profileResolution" v-model="editingProfile.resolutionCap" class="select-field">
+            <option value="KEEP">Keep source</option>
+            <option value="UHD_4K">4K UHD</option>
+            <option value="P1080">1080p</option>
+            <option value="P720">720p</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Audio mode</label>
+          <select name="profileAudio" v-model="editingProfile.audioMode" class="select-field">
+            <option value="COPY">Copy (passthrough)</option>
+            <option value="AAC">AAC</option>
+          </select>
+        </div>
+        <p v-if="profileError" class="error-inline">{{ profileError }}</p>
+        <div class="profile-form-actions">
+          <button class="btn-save" data-testid="save-profile-btn" @click="saveProfile" :disabled="savingProfile">
+            {{ savingProfile ? 'Saving…' : (editingProfile.id ? 'Update Profile' : 'Create Profile') }}
+          </button>
+          <button v-if="editingProfile.id" class="btn-sm" @click="resetProfileForm">Cancel</button>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -105,20 +166,15 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries, testTdarr } from '@/api/admin.js'
+import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries,
+         createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile } from '@/api/admin.js'
+import { getQualityProfiles } from '@/api/download.js'
 
 const SYNC_OPTIONS = [
   { label: 'Every hour',     cron: '0 0 * * * *'    },
   { label: 'Every 6 hours',  cron: '0 0 */6 * * *'  },
   { label: 'Every 12 hours', cron: '0 0 */12 * * *' },
   { label: 'Every day',      cron: '0 0 0 * * *'    },
-]
-
-const TDARR_OPTIONS = [
-  { label: 'Every 15 minutes', cron: '0 */15 * * * *' },
-  { label: 'Every 30 minutes', cron: '0 */30 * * * *' },
-  { label: 'Every hour',       cron: '0 0 * * * *'    },
-  { label: 'Every 6 hours',    cron: '0 0 */6 * * *'  },
 ]
 
 function matchCron(value, options) {
@@ -147,16 +203,80 @@ const selectedLibraryKeys = ref([])
 const loadingLibraries    = ref(false)
 const libraryError        = ref(null)
 
-const testingTdarr  = ref(false)
-const tdarrTestOk   = ref(null)   // null=untested, true=ok, false=fail
-const tdarrTestError = ref('')
+// Quality profiles state
+const profiles      = ref([])
+const savingProfile = ref(false)
+const profileError  = ref(null)
+
+function blankProfileForm() {
+  return { id: null, name: '', codec: 'HEVC_QSV', container: 'MKV', qualityLevel: 23, resolutionCap: 'KEEP', audioMode: 'COPY' }
+}
+const editingProfile = reactive(blankProfileForm())
+
+function resetProfileForm() {
+  Object.assign(editingProfile, blankProfileForm())
+  profileError.value = null
+}
+
+function editProfile(p) {
+  Object.assign(editingProfile, { id: p.id, name: p.name, codec: p.codec, container: p.container,
+    qualityLevel: p.qualityLevel, resolutionCap: p.resolutionCap, audioMode: p.audioMode })
+  profileError.value = null
+}
+
+async function fetchProfiles() {
+  profiles.value = await getQualityProfiles()
+}
+
+async function saveProfile() {
+  if (!editingProfile.name.trim()) { profileError.value = 'Name is required.'; return }
+  profileError.value = null
+  savingProfile.value = true
+  try {
+    const payload = {
+      name: editingProfile.name.trim(),
+      codec: editingProfile.codec,
+      container: editingProfile.container,
+      qualityLevel: editingProfile.qualityLevel,
+      resolutionCap: editingProfile.resolutionCap,
+      audioMode: editingProfile.audioMode
+    }
+    if (editingProfile.id) {
+      await updateQualityProfile(editingProfile.id, payload)
+    } else {
+      await createQualityProfile(payload)
+    }
+    resetProfileForm()
+    await fetchProfiles()
+  } catch (e) {
+    profileError.value = e?.response?.data?.message ?? 'Save failed.'
+  } finally {
+    savingProfile.value = false
+  }
+}
+
+async function setDefault(id) {
+  try {
+    await setDefaultQualityProfile(id)
+    await fetchProfiles()
+  } catch (e) {
+    profileError.value = 'Could not set default.'
+  }
+}
+
+async function removeProfile(id) {
+  try {
+    await deleteQualityProfile(id)
+    await fetchProfiles()
+  } catch (e) {
+    profileError.value = 'Could not delete profile.'
+  }
+}
 
 const form = reactive({
   plexUrl:       '',
   syncCron:      '',
-  tdarrUrl:      '',
-  tdarrApiKey:   '',
-  tdarrSyncCron: ''
+  maxConcurrent: 2
 })
 
 onMounted(async () => {
@@ -164,9 +284,7 @@ onMounted(async () => {
     const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
     form.plexUrl      = s['plex.server.url']  ?? ''
     form.syncCron     = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
-    form.tdarrUrl           = s['tdarr.server.url']       ?? ''
-    form.tdarrApiKey        = s['tdarr.api.key']          ?? ''
-    form.tdarrSyncCron      = matchCron(s['tdarr.sync.cron'],   TDARR_OPTIONS)
+    form.maxConcurrent = Number(s['transcode.max.concurrent'] ?? '2')
     const storedLibs = s['plex.sync.libraries'] ?? ''
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
     syncStatus.value = ss
@@ -177,18 +295,17 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load settings:', e)
   }
+  await fetchProfiles()
 })
 
 async function save() {
   saving.value = true
   saveOk.value = false
   const payload = {
-    'plex.server.url':       form.plexUrl,
-    'plex.sync.cron':        form.syncCron,
-    'plex.sync.libraries':   selectedLibraryKeys.value.join(','),
-    'tdarr.server.url':      form.tdarrUrl,
-    'tdarr.api.key':         form.tdarrApiKey,
-    'tdarr.sync.cron':       form.tdarrSyncCron
+    'plex.server.url':           form.plexUrl,
+    'plex.sync.cron':            form.syncCron,
+    'plex.sync.libraries':       selectedLibraryKeys.value.join(','),
+    'transcode.max.concurrent':  String(form.maxConcurrent)
   }
   try {
     await putSettings(payload)
@@ -197,27 +314,6 @@ async function save() {
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
   } finally {
     saving.value = false
-  }
-}
-
-async function testTdarrConnection() {
-  testingTdarr.value = true
-  tdarrTestOk.value = null
-  tdarrTestError.value = ''
-  try {
-    const result = await testTdarr(form.tdarrUrl, form.tdarrApiKey)
-    tdarrTestOk.value = result.ok
-    if (result.ok) {
-      // show detail (e.g. "Connected (401 — check API key)")
-      if (result.detail && result.detail !== 'Connected') tdarrTestError.value = result.detail
-    } else {
-      tdarrTestError.value = result.error ?? 'Connection failed'
-    }
-  } catch {
-    tdarrTestOk.value = false
-    tdarrTestError.value = 'Request failed'
-  } finally {
-    testingTdarr.value = false
   }
 }
 
@@ -317,7 +413,24 @@ input.readonly { opacity: 0.6; cursor: default; }
 .btn-load:hover:not(:disabled) { border-color: var(--accent-blue); }
 .error-inline   { color: var(--red); font-size: .85rem; margin-top: 6px; }
 .hint           { font-size: .75rem; color: var(--text-muted); font-weight: 400; }
-.url-row        { display: flex; gap: 8px; align-items: center; }
-.url-row input  { flex: 1; }
-.tdarr-status   { margin-top: 4px; }
+.section-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.sub-heading { font-size: .9rem; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+.profile-list { margin-bottom: 16px; }
+.profile-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px;
+               background: var(--surface2); border-radius: 6px; margin-bottom: 8px; }
+.profile-default { border-left: 3px solid var(--green); }
+.profile-name { font-size: .9rem; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.default-badge { background: var(--green); color: #fff; font-size: .7rem; font-weight: 700;
+                 padding: 2px 7px; border-radius: 10px; }
+.profile-meta { font-size: .8rem; color: var(--text-muted); }
+.profile-actions { display: flex; gap: 8px; margin-top: 6px; }
+.btn-sm { background: var(--surface); border: 1px solid var(--border); color: var(--text);
+          border-radius: 5px; padding: 4px 12px; font-size: .8rem; cursor: pointer; }
+.btn-sm:hover:not(:disabled) { border-color: var(--accent-blue); }
+.btn-sm:disabled { opacity: 0.5; cursor: default; }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; }
+.no-profiles { font-size: .85rem; color: var(--text-muted); margin-bottom: 16px; }
+.profile-form { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+.profile-form-actions { display: flex; gap: 12px; align-items: center; }
 </style>
