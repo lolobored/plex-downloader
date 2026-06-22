@@ -53,14 +53,19 @@ public class FileBrowserService {
         try {
             Files.createDirectories(dir);
             return dir.toAbsolutePath().toString();
+        } catch (AccessDeniedException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot create directory");
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Cannot create directory");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot create directory");
         }
     }
 
     public boolean isWritable(String path) {
         if (path == null || path.isBlank()) return false;
         Path p = Paths.get(path).normalize();
+        if (!p.isAbsolute()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Path must be absolute");
+        }
         if (Files.exists(p)) {
             return Files.isWritable(p);
         }

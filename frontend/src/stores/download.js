@@ -17,8 +17,12 @@ export const useDownloadStore = defineStore('download', () => {
   }
 
   async function fetchOutputStatus() {
-    const status = await getOutputStatus()
-    outputConfigured.value = status.configured
+    try {
+      const status = await getOutputStatus()
+      outputConfigured.value = status.configured
+    } catch {
+      outputConfigured.value = false
+    }
   }
 
   function statusFor(mediaType, mediaId) {

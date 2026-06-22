@@ -611,6 +611,36 @@ class DownloadServiceTest {
     }
 
     @Test
+    void enqueueEpisode_throwsConflictWhenOutputNotConfigured() {
+        when(settings.get("output.movies.dir")).thenReturn(Optional.empty());
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.enqueueEpisode(1L, new User()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("409");
+    }
+
+    @Test
+    void enqueueSeason_throwsConflictWhenOutputNotConfigured() {
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(""));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(""));
+
+        assertThatThrownBy(() -> service.enqueueSeason(10L, new User()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("409");
+    }
+
+    @Test
+    void enqueueShow_throwsConflictWhenOutputNotConfigured() {
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(""));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(""));
+
+        assertThatThrownBy(() -> service.enqueueShow(100L, new User()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("409");
+    }
+
+    @Test
     void buildItem_usesConfiguredTvShowsDirFromSettings() {
         TvShow show = new TvShow(); show.setId(100L); show.setTitle("Chernobyl");
         Season season = new Season(); season.setId(10L); season.setSeasonNumber(1); season.setShow(show);

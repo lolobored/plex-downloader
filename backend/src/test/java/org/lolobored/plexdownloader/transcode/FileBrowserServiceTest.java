@@ -46,11 +46,10 @@ class FileBrowserServiceTest {
     }
 
     @Test
-    void listDirectories_pathOutsideFormerRootIsNowAllowed() throws Exception {
-        // No sandbox — any readable path is allowed
+    void listDirectories_anyReadableAbsolutePathIsAllowed(@TempDir Path secondDir) throws Exception {
+        // No sandbox — any readable absolute path is allowed (even outside this test's tempDir)
         FileBrowserService svc = service();
-        // /tmp is always readable on the test OS
-        assertThatNoException().isThrownBy(() -> svc.listDirectories(tempDir.toString()));
+        assertThatNoException().isThrownBy(() -> svc.listDirectories(secondDir.toString()));
     }
 
     @Test
