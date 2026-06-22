@@ -10,6 +10,7 @@ import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,7 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,12 +35,13 @@ class TranscodeServiceTest {
     @Mock DownloadQueueRepository queueRepo;
     @Mock MediaProbe mediaProbe;
     @Mock ProcessRunner processRunner;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     // We create service manually to inject TranscodeConfig with custom tempDir
     private TranscodeService serviceWithTempDir(String tempDir) {
         TranscodeConfig cfg = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128", tempDir);
         return new TranscodeService(queueRepo, mediaProbe,
-            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner, cfg);
+            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner, cfg, eventPublisher);
     }
 
     private DownloadQueueItem item(Long id, String src, String dest) {
@@ -450,9 +455,7 @@ class TranscodeServiceTest {
 
     @Test
     void cancel_unknownItem_returnsFalse() {
-        TranscodeConfig cfg = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128", "/tmp");
-        TranscodeService service = new TranscodeService(queueRepo, mediaProbe,
-            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner, cfg);
+        TranscodeService service = serviceWithTempDir("/tmp");
         assertThat(service.cancel(999L)).isFalse();
     }
 
@@ -502,5 +505,319 @@ class TranscodeServiceTest {
         assertThat(cancelCalled.get()).isTrue();
         transcodeThread.join(2_000);
         assertThat(transcodeThread.isAlive()).isFalse();
+    }
+
+    // ── Prefetch tests ────────────────────────────────────────────────────────
+
+    @Test
+    void prefetchSource_copiesSourceToTempSrcPath(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3, 4, 5});
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(100L, src.toString(), tmp.resolve("dest/out.mkv").toString());
+        it.setStatus(DownloadQueueItem.Status.QUEUED);
+        when(queueRepo.findByIdWithProfile(100L)).thenReturn(Optional.of(it));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.prefetchSource(100L);
+
+        // Wait for the async prefetch to complete (up to 5s)
+        Path expectedTempSrc = tempBase.resolve("plex-downloader/100/src/source.avi");
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (!Files.exists(expectedTempSrc) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+
+        assertThat(expectedTempSrc).exists();
+        assertThat(Files.size(expectedTempSrc)).isEqualTo(5L);
+    }
+
+    @Test
+    void prefetchSource_secondCallWhileInFlight_isNoOp(@TempDir Path tmp) throws Exception {
+        // Block the first prefetch so we can issue a second call while it's still in-flight
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3});
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        CountDownLatch blockPrefetch = new CountDownLatch(1);
+        CountDownLatch prefetchStarted = new CountDownLatch(1);
+
+        DownloadQueueItem it = item(101L, src.toString(), tmp.resolve("dest/out.mkv").toString());
+        it.setStatus(DownloadQueueItem.Status.QUEUED);
+
+        DownloadQueueItem it2 = item(102L, src.toString(), tmp.resolve("dest2/out.mkv").toString());
+        it2.setStatus(DownloadQueueItem.Status.QUEUED);
+
+        // Block the prefetch at repo load so the future is in flight when second call happens
+        when(queueRepo.findByIdWithProfile(101L)).thenAnswer(inv -> {
+            prefetchStarted.countDown();
+            blockPrefetch.await(5, TimeUnit.SECONDS);
+            return Optional.of(it);
+        });
+        when(queueRepo.findByIdWithProfile(102L)).thenReturn(Optional.of(it2));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+
+        // Start prefetch for item 101 (blocks at repo)
+        service.prefetchSource(101L);
+        // Wait until the prefetch task is running (future is in map)
+        assertThat(prefetchStarted.await(3, TimeUnit.SECONDS)).isTrue();
+        // prefetches map is non-empty now; second call should be a no-op
+        service.prefetchSource(102L);
+
+        // Unblock the first prefetch and let it complete
+        blockPrefetch.countDown();
+        // Wait a bit for 101 to complete
+        Path item101TempSrc = tempBase.resolve("plex-downloader/101/src/source.avi");
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (!Files.exists(item101TempSrc) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+
+        // item 102 should never have been staged
+        Path item102TempSrc = tempBase.resolve("plex-downloader/102/src/source.avi");
+        assertThat(item102TempSrc).doesNotExist();
+        // item 101 was staged
+        assertThat(item101TempSrc).exists();
+    }
+
+    @Test
+    void prefetchSource_nonQueuedItem_isNoOp(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3});
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(103L, src.toString(), tmp.resolve("dest/out.mkv").toString());
+        it.setStatus(DownloadQueueItem.Status.TRANSCODING); // Not QUEUED
+        when(queueRepo.findByIdWithProfile(103L)).thenReturn(Optional.of(it));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.prefetchSource(103L);
+
+        Thread.sleep(200);
+        assertThat(tempBase.resolve("plex-downloader/103")).doesNotExist();
+    }
+
+    @Test
+    void prefetchSource_missingItem_isNoOp(@TempDir Path tmp) throws Exception {
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        when(queueRepo.findByIdWithProfile(104L)).thenReturn(Optional.empty());
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.prefetchSource(104L); // Should not throw
+
+        Thread.sleep(200);
+        assertThat(tempBase.resolve("plex-downloader/104")).doesNotExist();
+    }
+
+    @Test
+    void transcode_withPrefetchedSource_skipsFileCopyAndReachesDone(@TempDir Path tmp) throws Exception {
+        // Source file on "NAS" (temp dir)
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3, 4, 5});
+        Path destDir = tmp.resolve("dest");
+        Files.createDirectories(destDir);
+        Path dest = destDir.resolve("source.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(200L, src.toString(), dest.toString());
+        it.setStatus(DownloadQueueItem.Status.QUEUED);
+        when(queueRepo.findByIdWithProfile(200L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(200L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+
+        // Trigger a real prefetch and wait for it to complete
+        service.prefetchSource(200L);
+        Path stagedSrc = tempBase.resolve("plex-downloader/200/src/source.avi");
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (!Files.exists(stagedSrc) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(stagedSrc).exists();
+        // Prefetch future is still in map (success path keeps it)
+        assertThat(service.getPrefetchCount()).isEqualTo(1);
+
+        // Delete the "NAS" source to prove transcode() won't attempt to re-copy it
+        Files.delete(src);
+
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            List<String> cmd = inv.getArgument(0);
+            Path tempFile = Path.of(cmd.get(cmd.size() - 1));
+            Files.createDirectories(tempFile.getParent());
+            Files.write(tempFile, new byte[]{9, 8, 7});
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        // transcode() must succeed using the prefetched staged file (NAS src is gone)
+        service.transcode(200L);
+
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
+        assertThat(dest).exists();
+        // Prefetch map must be cleared after consumption
+        assertThat(service.getPrefetchCount()).isEqualTo(0);
+    }
+
+    @Test
+    void transcode_at90percent_publishesNearDoneEvent(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3});
+        Path destDir = tmp.resolve("dest");
+        Files.createDirectories(destDir);
+        Path dest = destDir.resolve("source.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(300L, src.toString(), dest.toString());
+        when(queueRepo.findByIdWithProfile(300L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(300L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(100, 1920, 1080));
+
+        List<Object> publishedEvents = new ArrayList<>();
+        doAnswer(inv -> { publishedEvents.add(inv.getArgument(0)); return null; })
+            .when(eventPublisher).publishEvent(any(Object.class));
+
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            Consumer<String> out = inv.getArgument(1);
+            // 50%
+            out.accept("out_time_us=50000000");
+            // 90% exactly (90s of 100s duration)
+            out.accept("out_time_us=90000000");
+            // Another 90% reading — should NOT fire again
+            out.accept("out_time_us=91000000");
+            out.accept("progress=end");
+            List<String> cmd = inv.getArgument(0);
+            Path tempFile = Path.of(cmd.get(cmd.size() - 1));
+            Files.createDirectories(tempFile.getParent());
+            Files.write(tempFile, new byte[]{1});
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.transcode(300L);
+
+        // Exactly one TranscodeNearDoneEvent should have been published
+        long nearDoneCount = publishedEvents.stream()
+            .filter(e -> e instanceof TranscodeNearDoneEvent)
+            .count();
+        assertThat(nearDoneCount).isEqualTo(1);
+
+        TranscodeNearDoneEvent evt = publishedEvents.stream()
+            .filter(e -> e instanceof TranscodeNearDoneEvent)
+            .map(e -> (TranscodeNearDoneEvent) e)
+            .findFirst().orElseThrow();
+        assertThat(evt.itemId()).isEqualTo(300L);
+    }
+
+    @Test
+    void transcode_below90percent_doesNotPublishNearDoneEvent(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3});
+        Path destDir = tmp.resolve("dest");
+        Files.createDirectories(destDir);
+        Path dest = destDir.resolve("source.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(301L, src.toString(), dest.toString());
+        when(queueRepo.findByIdWithProfile(301L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(301L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(100, 1920, 1080));
+
+        List<Object> publishedEvents = new ArrayList<>();
+        doAnswer(inv -> { publishedEvents.add(inv.getArgument(0)); return null; })
+            .when(eventPublisher).publishEvent(any(Object.class));
+
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            Consumer<String> out = inv.getArgument(1);
+            out.accept("out_time_us=50000000"); // 50% only
+            // No progress=end — just exit 1 to stop early
+            List<String> cmd = inv.getArgument(0);
+            Path tempFile = Path.of(cmd.get(cmd.size() - 1));
+            Files.createDirectories(tempFile.getParent());
+            Files.write(tempFile, new byte[]{1});
+            return new RunningTranscode() {
+                public int waitForExit() { return 1; } // non-zero exit
+                public void cancel() {}
+            };
+        });
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.transcode(301L);
+
+        long nearDoneCount = publishedEvents.stream()
+            .filter(e -> e instanceof TranscodeNearDoneEvent)
+            .count();
+        assertThat(nearDoneCount).isEqualTo(0);
+    }
+
+    @Test
+    void cancelPrefetch_cancelsInFlightAndCleansTempDir(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[]{1, 2, 3, 4, 5});
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(400L, src.toString(), tmp.resolve("dest/out.mkv").toString());
+        it.setStatus(DownloadQueueItem.Status.QUEUED);
+
+        CountDownLatch prefetchBlocked = new CountDownLatch(1);
+        CountDownLatch prefetchStarted = new CountDownLatch(1);
+
+        // Block the prefetch inside the repo call before the file copy starts
+        when(queueRepo.findByIdWithProfile(400L)).thenAnswer(inv -> {
+            prefetchStarted.countDown();
+            prefetchBlocked.await(5, TimeUnit.SECONDS);
+            return Optional.of(it);
+        });
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+
+        // Start prefetch — it will block at the repo call
+        service.prefetchSource(400L);
+        assertThat(prefetchStarted.await(3, TimeUnit.SECONDS)).isTrue();
+
+        // Pre-create a partial temp dir to verify cancelPrefetch cleans it
+        Path partialDir = tempBase.resolve("plex-downloader/400/src");
+        Files.createDirectories(partialDir);
+        Files.write(partialDir.resolve("partial.avi"), new byte[]{9});
+
+        // Cancel while in flight
+        service.cancelPrefetch(400L);
+        // The prefetch future is cancelled; unblock the task (it will see interrupted state)
+        prefetchBlocked.countDown();
+
+        // Temp dir should be cleaned by cancelPrefetch
+        assertThat(tempBase.resolve("plex-downloader/400")).doesNotExist();
+        // No pending prefetch
+        assertThat(service.getPrefetchCount()).isEqualTo(0);
+    }
+
+    @Test
+    void cancelPrefetch_noInFlightPrefetch_isNoOp(@TempDir Path tmp) throws Exception {
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        // Should not throw
+        service.cancelPrefetch(999L);
+        assertThat(service.getPrefetchCount()).isEqualTo(0);
     }
 }

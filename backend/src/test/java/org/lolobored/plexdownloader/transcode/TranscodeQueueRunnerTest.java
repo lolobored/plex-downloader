@@ -17,6 +17,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+// Helper to build queue items
+class QueueItemHelper {
+    static DownloadQueueItem queued(Long id, int pos) {
+        DownloadQueueItem i = new DownloadQueueItem();
+        i.setId(id);
+        i.setQueuePosition(pos);
+        i.setStatus(DownloadQueueItem.Status.QUEUED);
+        return i;
+    }
+}
+
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TranscodeQueueRunnerTest {
@@ -121,5 +132,56 @@ class TranscodeQueueRunnerTest {
         assertThat(fetching.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
         assertThat(fetching.getProgressPercent()).isNull();
         verify(transcodeService, timeout(2000)).transcode(20L);
+    }
+
+    // ── onNearDone tests ──────────────────────────────────────────────────────
+
+    @Test
+    void onNearDone_prefetchesLowestQueuedCandidateNotNearDoneItem() {
+        // Near-done item is 10; lowest queued that is not 10 is item 20 (pos=1)
+        DownloadQueueItem candidate = QueueItemHelper.queued(20L, 1);
+        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
+            .thenReturn(Optional.of(candidate));
+
+        TranscodeQueueRunner r = runner();
+        r.onNearDone(new TranscodeNearDoneEvent(10L));
+
+        verify(transcodeService).prefetchSource(20L);
+    }
+
+    @Test
+    void onNearDone_nearDoneItemIsNextQueued_skips() {
+        // The lowest queued item IS the near-done item → should not prefetch
+        DownloadQueueItem sameItem = QueueItemHelper.queued(10L, 1);
+        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
+            .thenReturn(Optional.of(sameItem));
+
+        TranscodeQueueRunner r = runner();
+        r.onNearDone(new TranscodeNearDoneEvent(10L));
+
+        verify(transcodeService, never()).prefetchSource(any());
+    }
+
+    @Test
+    void onNearDone_noQueuedItem_doesNothing() {
+        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
+            .thenReturn(Optional.empty());
+
+        TranscodeQueueRunner r = runner();
+        r.onNearDone(new TranscodeNearDoneEvent(10L));
+
+        verify(transcodeService, never()).prefetchSource(any());
+    }
+
+    @Test
+    void onNearDone_exceptionInRepo_doesNotPropagateAndDoesNotCallPrefetch() {
+        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
+            .thenThrow(new RuntimeException("DB down"));
+
+        TranscodeQueueRunner r = runner();
+        // Must not throw
+        r.onNearDone(new TranscodeNearDoneEvent(10L));
+
+        verify(transcodeService, never()).prefetchSource(any());
     }
 }

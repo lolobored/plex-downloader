@@ -2,8 +2,8 @@ package org.lolobored.plexdownloader.transcode;
 
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -19,11 +19,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TranscodeService {
 
     private static final int STDERR_TAIL = 20;
@@ -34,8 +38,99 @@ public class TranscodeService {
     private final ProgressParser progressParser;
     private final ProcessRunner processRunner;
     private final TranscodeConfig transcodeConfig;
+    private final ApplicationEventPublisher eventPublisher;
 
     private final ConcurrentHashMap<Long, RunningTranscode> running = new ConcurrentHashMap<>();
+
+    /** Tracks in-flight prefetch futures keyed by itemId. At most one entry at a time. */
+    private final ConcurrentHashMap<Long, Future<?>> prefetches = new ConcurrentHashMap<>();
+
+    private final ExecutorService prefetchPool = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "prefetch-worker");
+        t.setDaemon(true);
+        return t;
+    });
+
+    public TranscodeService(DownloadQueueRepository queueRepo,
+                            MediaProbe mediaProbe,
+                            FfmpegCommandBuilder commandBuilder,
+                            ProgressParser progressParser,
+                            ProcessRunner processRunner,
+                            TranscodeConfig transcodeConfig,
+                            ApplicationEventPublisher eventPublisher) {
+        this.queueRepo = queueRepo;
+        this.mediaProbe = mediaProbe;
+        this.commandBuilder = commandBuilder;
+        this.progressParser = progressParser;
+        this.processRunner = processRunner;
+        this.transcodeConfig = transcodeConfig;
+        this.eventPublisher = eventPublisher;
+    }
+
+    // ── Temp-path helpers ─────────────────────────────────────────────────────
+
+    Path tempItemDir(Long itemId) {
+        return Path.of(transcodeConfig.tempDir(), "plex-downloader", itemId.toString());
+    }
+
+    Path tempSrcFile(Long itemId, String sourceFilePath) {
+        String sourceFilename = Path.of(sourceFilePath).getFileName().toString();
+        return tempItemDir(itemId).resolve("src").resolve(sourceFilename);
+    }
+
+    // ── Prefetch API ──────────────────────────────────────────────────────────
+
+    /**
+     * Begins copying {@code item.sourceFilePath} → the item's temp src path asynchronously.
+     * One-ahead only: if a prefetch is already in flight, this is a no-op.
+     * Does NOT change the item's DB status (item stays QUEUED).
+     */
+    public void prefetchSource(Long itemId) {
+        if (!prefetches.isEmpty()) {
+            log.debug("Prefetch already in flight, skipping prefetch for item={}", itemId);
+            return;
+        }
+        DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
+        if (item == null || item.getStatus() != DownloadQueueItem.Status.QUEUED) {
+            log.debug("Prefetch skipped for item={}: missing or not QUEUED", itemId);
+            return;
+        }
+
+        String sourceFilePath = item.getSourceFilePath();
+        Path tempSrc = tempSrcFile(itemId, sourceFilePath);
+        Path tempSrcDir = tempSrc.getParent();
+
+        Future<?> future = prefetchPool.submit(() -> {
+            try {
+                log.info("Prefetching source for item={} src={}", itemId, sourceFilePath);
+                Files.createDirectories(tempSrcDir);
+                Files.copy(Path.of(sourceFilePath), tempSrc, StandardCopyOption.REPLACE_EXISTING);
+                log.info("Prefetch complete: item={} bytes={}", itemId, Files.size(tempSrc));
+            } catch (Exception e) {
+                log.warn("Prefetch failed for item={}: {}", itemId, e.getMessage());
+                deleteTempDir(tempItemDir(itemId));
+                prefetches.remove(itemId);
+            }
+        });
+        prefetches.put(itemId, future);
+    }
+
+    /**
+     * Cancels an in-flight prefetch and cleans up the item's temp dir.
+     * No-op if no prefetch is registered for the item.
+     */
+    public void cancelPrefetch(Long itemId) {
+        Future<?> future = prefetches.remove(itemId);
+        if (future == null) return;
+        future.cancel(true);
+        deleteTempDir(tempItemDir(itemId));
+        log.info("Prefetch cancelled for item={}", itemId);
+    }
+
+    /** Package-private for testing. */
+    int getPrefetchCount() { return prefetches.size(); }
+
+    // ── Main transcode ────────────────────────────────────────────────────────
 
     public void transcode(Long itemId) {
         DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
@@ -45,13 +140,12 @@ public class TranscodeService {
         //   src/<sourceFilename>  — local copy of NAS source
         //   <outName>            — ffmpeg output (same as #61)
         String outName = Path.of(item.getDestFilePath()).getFileName().toString();
-        Path tempItemDir = Path.of(transcodeConfig.tempDir(), "plex-downloader", itemId.toString());
+        Path tempItemDir = tempItemDir(itemId);
         Path tempSrcDir  = tempItemDir.resolve("src");
-        String sourceFilename = Path.of(item.getSourceFilePath()).getFileName().toString();
-        Path tempSrcFile = tempSrcDir.resolve(sourceFilename);
+        Path tempSrcFile = tempSrcFile(itemId, item.getSourceFilePath());
         Path tempFile    = tempItemDir.resolve(outName);
 
-        // ── FETCHING: copy source from NAS to local temp ──────────────────────
+        // ── FETCHING: copy source from NAS to local temp (or consume prefetch) ─
         item.setStatus(DownloadQueueItem.Status.FETCHING);
         item.setTranscodeStartedAt(Instant.now());
         item.setProgressPercent(0);
@@ -59,10 +153,34 @@ public class TranscodeService {
         queueRepo.save(item);
 
         try {
-            Files.createDirectories(tempSrcDir);
-            log.info("Fetching source to local temp: item={} src={}", itemId, item.getSourceFilePath());
-            Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);
-            log.info("Source fetched: item={} bytes={}", itemId, Files.size(tempSrcFile));
+            Future<?> prefetchFuture = prefetches.remove(itemId);
+            if (prefetchFuture != null) {
+                // Await the prefetch — if it failed/was cancelled, fall through to a normal copy
+                boolean prefetchOk = false;
+                try {
+                    prefetchFuture.get();
+                    prefetchOk = true;
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException ee) {
+                    log.warn("Prefetch for item={} failed ({}), will re-copy source", itemId, ee.getCause().getMessage());
+                }
+                if (prefetchOk && Files.exists(tempSrcFile) && Files.size(tempSrcFile) > 0) {
+                    log.info("Prefetch hit: skipping source copy for item={} bytes={}", itemId, Files.size(tempSrcFile));
+                    // Source already staged — skip the copy
+                } else {
+                    // Prefetch failed or produced an empty file — fall back to a normal copy
+                    Files.createDirectories(tempSrcDir);
+                    log.info("Prefetch miss: re-copying source for item={}", itemId);
+                    Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);
+                    log.info("Source fetched (fallback): item={} bytes={}", itemId, Files.size(tempSrcFile));
+                }
+            } else {
+                Files.createDirectories(tempSrcDir);
+                log.info("Fetching source to local temp: item={} src={}", itemId, item.getSourceFilePath());
+                Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);
+                log.info("Source fetched: item={} bytes={}", itemId, Files.size(tempSrcFile));
+            }
         } catch (IOException e) {
             deleteTempDir(tempItemDir);
             failItem(item, "Source copy failed: " + e.getMessage());
@@ -84,6 +202,7 @@ public class TranscodeService {
 
             Deque<String> stderrTail = new ArrayDeque<>();
             AtomicInteger lastPct = new AtomicInteger(-1);
+            AtomicBoolean nearDoneFired = new AtomicBoolean(false);
 
             RunningTranscode rt = processRunner.start(cmd,
                 line -> {
@@ -92,6 +211,9 @@ public class TranscodeService {
                         int p = pct.getAsInt();
                         if (lastPct.getAndSet(p) != p) {
                             persistProgress(itemId, p);
+                        }
+                        if (p >= 90 && nearDoneFired.compareAndSet(false, true)) {
+                            eventPublisher.publishEvent(new TranscodeNearDoneEvent(itemId));
                         }
                     }
                 },
