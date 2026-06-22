@@ -8,6 +8,10 @@ services:
     ports:
       - "3615:8080"
     restart: unless-stopped
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "render"
     environment:
       JWT_SECRET: ${JWT_SECRET}
     volumes:
