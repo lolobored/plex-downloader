@@ -27,16 +27,21 @@ public class ProcessBuilderRunner implements ProcessRunner {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to start: " + String.join(" ", command), e);
         }
-        pump(process.getInputStream(), stdoutLineSink, "ffmpeg-out");
-        pump(process.getErrorStream(), stderrLineSink, "ffmpeg-err");
+        Thread outThread = pump(process.getInputStream(), stdoutLineSink, "ffmpeg-out");
+        Thread errThread = pump(process.getErrorStream(), stderrLineSink, "ffmpeg-err");
 
         return new RunningTranscode() {
-            @Override public int waitForExit() throws InterruptedException { return process.waitFor(); }
+            @Override public int waitForExit() throws InterruptedException {
+                int code = process.waitFor();
+                outThread.join();
+                errThread.join();
+                return code;
+            }
             @Override public void cancel() { process.destroyForcibly(); }
         };
     }
 
-    private void pump(InputStream in, Consumer<String> sink, String threadName) {
+    private Thread pump(InputStream in, Consumer<String> sink, String threadName) {
         Thread t = new Thread(() -> {
             try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
                 String line;
@@ -47,5 +52,6 @@ public class ProcessBuilderRunner implements ProcessRunner {
         }, threadName);
         t.setDaemon(true);
         t.start();
+        return t;
     }
 }
