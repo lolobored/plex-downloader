@@ -26,6 +26,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/actuator/health").permitAll()
                 // Static frontend assets (Vue build output)
                 .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/*.js", "/*.css").permitAll()
+                // All other /api/** routes require authentication (must come before SPA fallback)
+                .requestMatchers("/api/**").authenticated()
                 // SPA fallback routes (any path without a dot — handled by SpaController)
                 .requestMatchers("/{path:[^\\.]*}", "/{p1:[^\\.]*}/{p2:[^\\.]*}").permitAll()
                 .anyRequest().authenticated()
