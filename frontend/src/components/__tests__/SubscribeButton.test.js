@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { useWatchedStore } from '../../stores/watched.js'
+import { useDownloadStore } from '../../stores/download.js'
 import { getShowQueueCount, getSeasonQueueCount } from '../../api/watched.js'
 import * as downloadApi from '../../api/download.js'
 import SubscribeButton from '../SubscribeButton.vue'
@@ -11,14 +12,15 @@ vi.mock('../../api/watched.js', () => ({
   getSeasonQueueCount: vi.fn()
 }))
 vi.mock('../../api/download.js', () => ({
-  enqueue: vi.fn().mockResolvedValue({ jobIds: [1], status: 'QUEUED' })
+  enqueue:            vi.fn().mockResolvedValue({ jobIds: [1], status: 'QUEUED' }),
+  getQualityProfiles: vi.fn().mockResolvedValue([])
 }))
 
 describe('SubscribeButton — show context (no seasonId)', () => {
   afterEach(() => { document.body.innerHTML = '' })
   beforeEach(() => { vi.clearAllMocks() })
 
-  function factory(subscription = null) {
+  function factory(subscription = null, profiles = []) {
     const pinia = createTestingPinia({ createSpy: vi.fn })
     const store = useWatchedStore(pinia)
     store.getSubscription       = vi.fn().mockReturnValue(subscription)
@@ -27,6 +29,9 @@ describe('SubscribeButton — show context (no seasonId)', () => {
     store.unsubscribe           = vi.fn()
     store.subscribeSeason       = vi.fn()
     store.unsubscribeSeason     = vi.fn()
+    const dlStore = useDownloadStore(pinia)
+    dlStore.fetchProfiles = vi.fn()
+    dlStore.profiles      = profiles
     return { wrapper: mount(SubscribeButton, {
       props: { showId: 10 },
       global: { plugins: [pinia] },
@@ -64,7 +69,7 @@ describe('SubscribeButton — show context (no seasonId)', () => {
     const dlBtn = wrapper.find('[data-testid="download-all-btn"]')
     expect(dlBtn.exists()).toBe(true)
     await dlBtn.trigger('click')
-    expect(downloadApi.enqueue).toHaveBeenCalledWith('SHOW', 10)
+    expect(downloadApi.enqueue).toHaveBeenCalledWith('SHOW', 10, null)
   })
 
   it('picker has exactly 4 subscribe opts + 1 download-all (no N-count one-time)', async () => {
@@ -122,7 +127,7 @@ describe('SubscribeButton — season context (with seasonId)', () => {
   afterEach(() => { document.body.innerHTML = '' })
   beforeEach(() => { vi.clearAllMocks() })
 
-  function factory(seasonSubscription = null) {
+  function factory(seasonSubscription = null, profiles = []) {
     const pinia = createTestingPinia({ createSpy: vi.fn })
     const store = useWatchedStore(pinia)
     store.getSubscription       = vi.fn().mockReturnValue(null)
@@ -131,6 +136,9 @@ describe('SubscribeButton — season context (with seasonId)', () => {
     store.unsubscribe           = vi.fn()
     store.subscribeSeason       = vi.fn()
     store.unsubscribeSeason     = vi.fn()
+    const dlStore = useDownloadStore(pinia)
+    dlStore.fetchProfiles = vi.fn()
+    dlStore.profiles      = profiles
     return { wrapper: mount(SubscribeButton, {
       props: { showId: 10, seasonId: 100 },
       global: { plugins: [pinia] },
@@ -159,7 +167,7 @@ describe('SubscribeButton — season context (with seasonId)', () => {
     const { wrapper } = factory(null)
     await wrapper.find('button.sub-btn').trigger('click')
     await wrapper.find('[data-testid="download-all-btn"]').trigger('click')
-    expect(downloadApi.enqueue).toHaveBeenCalledWith('SEASON', 100)
+    expect(downloadApi.enqueue).toHaveBeenCalledWith('SEASON', 100, null)
   })
 
   it('shows confirm with season queue count on unsubscribe', async () => {

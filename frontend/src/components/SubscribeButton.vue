@@ -7,6 +7,14 @@
     </button>
 
     <div v-if="open" class="picker" @click.stop>
+      <div v-if="dlStore.profiles.length > 1" class="picker-section">
+        <p class="picker-label">Quality profile</p>
+        <select v-model="selectedProfileId" class="profile-select">
+          <option v-for="p in dlStore.profiles" :key="p.id" :value="p.id">
+            {{ p.name }}{{ p.isDefault ? ' ✓' : '' }}
+          </option>
+        </select>
+      </div>
       <div class="picker-section">
         <p class="picker-label">{{ current ? 'Change subscription' : 'Subscribe: keep ahead' }}</p>
         <button v-for="n in COUNTS" :key="`sub-${n}`"
@@ -38,8 +46,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useWatchedStore } from '@/stores/watched.js'
+import { useDownloadStore } from '@/stores/download.js'
 import { getShowQueueCount, getSeasonQueueCount } from '@/api/watched.js'
 import { enqueue } from '@/api/download.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
@@ -53,8 +62,10 @@ const props = defineProps({
 })
 
 const watchedStore = useWatchedStore()
-const open    = ref(false)
-const loading = ref(false)
+const dlStore      = useDownloadStore()
+const open         = ref(false)
+const loading      = ref(false)
+const selectedProfileId = ref(null)
 
 const showConfirm    = ref(false)
 const confirmMessage = ref('')
@@ -65,6 +76,22 @@ const current = computed(() =>
     : watchedStore.getSubscription(props.showId)
 )
 const statusClass = computed(() => current.value ? 'active-sub' : 'idle')
+
+function initSelectedProfile() {
+  const def = dlStore.profiles.find(p => p.isDefault)
+  selectedProfileId.value = def?.id ?? null
+}
+
+onMounted(async () => {
+  await dlStore.fetchProfiles()
+  initSelectedProfile()
+})
+
+watch(() => dlStore.profiles, () => {
+  if (selectedProfileId.value === null) {
+    initSelectedProfile()
+  }
+})
 
 function toggle() { open.value = !open.value }
 
@@ -83,11 +110,12 @@ async function doSubscribe(n) {
 async function doDownloadAll() {
   open.value = false
   loading.value = true
+  const profileId = dlStore.profiles.length > 1 ? (selectedProfileId.value ?? null) : null
   try {
     if (props.seasonId) {
-      await enqueue('SEASON', props.seasonId)
+      await enqueue('SEASON', props.seasonId, profileId)
     } else {
-      await enqueue('SHOW', props.showId)
+      await enqueue('SHOW', props.showId, profileId)
     }
   } finally { loading.value = false }
 }
@@ -147,4 +175,7 @@ function cancelUnsubscribe() {
 .picker-opt.active { border-color: var(--accent-blue); color: var(--accent-blue); }
 .cancel-opt { color: var(--red); border-color: var(--red); }
 .cancel-opt:hover { background: rgba(231,76,60,.1); }
+.profile-select { width: 100%; font-size: .85rem; padding: 5px 8px; border-radius: 4px;
+                  border: 1px solid var(--border); background: var(--surface);
+                  color: var(--text); cursor: pointer; }
 </style>

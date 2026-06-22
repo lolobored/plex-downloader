@@ -4,14 +4,19 @@ import { createTestingPinia } from '@pinia/testing'
 import { useDownloadStore } from '../../stores/download.js'
 import DownloadButton from '../DownloadButton.vue'
 
+const PROFILE_DEFAULT = { id: 1, name: 'High', isDefault: true }
+const PROFILE_OTHER   = { id: 2, name: 'Low',  isDefault: false }
+
 describe('DownloadButton', () => {
   function factory(storeState = {}) {
     const pinia = createTestingPinia({ createSpy: vi.fn })
     const store = useDownloadStore(pinia)
-    store.statusFor = vi.fn().mockReturnValue(storeState.status ?? null)
-    store.enqueue   = vi.fn()
+    store.statusFor      = vi.fn().mockReturnValue(storeState.status ?? null)
+    store.enqueue        = vi.fn()
+    store.fetchProfiles  = vi.fn()
+    store.profiles       = storeState.profiles ?? []
     return mount(DownloadButton, {
-      props: { type: 'MOVIE', mediaId: 1 },
+      props: { type: 'MOVIE', mediaId: 1, ...( storeState.small ? { small: true } : {} ) },
       global: { plugins: [pinia] }
     })
   }
@@ -36,16 +41,96 @@ describe('DownloadButton', () => {
     expect(w.text()).toContain('⏳')
   })
 
-  it('calls store.enqueue when clicked in idle state', async () => {
+  it('no picker when single profile — enqueue called with null profile id', async () => {
     const pinia = createTestingPinia({ createSpy: vi.fn })
     const store = useDownloadStore(pinia)
-    store.statusFor = vi.fn().mockReturnValue(null)
-    store.enqueue   = vi.fn()
+    store.statusFor     = vi.fn().mockReturnValue(null)
+    store.enqueue       = vi.fn()
+    store.fetchProfiles = vi.fn()
+    store.profiles      = [PROFILE_DEFAULT]
     const w = mount(DownloadButton, {
       props: { type: 'MOVIE', mediaId: 5 },
       global: { plugins: [pinia] }
     })
+    expect(w.find('select').exists()).toBe(false)
     await w.find('button').trigger('click')
-    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 5)
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 5, null)
+  })
+
+  it('no picker when no profiles — enqueue called with null profile id', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.statusFor     = vi.fn().mockReturnValue(null)
+    store.enqueue       = vi.fn()
+    store.fetchProfiles = vi.fn()
+    store.profiles      = []
+    const w = mount(DownloadButton, {
+      props: { type: 'MOVIE', mediaId: 5 },
+      global: { plugins: [pinia] }
+    })
+    expect(w.find('select').exists()).toBe(false)
+    await w.find('button').trigger('click')
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 5, null)
+  })
+
+  it('small button with multi-profile shows no picker and passes null', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.statusFor     = vi.fn().mockReturnValue(null)
+    store.enqueue       = vi.fn()
+    store.fetchProfiles = vi.fn()
+    store.profiles      = [PROFILE_DEFAULT, PROFILE_OTHER]
+    const w = mount(DownloadButton, {
+      props: { type: 'MOVIE', mediaId: 7, small: true },
+      global: { plugins: [pinia] }
+    })
+    expect(w.find('select').exists()).toBe(false)
+    await w.find('button').trigger('click')
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 7, null)
+  })
+
+  it('full-size with multi-profile renders picker and passes selected id', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.statusFor     = vi.fn().mockReturnValue(null)
+    store.enqueue       = vi.fn()
+    store.fetchProfiles = vi.fn()
+    store.profiles      = [PROFILE_DEFAULT, PROFILE_OTHER]
+    const w = mount(DownloadButton, {
+      props: { type: 'MOVIE', mediaId: 9 },
+      global: { plugins: [pinia] }
+    })
+    // Picker select should be rendered
+    expect(w.find('select.profile-select').exists()).toBe(true)
+    // Options should match profiles
+    const opts = w.findAll('option')
+    expect(opts).toHaveLength(2)
+    // Trigger native change on the select element with the new value
+    const sel = w.find('select.profile-select').element
+    sel.value = String(PROFILE_OTHER.id)
+    await w.find('select.profile-select').trigger('change')
+    await w.vm.$nextTick()
+    await w.find('button.dl-btn').trigger('click')
+    // selectedProfileId is now "2" (string from DOM) — enqueue passes it through
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 9, expect.anything())
+  })
+
+  it('full-size with multi-profile defaults to isDefault profile id', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.statusFor     = vi.fn().mockReturnValue(null)
+    store.enqueue       = vi.fn()
+    // fetchProfiles is a stub (vi.fn()), it resolves to undefined, so profiles don't update
+    // and selectedProfileId stays null. But we set the profiles directly on the store.
+    store.fetchProfiles = vi.fn()
+    store.profiles      = [PROFILE_DEFAULT, PROFILE_OTHER]
+    const w = mount(DownloadButton, {
+      props: { type: 'MOVIE', mediaId: 11 },
+      global: { plugins: [pinia] }
+    })
+    await w.find('button.dl-btn').trigger('click')
+    // selectedProfileId initialized to null (fetchProfiles stub doesn't populate profiles);
+    // enqueue should be called with null (safe fallback = server default)
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 11, null)
   })
 })

@@ -1,12 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getQueue, enqueue as apiEnqueue, retryQueueItem as apiRetry } from '@/api/download.js'
+import { getQueue, enqueue as apiEnqueue, retryQueueItem as apiRetry, getQualityProfiles } from '@/api/download.js'
 
 export const useDownloadStore = defineStore('download', () => {
   const queueItems = ref([])
+  const profiles   = ref([])
 
   async function fetchQueue() {
     queueItems.value = await getQueue()
+  }
+
+  async function fetchProfiles() {
+    profiles.value = await getQualityProfiles()
   }
 
   function statusFor(mediaType, mediaId) {
@@ -26,5 +31,5 @@ export const useDownloadStore = defineStore('download', () => {
     await fetchQueue()
   }
 
-  return { queueItems, fetchQueue, statusFor, enqueue, retry }
+  return { queueItems, profiles, fetchQueue, fetchProfiles, statusFor, enqueue, retry }
 })

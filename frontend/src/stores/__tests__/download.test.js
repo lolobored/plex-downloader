@@ -3,11 +3,12 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useDownloadStore } from '../download.js'
 
 vi.mock('../../api/download.js', () => ({
-  getQueue:        vi.fn(),
-  enqueue:         vi.fn(),
-  retryQueueItem:  vi.fn()
+  getQueue:           vi.fn(),
+  enqueue:            vi.fn(),
+  retryQueueItem:     vi.fn(),
+  getQualityProfiles: vi.fn()
 }))
-import { getQueue, enqueue, retryQueueItem } from '../../api/download.js'
+import { getQueue, enqueue, retryQueueItem, getQualityProfiles } from '../../api/download.js'
 
 describe('download store', () => {
   beforeEach(() => {
@@ -39,6 +40,17 @@ describe('download store', () => {
     const store = useDownloadStore()
     await store.fetchQueue()
     expect(store.statusFor('MOVIE', 999)).toBeNull()
+  })
+
+  it('fetchProfiles populates profiles', async () => {
+    getQualityProfiles.mockResolvedValue([
+      { id: 1, name: 'High', isDefault: true },
+      { id: 2, name: 'Low',  isDefault: false }
+    ])
+    const store = useDownloadStore()
+    await store.fetchProfiles()
+    expect(store.profiles).toHaveLength(2)
+    expect(store.profiles[0].name).toBe('High')
   })
 
   it('enqueue calls API and refreshes queue', async () => {
