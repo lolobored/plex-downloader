@@ -58,6 +58,12 @@ public class DownloadQueueItem {
     @Column(name = "compression_ratio")
     private Double compressionRatio;
 
+    @Column(name = "source_size_bytes")
+    private Long sourceSizeBytes;
+
+    @Column(name = "output_size_bytes")
+    private Long outputSizeBytes;
+
     public enum MediaType { MOVIE, EPISODE }
     public enum Status { QUEUED, TRANSCODING, COPYING, DONE, ERROR }
 }

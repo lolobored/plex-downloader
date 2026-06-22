@@ -163,7 +163,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, h, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -200,11 +200,32 @@ const erroredCount = computed(() =>
   dlStore.queueItems.filter(i => i.status === 'ERROR').length
 )
 
+// ── Formatting helpers ────────────────────────────────────────────────────────
+function formatBytes(bytes) {
+  if (bytes == null) return '—'
+  if (bytes >= 1_000_000_000) return (bytes / 1_000_000_000).toFixed(1) + ' GB'
+  if (bytes >= 1_000_000)     return (bytes / 1_000_000).toFixed(1) + ' MB'
+  if (bytes >= 1_000)         return (bytes / 1_000).toFixed(1) + ' KB'
+  return bytes + ' B'
+}
+
+function formatDuration(startIso, endIso) {
+  if (!startIso || !endIso) return '—'
+  const ms = new Date(endIso) - new Date(startIso)
+  if (ms < 0) return '—'
+  const totalSec = Math.floor(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
 // ── Inline QueueItemRow component ────────────────────────────────────────────
 const QueueItemRow = defineComponent({
   props: ['item', 'removing', 'retrying'],
   emits: ['remove', 'retry', 'navigate'],
   setup(props, { emit }) {
+    const infoOpen = shallowRef(false)
+
     return () => {
       const item = props.item
       const isRemoving = props.removing.has(item.id)
@@ -249,6 +270,44 @@ const QueueItemRow = defineComponent({
               'data-testid': 'compression-rate',
               title: 'Space saved vs source',
             }, `${item.compressionRatio >= 0 ? '↓' : '↑'} ${Math.abs(item.compressionRatio).toFixed(1)}%`)
+          : null,
+        (item.status === 'DONE' && (item.sourceSizeBytes != null || item.outputSizeBytes != null || item.compressionRatio != null))
+          ? h('div', { class: 'info-btn-wrap', style: 'position:relative' }, [
+              h('button', {
+                class: 'btn-info',
+                'data-testid': 'info-btn',
+                title: 'Conversion details',
+                onClick: (e) => { e.stopPropagation(); infoOpen.value = !infoOpen.value }
+              }, 'ℹ'),
+              infoOpen.value
+                ? h('div', {
+                    class: 'info-popover',
+                    'data-testid': 'info-popover',
+                    onClick: (e) => e.stopPropagation()
+                  }, [
+                    h('div', { class: 'info-row' }, [
+                      h('span', { class: 'info-label' }, 'Compression'),
+                      h('span', { class: 'info-value', 'data-testid': 'info-compression' },
+                        item.compressionRatio != null
+                          ? `${item.compressionRatio >= 0 ? '↓' : '↑'} ${Math.abs(item.compressionRatio).toFixed(1)}% ${item.compressionRatio >= 0 ? 'saved' : 'larger'}`
+                          : '—')
+                    ]),
+                    h('div', { class: 'info-row' }, [
+                      h('span', { class: 'info-label' }, 'Original size'),
+                      h('span', { class: 'info-value', 'data-testid': 'info-source-size' }, formatBytes(item.sourceSizeBytes))
+                    ]),
+                    h('div', { class: 'info-row' }, [
+                      h('span', { class: 'info-label' }, 'Transcoded size'),
+                      h('span', { class: 'info-value', 'data-testid': 'info-output-size' }, formatBytes(item.outputSizeBytes))
+                    ]),
+                    h('div', { class: 'info-row' }, [
+                      h('span', { class: 'info-label' }, 'Transcode time'),
+                      h('span', { class: 'info-value', 'data-testid': 'info-duration' },
+                        formatDuration(item.transcodeStartedAt, item.completedAt))
+                    ]),
+                  ])
+                : null
+            ])
           : null,
         isError
           ? h('button', {
@@ -560,4 +619,15 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
 .btn-unsub { background: none; border: 1px solid var(--accent); color: var(--accent); cursor: pointer;
              font-size: .75rem; padding: 2px 10px; border-radius: 4px; white-space: nowrap; }
 .btn-unsub:hover { background: rgba(var(--accent-rgb, 52,152,219),.1); }
+.info-btn-wrap { position: relative; }
+.btn-info { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
+            font-size: .75rem; padding: 2px 6px; border-radius: 4px; line-height: 1; }
+.btn-info:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(52,152,219,.08); }
+.info-popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 100;
+                background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+                padding: 10px 14px; min-width: 220px; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+.info-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+            font-size: .78rem; }
+.info-label { color: var(--text-muted); white-space: nowrap; }
+.info-value { font-weight: 600; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
 </style>

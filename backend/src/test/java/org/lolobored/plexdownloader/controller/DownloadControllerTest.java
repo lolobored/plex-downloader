@@ -80,7 +80,7 @@ class DownloadControllerTest {
             10L, 20L,
             null, null,
             "Breaking Bad", 1,
-            null
+            null, null, null, null
         );
         when(downloadService.getQueue(1L)).thenReturn(List.of(resp));
 

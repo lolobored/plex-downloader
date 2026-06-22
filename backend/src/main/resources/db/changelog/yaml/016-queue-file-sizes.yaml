@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 016-queue-file-sizes
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN source_size_bytes BIGINT"
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN output_size_bytes BIGINT"

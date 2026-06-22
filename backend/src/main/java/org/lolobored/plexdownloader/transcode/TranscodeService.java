@@ -113,7 +113,10 @@ public class TranscodeService {
                 fresh.setStatus(DownloadQueueItem.Status.DONE);
                 fresh.setProgressPercent(100);
                 fresh.setCompletedAt(Instant.now());
-                fresh.setCompressionRatio(compressionRatio(fresh.getSourceFilePath(), destPath.toString()));
+                FileSizeStats stats = fileSizeStats(fresh.getSourceFilePath(), destPath.toString());
+                fresh.setSourceSizeBytes(stats.srcSize());
+                fresh.setOutputSizeBytes(stats.destSize());
+                fresh.setCompressionRatio(stats.ratio());
                 queueRepo.save(fresh);
                 log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
             } catch (IOException e) {
@@ -152,17 +155,20 @@ public class TranscodeService {
         log.error("Transcode failed: item={} {}", item.getId(), message);
     }
 
-    /** Space saved as a percentage of source size, rounded to 1 decimal. Null if either size is unavailable. */
-    private Double compressionRatio(String source, String dest) {
+    record FileSizeStats(Long srcSize, Long destSize, Double ratio) {}
+
+    /** Stats source and dest once; computes space saved as a percentage of source size, rounded to 1 decimal. */
+    private FileSizeStats fileSizeStats(String source, String dest) {
         try {
             long srcSize = Files.size(Path.of(source));
             long destSize = Files.size(Path.of(dest));
-            if (srcSize <= 0) return null;
+            if (srcSize <= 0) return new FileSizeStats(srcSize, destSize, null);
             double saved = (srcSize - destSize) * 100.0 / srcSize;
-            return Math.round(saved * 10.0) / 10.0;
+            double ratio = Math.round(saved * 10.0) / 10.0;
+            return new FileSizeStats(srcSize, destSize, ratio);
         } catch (IOException | RuntimeException e) {
-            log.warn("Could not compute compression ratio src={} dest={}: {}", source, dest, e.getMessage());
-            return null;
+            log.warn("Could not compute file size stats src={} dest={}: {}", source, dest, e.getMessage());
+            return new FileSizeStats(null, null, null);
         }
     }
 

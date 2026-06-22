@@ -36,7 +36,8 @@ function movieItem(overrides = {}) {
     playlistId: null, playlistTitle: null,
     showId: null, seasonId: null, showTitle: null, seasonNumber: null,
     queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
-    compressionRatio: null,
+    compressionRatio: null, sourceSizeBytes: null, outputSizeBytes: null,
+    transcodeStartedAt: null,
     ...overrides
   }
 }
@@ -47,7 +48,8 @@ function episodeItem(overrides = {}) {
     playlistId: null, playlistTitle: null,
     showId: 50, seasonId: 100, showTitle: 'Breaking Bad', seasonNumber: 1,
     queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
-    compressionRatio: null,
+    compressionRatio: null, sourceSizeBytes: null, outputSizeBytes: null,
+    transcodeStartedAt: null,
     ...overrides
   }
 }
@@ -573,5 +575,103 @@ describe('QueueView', () => {
     const errSpan = wrapper.find('.error-msg')
     expect(errSpan.text()).toBe('codec error')
     expect(errSpan.attributes('title')).toBe(shortError)
+  })
+
+  // ── Info button (DONE rows) ───────────────────────────────────────────────────
+
+  it('info button appears on DONE row with sizes', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 42.0,
+      sourceSizeBytes: 4_200_000_000, outputSizeBytes: 2_400_000_000,
+      transcodeStartedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:12:30Z'
+    })])
+    expect(wrapper.find('[data-testid="info-btn"]').exists()).toBe(true)
+  })
+
+  it('info button absent on QUEUED row', () => {
+    const { wrapper } = factory([movieItem({ status: 'QUEUED' })])
+    expect(wrapper.find('[data-testid="info-btn"]').exists()).toBe(false)
+  })
+
+  it('info button absent on DONE row with no sizes and no ratio', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: null, sourceSizeBytes: null, outputSizeBytes: null
+    })])
+    expect(wrapper.find('[data-testid="info-btn"]').exists()).toBe(false)
+  })
+
+  it('clicking info button opens popover with four values', async () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 42.0,
+      sourceSizeBytes: 4_200_000_000, outputSizeBytes: 2_400_000_000,
+      transcodeStartedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:12:30Z'
+    })])
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-popover"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="info-compression"]').text()).toContain('42.0%')
+    expect(wrapper.find('[data-testid="info-source-size"]').text()).toBe('4.2 GB')
+    expect(wrapper.find('[data-testid="info-output-size"]').text()).toBe('2.4 GB')
+    expect(wrapper.find('[data-testid="info-duration"]').text()).toBe('12m 30s')
+  })
+
+  it('clicking info button again closes popover', async () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 30.0, sourceSizeBytes: 1_000_000, outputSizeBytes: 700_000,
+      transcodeStartedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:01:00Z'
+    })])
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-popover"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-popover"]').exists()).toBe(false)
+  })
+
+  it('popover shows — for transcode time when timestamps missing', async () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 10.0, sourceSizeBytes: 1_000_000, outputSizeBytes: 900_000,
+      transcodeStartedAt: null, completedAt: null
+    })])
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-duration"]').text()).toBe('—')
+  })
+
+  it('popover shows negative compression as "↑ x% larger"', async () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: -5.2, sourceSizeBytes: 1_000_000, outputSizeBytes: 1_052_000,
+      transcodeStartedAt: null, completedAt: null
+    })])
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-compression"]').text()).toContain('5.2%')
+    expect(wrapper.find('[data-testid="info-compression"]').text()).toContain('larger')
+  })
+
+  // ── Formatting helpers ────────────────────────────────────────────────────────
+
+  it('formatBytes: bytes → GB for large values', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 0.0, sourceSizeBytes: 4_500_000_000, outputSizeBytes: 4_500_000_000,
+      transcodeStartedAt: null, completedAt: null
+    })])
+    wrapper.find('[data-testid="info-btn"]').trigger('click')
+    // 4.5 GB
+    expect(wrapper.html()).not.toThrow
+  })
+
+  it('formatBytes renders KB correctly', async () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 0.0, sourceSizeBytes: 512_000, outputSizeBytes: 256_000,
+      transcodeStartedAt: null, completedAt: null
+    })])
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-source-size"]').text()).toBe('512.0 KB')
+    expect(wrapper.find('[data-testid="info-output-size"]').text()).toBe('256.0 KB')
+  })
+
+  it('formatDuration: short duration under a minute shows only seconds', async () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE', compressionRatio: 0.0, sourceSizeBytes: 1_000_000, outputSizeBytes: 900_000,
+      transcodeStartedAt: '2026-01-01T00:00:00Z', completedAt: '2026-01-01T00:00:45Z'
+    })])
+    await wrapper.find('[data-testid="info-btn"]').trigger('click')
+    expect(wrapper.find('[data-testid="info-duration"]').text()).toBe('45s')
   })
 })

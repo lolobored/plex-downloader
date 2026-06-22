@@ -161,7 +161,45 @@ class TranscodeServiceTest {
 
         assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
         assertThat(it.getCompressionRatio()).isEqualTo(60.0);
+        assertThat(it.getSourceSizeBytes()).isEqualTo(1000L);
+        assertThat(it.getOutputSizeBytes()).isEqualTo(400L);
         assertThat(dest).exists();
+    }
+
+    @Test
+    void success_setsSizeFieldsOnDone(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[2000]);
+        Path destDir = tmp.resolve("dest");
+        Files.createDirectories(destDir);
+        Path dest = destDir.resolve("out.mkv");
+        Path tempBase = tmp.resolve("temp");
+        Files.createDirectories(tempBase);
+
+        DownloadQueueItem it = item(6L, dest.toString());
+        it.setSourceFilePath(src.toString());
+        when(queueRepo.findByIdWithProfile(6L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(6L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            Path tempFile = tempBase.resolve("plex-downloader/6/out.mkv");
+            Files.createDirectories(tempFile.getParent());
+            Files.write(tempFile, new byte[500]);
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        TranscodeService service = serviceWithTempDir(tempBase.toString());
+        service.transcode(6L);
+
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
+        assertThat(it.getSourceSizeBytes()).isEqualTo(2000L);
+        assertThat(it.getOutputSizeBytes()).isEqualTo(500L);
+        // ratio: (2000-500)/2000 * 100 = 75.0
+        assertThat(it.getCompressionRatio()).isEqualTo(75.0);
     }
 
     @Test

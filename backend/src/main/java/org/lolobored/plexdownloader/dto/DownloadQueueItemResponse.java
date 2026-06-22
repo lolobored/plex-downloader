@@ -22,7 +22,10 @@ public record DownloadQueueItemResponse(
     String playlistTitle,
     String showTitle,
     Integer seasonNumber,
-    Double compressionRatio
+    Double compressionRatio,
+    Long sourceSizeBytes,
+    Long outputSizeBytes,
+    Instant transcodeStartedAt
 ) {
     public static DownloadQueueItemResponse from(
             DownloadQueueItem item,
@@ -38,7 +41,10 @@ public record DownloadQueueItemResponse(
             showId, seasonId,
             playlistId, playlistTitle,
             showTitle, seasonNumber,
-            item.getCompressionRatio()
+            item.getCompressionRatio(),
+            item.getSourceSizeBytes(),
+            item.getOutputSizeBytes(),
+            item.getTranscodeStartedAt()
         );
     }
 }
