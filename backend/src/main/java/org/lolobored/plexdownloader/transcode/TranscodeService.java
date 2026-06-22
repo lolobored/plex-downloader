@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -54,14 +55,16 @@ public class TranscodeService {
         }
 
         Deque<String> stderrTail = new ArrayDeque<>();
-        final int[] lastPct = { -1 };
+        AtomicInteger lastPct = new AtomicInteger(-1);
 
         RunningTranscode rt = processRunner.start(cmd,
             line -> {
                 OptionalInt pct = progressParser.percentFor(line, info.durationSeconds());
-                if (pct.isPresent() && pct.getAsInt() != lastPct[0]) {
-                    lastPct[0] = pct.getAsInt();
-                    persistProgress(itemId, pct.getAsInt());
+                if (pct.isPresent()) {
+                    int p = pct.getAsInt();
+                    if (lastPct.getAndSet(p) != p) {
+                        persistProgress(itemId, p);
+                    }
                 }
             },
             line -> {

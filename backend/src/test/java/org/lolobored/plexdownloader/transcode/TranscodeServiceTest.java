@@ -15,6 +15,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -96,5 +98,44 @@ class TranscodeServiceTest {
     @Test
     void cancel_unknownItem_returnsFalse() {
         assertThat(service.cancel(999L)).isFalse();
+    }
+
+    @Test
+    void cancel_registeredItem_returnsTrue(@TempDir Path tmp) throws Exception {
+        Path dest = tmp.resolve("z.mkv");
+        DownloadQueueItem it = item(3L, dest.toString());
+        when(queueRepo.findById(3L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+
+        CountDownLatch blockWait = new CountDownLatch(1);
+        AtomicBoolean cancelCalled = new AtomicBoolean(false);
+
+        when(processRunner.start(anyList(), any(), any())).thenReturn(new RunningTranscode() {
+            public int waitForExit() throws InterruptedException {
+                blockWait.await();
+                return 0;
+            }
+            public void cancel() {
+                cancelCalled.set(true);
+                blockWait.countDown();
+            }
+        });
+
+        Thread transcodeThread = new Thread(() -> service.transcode(3L));
+        transcodeThread.start();
+
+        // Poll until the item is registered (max 2 s)
+        long deadline = System.currentTimeMillis() + 2_000;
+        while (service.cancel(3L) == false) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("Transcode not registered within 2 s");
+            }
+            Thread.sleep(10);
+        }
+
+        assertThat(cancelCalled.get()).isTrue();
+        transcodeThread.join(2_000);
+        assertThat(transcodeThread.isAlive()).isFalse();
     }
 }
