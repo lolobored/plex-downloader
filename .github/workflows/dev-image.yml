@@ -1,0 +1,54 @@
+name: Dev Image
+
+# Manually build & push a throwaway image to Docker Hub WITHOUT cutting a release.
+# No version bump, no Git tag, no GitHub Release. Use it to test changes on a branch.
+#
+# Run it from the Actions tab (pick the branch in the "Run workflow" dropdown), or:
+#   gh workflow run "Dev Image" --ref my-branch -f tag=dev
+# Then deploy:  docker pull lolobored/plex-downloader:dev   (or whatever tag you chose)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker tag to push (default: dev). The built ref is the branch you select above."
+        required: false
+        default: dev
+
+jobs:
+  dev-image:
+    name: Build & push dev image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: lolobored
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            lolobored/plex-downloader:${{ inputs.tag }}
+            lolobored/plex-downloader:dev-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Dev image pushed 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`lolobored/plex-downloader:${{ inputs.tag }}\` (mutable — overwritten each run)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`lolobored/plex-downloader:dev-${{ github.sha }}\` (immutable, this commit)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Built from ref \`${{ github.ref_name }}\`. Does NOT touch \`:latest\` or create a release." >> "$GITHUB_STEP_SUMMARY"
