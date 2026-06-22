@@ -11,6 +11,7 @@ export const useDownloadStore = defineStore('download', () => {
   }
 
   async function fetchProfiles() {
+    if (profiles.value.length > 0) return
     profiles.value = await getQualityProfiles()
   }
 

@@ -43,7 +43,7 @@ const selectedProfileId = ref(null)
 const showPicker = computed(() =>
   !props.small &&
   dlStore.profiles.length > 1 &&
-  !status.value
+  (!status.value || status.value === 'ERROR')
 )
 
 // Initialize selectedProfileId to the default profile's id once profiles are available
@@ -85,15 +85,17 @@ const label = computed(() => {
 })
 
 async function handleClick() {
-  if (!status.value) {
+  if (!status.value || status.value === 'ERROR') {
     try {
-      const profileId = props.small ? null : (selectedProfileId.value ?? null)
+      const profileId = props.small ? null : (selectedProfileId.value != null ? Number(selectedProfileId.value) : null)
       await dlStore.enqueue(props.type, props.mediaId, profileId)
     } catch (e) {
       console.error('Enqueue failed', e)
     }
   }
 }
+
+defineExpose({ selectedProfileId })
 </script>
 
 <style scoped>

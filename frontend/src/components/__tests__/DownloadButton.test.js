@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { useDownloadStore } from '../../stores/download.js'
@@ -100,19 +101,19 @@ describe('DownloadButton', () => {
       props: { type: 'MOVIE', mediaId: 9 },
       global: { plugins: [pinia] }
     })
+    // Allow onMounted / watch to run and initialize selectedProfileId
+    await nextTick()
     // Picker select should be rendered
     expect(w.find('select.profile-select').exists()).toBe(true)
     // Options should match profiles
     const opts = w.findAll('option')
     expect(opts).toHaveLength(2)
-    // Trigger native change on the select element with the new value
-    const sel = w.find('select.profile-select').element
-    sel.value = String(PROFILE_OTHER.id)
-    await w.find('select.profile-select').trigger('change')
+    // Set selectedProfileId via the exposed ref (after onMounted has run)
+    w.vm.selectedProfileId = PROFILE_OTHER.id
     await w.vm.$nextTick()
     await w.find('button.dl-btn').trigger('click')
-    // selectedProfileId is now "2" (string from DOM) — enqueue passes it through
-    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 9, expect.anything())
+    // selectedProfileId is now 2 (Number) — enqueue must pass it as a Number
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 9, 2)
   })
 
   it('full-size with multi-profile defaults to isDefault profile id', async () => {
@@ -120,17 +121,17 @@ describe('DownloadButton', () => {
     const store = useDownloadStore(pinia)
     store.statusFor     = vi.fn().mockReturnValue(null)
     store.enqueue       = vi.fn()
-    // fetchProfiles is a stub (vi.fn()), it resolves to undefined, so profiles don't update
-    // and selectedProfileId stays null. But we set the profiles directly on the store.
+    // Profiles are pre-set before mount so initSelectedProfile() picks up the default
     store.fetchProfiles = vi.fn()
     store.profiles      = [PROFILE_DEFAULT, PROFILE_OTHER]
     const w = mount(DownloadButton, {
       props: { type: 'MOVIE', mediaId: 11 },
       global: { plugins: [pinia] }
     })
+    // Allow onMounted / watch to run and initialize selectedProfileId
+    await nextTick()
     await w.find('button.dl-btn').trigger('click')
-    // selectedProfileId initialized to null (fetchProfiles stub doesn't populate profiles);
-    // enqueue should be called with null (safe fallback = server default)
-    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 11, null)
+    // selectedProfileId should be initialized to PROFILE_DEFAULT.id (1)
+    expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 11, 1)
   })
 })
