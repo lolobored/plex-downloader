@@ -295,8 +295,37 @@ public class DownloadService {
             } catch (IOException e) {
                 log.warn("Could not delete output file {}: {}", item.getDestFilePath(), e.getMessage());
             }
+            pruneEmptyParents(item);
         }
         queueRepo.delete(item);
+    }
+
+    /**
+     * Removes now-empty parent folders of a deleted output file, walking up from the file's
+     * directory. Deletes only directories strictly UNDER the media-type's configured output
+     * root — never the root itself, nor anything outside it. Stops at the first non-empty dir.
+     */
+    private void pruneEmptyParents(DownloadQueueItem item) {
+        String rootKey = item.getMediaType() == DownloadQueueItem.MediaType.MOVIE
+            ? "output.movies.dir" : "output.tvshows.dir";
+        String rootStr = settings.get(rootKey).filter(s -> !s.isBlank()).orElse(null);
+        if (rootStr == null) return;
+        Path root = Path.of(rootStr).normalize();
+        Path dir = Path.of(item.getDestFilePath()).normalize().getParent();
+        while (dir != null && dir.startsWith(root) && !dir.equals(root)) {
+            try {
+                if (!Files.isDirectory(dir)) break;
+                try (var entries = Files.list(dir)) {
+                    if (entries.findFirst().isPresent()) break; // non-empty — stop
+                }
+                Files.delete(dir);
+                log.info("Pruned empty dir {}", dir);
+            } catch (IOException e) {
+                log.warn("Could not prune dir {}: {}", dir, e.getMessage());
+                break;
+            }
+            dir = dir.getParent();
+        }
     }
 
     @Transactional

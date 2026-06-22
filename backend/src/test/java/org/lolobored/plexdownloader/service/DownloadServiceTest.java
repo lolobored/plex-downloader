@@ -201,6 +201,57 @@ class DownloadServiceTest {
     }
 
     @Test
+    void cancel_prunesEmptyParentDirsUpToRoot(@TempDir Path tmp) throws Exception {
+        Path root = Files.createDirectories(tmp.resolve("movies"));
+        Path titleDir = Files.createDirectories(root.resolve("Some Movie (2016)"));
+        Path out = titleDir.resolve("film.mkv");
+        Files.writeString(out, "data");
+
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(11L); item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setMediaType(DownloadQueueItem.MediaType.MOVIE);
+        item.setDestFilePath(out.toString());
+        User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
+        item.setUser(owner);
+        when(queueRepo.findById(11L)).thenReturn(Optional.of(item));
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(root.toString()));
+
+        User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
+        service.cancel(11L, caller);
+
+        assertThat(out).doesNotExist();
+        assertThat(titleDir).doesNotExist();   // empty parent pruned
+        assertThat(root).exists();             // output root never deleted
+        verify(queueRepo).delete(item);
+    }
+
+    @Test
+    void cancel_stopsPruneAtNonEmptyDir(@TempDir Path tmp) throws Exception {
+        Path root = Files.createDirectories(tmp.resolve("tvshows"));
+        Path showDir = Files.createDirectories(root.resolve("Breaking Bad"));
+        Path seasonDir = Files.createDirectories(showDir.resolve("Season 01"));
+        Path out = seasonDir.resolve("s01e01.mkv");
+        Files.writeString(out, "data");
+        Files.writeString(showDir.resolve("poster.jpg"), "img"); // showDir stays non-empty
+
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(12L); item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setMediaType(DownloadQueueItem.MediaType.EPISODE);
+        item.setDestFilePath(out.toString());
+        User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
+        item.setUser(owner);
+        when(queueRepo.findById(12L)).thenReturn(Optional.of(item));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(root.toString()));
+
+        User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
+        service.cancel(12L, caller);
+
+        assertThat(seasonDir).doesNotExist();  // empty season pruned
+        assertThat(showDir).exists();          // non-empty show kept
+        assertThat(root).exists();
+    }
+
+    @Test
     void cancel_transcoding_callsTranscodeServiceCancelAndDeletesRow() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(13L);

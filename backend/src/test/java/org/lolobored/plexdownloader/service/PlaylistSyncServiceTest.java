@@ -126,8 +126,8 @@ class PlaylistSyncServiceTest {
         service.syncAll();
 
         verify(itemRepo).deleteByPlaylistIdAndPlexId(10L, "m1");
-        verify(queueRepo).delete(qi);
-        assertThat(destFile).doesNotExist();
+        // cancelItem now delegates file delete + dir prune + row removal to DownloadService.
+        verify(downloadService).doCancelItem(qi);
     }
 
     @Test

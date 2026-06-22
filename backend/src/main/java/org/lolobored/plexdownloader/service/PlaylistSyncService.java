@@ -12,9 +12,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -187,14 +184,9 @@ public class PlaylistSyncService {
         Long mediaId = resolveLocalId(plexId, mediaType);
         if (mediaId == null) return;
         DownloadQueueItem.MediaType type = DownloadQueueItem.MediaType.valueOf(mediaType);
-        queueRepo.findByUser_IdAndMediaTypeAndMediaId(user.getId(), type, mediaId).ifPresent(qi -> {
-            String destPath = qi.getDestFilePath();
-            queueRepo.delete(qi);
-            if (destPath != null) {
-                try { Files.deleteIfExists(Path.of(destPath)); }
-                catch (IOException e) { log.warn("Could not delete file {}: {}", destPath, e.getMessage()); }
-            }
-        });
+        // doCancelItem deletes the output file, prunes now-empty parent dirs, and removes the row.
+        queueRepo.findByUser_IdAndMediaTypeAndMediaId(user.getId(), type, mediaId)
+            .ifPresent(downloadService::doCancelItem);
     }
 
     public int countQueuedForUser(Long userId, Long playlistId) {
