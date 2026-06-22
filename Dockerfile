@@ -7,7 +7,7 @@ COPY frontend/ .
 RUN npm run build
 
 # ── Stage 2: build Spring Boot JAR (with embedded frontend) ──────────────────
-FROM eclipse-temurin:21-jdk-alpine AS backend-build
+FROM eclipse-temurin:25-jdk-alpine AS backend-build
 WORKDIR /app
 COPY backend/gradlew backend/settings.gradle backend/build.gradle ./
 COPY backend/gradle ./gradle
@@ -18,7 +18,7 @@ COPY --from=frontend-build /app/dist ./src/main/resources/static
 RUN ./gradlew bootJar --no-daemon -x test -q
 
 # ── Stage 3: runtime image (Debian) with PostgreSQL + jellyfin-ffmpeg (Intel QSV) ──
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 
 # PostgreSQL + gosu (privilege drop) + diagnostics, then jellyfin-ffmpeg7:
 # a self-contained latest-ffmpeg build with oneVPL + the Intel iHD driver bundled —
