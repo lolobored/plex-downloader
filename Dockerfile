@@ -17,10 +17,28 @@ COPY backend/src ./src
 COPY --from=frontend-build /app/dist ./src/main/resources/static
 RUN ./gradlew bootJar --no-daemon -x test -q
 
-# ── Stage 3: runtime image with embedded PostgreSQL ───────────────────────────
-FROM eclipse-temurin:21-jre-alpine
-# Install PostgreSQL and su-exec (for privilege-dropping to the postgres user)
-RUN apk add --no-cache postgresql postgresql-contrib su-exec
+# ── Stage 3: runtime image (Debian) with PostgreSQL + ffmpeg + Intel QSV ──────
+FROM eclipse-temurin:21-jre-jammy
+
+# PostgreSQL, ffmpeg, VAAPI tools, gosu for privilege drop
+# Intel QSV runtime packages (intel-media-va-driver-non-free, libmfx-gen1.2, libvpl2)
+# are x86_64-only; install them conditionally so the image builds on arm64 too.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        postgresql postgresql-contrib \
+        ffmpeg \
+        vainfo \
+        gosu \
+        wget \
+    && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+           apt-get install -y --no-install-recommends \
+               intel-media-va-driver-non-free \
+               libmfx-gen1.2 libvpl2; \
+       fi \
+    && rm -rf /var/lib/apt/lists/*
+
+# On Debian/Ubuntu, PostgreSQL binaries are under a versioned path — add to PATH
+ENV PATH="/usr/lib/postgresql/14/bin:${PATH}"
 
 # Postgres data directory — will be populated on first boot
 ENV PGDATA=/var/lib/postgresql/data
