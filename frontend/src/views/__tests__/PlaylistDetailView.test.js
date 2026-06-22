@@ -22,13 +22,13 @@ const fakePlaylist = {
   leafCount: 3, subscribed: false, posterPlexIds: [],
   items: [
     { id: 10, plexId: 'm1', mediaType: 'MOVIE', ordinal: 0,
-      title: 'The Dark Knight', year: 2008, queueStatus: 'DONE', tdarrStatus: 'TRANSCODED',
+      title: 'The Dark Knight', year: 2008, queueStatus: 'DONE',
       mediaId: 42, showId: null, seasonId: null },
     { id: 11, plexId: 'm2', mediaType: 'MOVIE', ordinal: 1,
-      title: 'Inception', year: 2010, queueStatus: null, tdarrStatus: null,
+      title: 'Inception', year: 2010, queueStatus: null,
       mediaId: null, showId: null, seasonId: null },
     { id: 12, plexId: 'ep1', mediaType: 'EPISODE', ordinal: 2,
-      title: 'Pilot', year: 2020, queueStatus: null, tdarrStatus: null,
+      title: 'Pilot', year: 2020, queueStatus: null,
       mediaId: 99, showId: 5, seasonId: 12 }
   ]
 }
@@ -52,7 +52,7 @@ describe('PlaylistDetailView', () => {
     expect(w.text()).toContain('Inception')
   })
 
-  it('shows transcoded badge for first item', async () => {
+  it('shows transcoded badge for item with queueStatus DONE', async () => {
     getPlaylist.mockResolvedValue(fakePlaylist)
     const w = mount(PlaylistDetailView, {
       global: { plugins: [createTestingPinia()] },
@@ -60,6 +60,7 @@ describe('PlaylistDetailView', () => {
     })
     await flushPromises()
     expect(w.find('.status-done').exists()).toBe(true)
+    expect(w.find('.status-done').text()).toBe('transcoded')
   })
 
   it('shows "not queued" for item with null queueStatus', async () => {
@@ -70,6 +71,57 @@ describe('PlaylistDetailView', () => {
     })
     await flushPromises()
     expect(w.text()).toContain('not queued')
+  })
+
+  it('shows "transcoding" badge for TRANSCODING queueStatus', async () => {
+    const playlist = {
+      ...fakePlaylist,
+      items: [{ id: 20, plexId: 'x1', mediaType: 'MOVIE', ordinal: 0,
+                title: 'Test Film', year: 2020, queueStatus: 'TRANSCODING',
+                mediaId: 99, showId: null, seasonId: null }]
+    }
+    getPlaylist.mockResolvedValue(playlist)
+    const w = mount(PlaylistDetailView, {
+      global: { plugins: [createTestingPinia()] },
+      attachTo: document.body
+    })
+    await flushPromises()
+    expect(w.find('.status-processing').exists()).toBe(true)
+    expect(w.find('.status-processing').text()).toBe('transcoding')
+  })
+
+  it('shows "error" badge for ERROR queueStatus', async () => {
+    const playlist = {
+      ...fakePlaylist,
+      items: [{ id: 21, plexId: 'x2', mediaType: 'MOVIE', ordinal: 0,
+                title: 'Error Film', year: 2020, queueStatus: 'ERROR',
+                mediaId: 99, showId: null, seasonId: null }]
+    }
+    getPlaylist.mockResolvedValue(playlist)
+    const w = mount(PlaylistDetailView, {
+      global: { plugins: [createTestingPinia()] },
+      attachTo: document.body
+    })
+    await flushPromises()
+    expect(w.find('.status-error').exists()).toBe(true)
+    expect(w.find('.status-error').text()).toBe('error')
+  })
+
+  it('shows "queued" badge for QUEUED queueStatus', async () => {
+    const playlist = {
+      ...fakePlaylist,
+      items: [{ id: 22, plexId: 'x3', mediaType: 'MOVIE', ordinal: 0,
+                title: 'Queued Film', year: 2020, queueStatus: 'QUEUED',
+                mediaId: 99, showId: null, seasonId: null }]
+    }
+    getPlaylist.mockResolvedValue(playlist)
+    const w = mount(PlaylistDetailView, {
+      global: { plugins: [createTestingPinia()] },
+      attachTo: document.body
+    })
+    await flushPromises()
+    expect(w.find('.status-queued').exists()).toBe(true)
+    expect(w.find('.status-queued').text()).toBe('queued')
   })
 
   it('subscribe button calls subscribe API and updates state', async () => {

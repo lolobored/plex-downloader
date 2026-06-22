@@ -49,13 +49,13 @@
         <div v-if="isOpen('playlist-' + group.playlistId)" class="group-body">
           <template v-for="bucket in [buckets(group.items)]" :key="'b'">
             <div v-if="bucket.inProgress.length" class="sub-section">
-              <p class="sub-label" data-testid="sub-label-IN_PROGRESS">IN PROGRESS</p>
+              <p class="sub-label" data-testid="sub-label-TRANSCODING">TRANSCODING</p>
               <QueueItemRow v-for="item in bucket.inProgress" :key="item.id"
                 :item="item" :removing="removing" :retrying="retrying"
                 @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
             </div>
             <div v-if="bucket.pending.length" class="sub-section">
-              <p class="sub-label" data-testid="sub-label-PENDING">PENDING</p>
+              <p class="sub-label" data-testid="sub-label-QUEUED">QUEUED</p>
               <QueueItemRow v-for="item in bucket.pending" :key="item.id"
                 :item="item" :removing="removing" :retrying="retrying"
                 @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
@@ -98,13 +98,13 @@
             <div v-if="isOpen('season-' + season.seasonId)" class="sub-group-body">
               <template v-for="bucket in [buckets(season.items)]" :key="'b'">
                 <div v-if="bucket.inProgress.length" class="sub-section">
-                  <p class="sub-label" data-testid="sub-label-IN_PROGRESS">IN PROGRESS</p>
+                  <p class="sub-label" data-testid="sub-label-TRANSCODING">TRANSCODING</p>
                   <QueueItemRow v-for="item in bucket.inProgress" :key="item.id"
                     :item="item" :removing="removing" :retrying="retrying"
                     @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
                 </div>
                 <div v-if="bucket.pending.length" class="sub-section">
-                  <p class="sub-label" data-testid="sub-label-PENDING">PENDING</p>
+                  <p class="sub-label" data-testid="sub-label-QUEUED">QUEUED</p>
                   <QueueItemRow v-for="item in bucket.pending" :key="item.id"
                     :item="item" :removing="removing" :retrying="retrying"
                     @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
@@ -162,31 +162,36 @@ const QueueItemRow = defineComponent({
       const item = props.item
       const isRemoving = props.removing.has(item.id)
       const isRetrying = props.retrying.has(item.id)
-      const isInProgress = item.status === 'IN_PROGRESS'
-      const isTdarrError = item.tdarrStatus === 'TDARR_ERROR'
+      const isTranscoding = item.status === 'TRANSCODING'
+      const isError = item.status === 'ERROR'
 
-      let statusLabel = 'pending'
-      let statusClass = 'badge-pending'
-      if (item.status === 'IN_PROGRESS') { statusLabel = 'copying…'; statusClass = 'badge-copying' }
-      else if (item.status === 'ERROR' || isTdarrError) { statusLabel = 'error'; statusClass = 'badge-error' }
+      let statusLabel = 'queued'
+      let statusClass = 'badge-queued'
+      if (item.status === 'TRANSCODING') { statusLabel = `transcoding ${item.progressPercent ?? 0}%`; statusClass = 'badge-transcoding' }
+      else if (isError) { statusLabel = 'error'; statusClass = 'badge-error' }
       else if (item.status === 'DONE') { statusLabel = 'done'; statusClass = 'badge-done' }
 
+      const errorText = item.transcodeError || item.errorMessage
+
       return h('div', {
-        class: ['queue-item', 'clickable', isInProgress ? 'active' : '', (item.status === 'DONE' || item.status === 'ERROR') ? 'done' : ''].filter(Boolean).join(' '),
+        class: ['queue-item', 'clickable', isTranscoding ? 'active' : '', (item.status === 'DONE' || isError) ? 'done' : ''].filter(Boolean).join(' '),
         'data-testid': 'queue-item-row',
         onClick: () => emit('navigate', item)
       }, [
         h('div', { class: 'item-info' }, [
           h('span', { class: 'type' }, item.title || `${item.mediaType} #${item.mediaId}`),
-          item.status === 'ERROR' && item.errorMessage
-            ? h('span', { class: 'error-msg' }, item.errorMessage)
-            : null,
-          isTdarrError && item.tdarrError
-            ? h('span', { class: 'error-msg' }, item.tdarrError)
+          isError && errorText
+            ? h('span', { class: 'error-msg' }, errorText)
             : null,
         ].filter(Boolean)),
+        isTranscoding
+          ? h('div', { class: 'progress', 'data-testid': 'progress-bar' }, [
+              h('div', { class: 'progress-bar', style: { width: (item.progressPercent ?? 0) + '%' } }),
+              h('span', { class: 'progress-label' }, `${item.progressPercent ?? 0}%`),
+            ])
+          : null,
         h('span', { class: ['status-badge', statusClass].join(' ') }, statusLabel),
-        isTdarrError
+        isError
           ? h('button', {
               class: 'btn-retry',
               'data-testid': 'retry-btn',
@@ -197,8 +202,8 @@ const QueueItemRow = defineComponent({
         h('button', {
           class: 'btn-remove',
           'data-testid': `remove-btn-${item.id}`,
-          disabled: isRemoving || isInProgress,
-          title: isInProgress ? 'Wait for copy to finish' : 'Remove',
+          disabled: isRemoving || isTranscoding,
+          title: isTranscoding ? 'Wait for transcoding to finish' : 'Remove',
           onClick: (e) => { e.stopPropagation(); emit('remove', item.id) }
         }, isRemoving ? '…' : '✕'),
       ].filter(Boolean))
@@ -212,10 +217,10 @@ const statusFilter = ref(new Set())
 const textFilter   = ref('')
 
 const STATUS_CHIPS = [
-  { key: 'PENDING', label: 'Pending' },
-  { key: 'COPYING', label: 'Copying' },
-  { key: 'DONE',    label: 'Done'    },
-  { key: 'ERROR',   label: 'Error'   },
+  { key: 'QUEUED',      label: 'Queued'      },
+  { key: 'TRANSCODING', label: 'Transcoding' },
+  { key: 'DONE',        label: 'Done'        },
+  { key: 'ERROR',       label: 'Error'       },
 ]
 
 function matchesType(item) {
@@ -227,17 +232,17 @@ function matchesType(item) {
 function matchesStatus(item) {
   if (statusFilter.value.size === 0) return true
   const a = statusFilter.value
-  if (a.has('PENDING') && item.status === 'PENDING') return true
-  if (a.has('COPYING') && item.status === 'IN_PROGRESS') return true
-  if (a.has('DONE') && item.status === 'DONE' && item.tdarrStatus !== 'TDARR_ERROR') return true
-  if (a.has('ERROR') && (item.status === 'ERROR' || item.tdarrStatus === 'TDARR_ERROR')) return true
+  if (a.has('QUEUED')      && item.status === 'QUEUED')      return true
+  if (a.has('TRANSCODING') && item.status === 'TRANSCODING') return true
+  if (a.has('DONE')        && item.status === 'DONE')        return true
+  if (a.has('ERROR')       && item.status === 'ERROR')       return true
   return false
 }
 function matchesText(item) {
   const q = textFilter.value.trim().toLowerCase()
   if (!q) return true
   const display = item.title || `${item.mediaType} #${item.mediaId}`
-  return [display, item.mediaType, item.errorMessage, item.tdarrError, item.showTitle, item.playlistTitle]
+  return [display, item.mediaType, item.errorMessage, item.transcodeError, item.showTitle, item.playlistTitle]
     .filter(Boolean).some(s => s.toLowerCase().includes(q))
 }
 
@@ -321,8 +326,8 @@ const soloMovies = computed(() =>
 // ── Bucket helper ─────────────────────────────────────────────────────────────
 function buckets(items) {
   return {
-    inProgress: items.filter(i => i.status === 'IN_PROGRESS'),
-    pending:    items.filter(i => i.status === 'PENDING'),
+    inProgress: items.filter(i => i.status === 'TRANSCODING'),
+    pending:    items.filter(i => i.status === 'QUEUED'),
     done:       items.filter(i => i.status === 'DONE' || i.status === 'ERROR'),
   }
 }
@@ -445,10 +450,15 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
 .error-msg { font-size: .78rem; color: var(--red); }
 .status-badge { flex-shrink: 0; font-size: .7rem; font-weight: 600; border-radius: 10px;
                 padding: 2px 8px; letter-spacing: .03em; text-transform: uppercase; }
-.badge-pending { background: rgba(120,120,140,.18); color: var(--text-muted); border: 1px solid rgba(120,120,140,.3); }
-.badge-copying { background: rgba(52,152,219,.18); color: #5dade2; border: 1px solid rgba(52,152,219,.3); }
-.badge-done    { background: rgba(39,174,96,.18);  color: #2ecc71;  border: 1px solid rgba(39,174,96,.3); }
-.badge-error   { background: rgba(231,76,60,.18);  color: #e74c3c;  border: 1px solid rgba(231,76,60,.3); }
+.badge-queued      { background: rgba(120,120,140,.18); color: var(--text-muted); border: 1px solid rgba(120,120,140,.3); }
+.badge-transcoding { background: rgba(52,152,219,.18); color: #5dade2; border: 1px solid rgba(52,152,219,.3); }
+.badge-done        { background: rgba(39,174,96,.18);  color: #2ecc71;  border: 1px solid rgba(39,174,96,.3); }
+.badge-error       { background: rgba(231,76,60,.18);  color: #e74c3c;  border: 1px solid rgba(231,76,60,.3); }
+.progress { position: relative; flex: 1; height: 6px; background: rgba(52,152,219,.18);
+            border-radius: 3px; overflow: hidden; min-width: 60px; max-width: 120px; }
+.progress-bar { height: 100%; background: #5dade2; border-radius: 3px; transition: width .5s ease; }
+.progress-label { position: absolute; top: -1px; left: 0; right: 0; text-align: center;
+                  font-size: .65rem; color: #5dade2; line-height: 6px; pointer-events: none; }
 .btn-remove { background: none; border: none; color: var(--text-muted); cursor: pointer;
               font-size: 1rem; padding: 4px 8px; border-radius: 4px; }
 .btn-remove:hover:not(:disabled) { color: var(--red); background: rgba(231,76,60,.1); }

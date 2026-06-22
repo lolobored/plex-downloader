@@ -125,18 +125,17 @@ function navigateToItem(item) {
 
 function statusClass(item) {
   if (!item.queueStatus) return 'status-none'
-  if (item.tdarrStatus === 'TRANSCODED') return 'status-done'
-  if (item.queueStatus === 'IN_PROGRESS' || item.tdarrStatus === 'PROCESSING') return 'status-processing'
-  if (item.queueStatus === 'ERROR' || item.tdarrStatus === 'TDARR_ERROR') return 'status-error'
+  if (item.queueStatus === 'DONE') return 'status-done'
+  if (item.queueStatus === 'TRANSCODING') return 'status-processing'
+  if (item.queueStatus === 'ERROR') return 'status-error'
   return 'status-queued'
 }
 
 function statusLabel(item) {
   if (!item.queueStatus) return 'not queued'
-  if (item.tdarrStatus === 'TRANSCODED') return 'transcoded'
-  if (item.queueStatus === 'IN_PROGRESS' || item.tdarrStatus === 'PROCESSING') return 'processing'
+  if (item.queueStatus === 'DONE') return 'transcoded'
+  if (item.queueStatus === 'TRANSCODING') return 'transcoding'
   if (item.queueStatus === 'ERROR') return 'error'
-  if (item.tdarrStatus === 'TDARR_ERROR') return 'tdarr error'
   return 'queued'
 }
 </script>

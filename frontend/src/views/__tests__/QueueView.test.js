@@ -11,7 +11,6 @@ vi.mock('../../api/download.js', () => ({
   getQueue:          vi.fn().mockResolvedValue([]),
   enqueue:           vi.fn().mockResolvedValue({}),
   removeQueueItem:   vi.fn().mockResolvedValue(undefined),
-  refreshTdarrStatus:vi.fn().mockResolvedValue({}),
   retryQueueItem:    vi.fn().mockResolvedValue({})
 }))
 vi.mock('../../api/playlists.js', () => ({
@@ -27,7 +26,7 @@ vi.mock('vue-router', () => ({
 function movieItem(overrides = {}) {
   return {
     id: 1, mediaType: 'MOVIE', mediaId: 10, title: 'Inception',
-    status: 'PENDING', tdarrStatus: 'NONE', tdarrError: null,
+    status: 'QUEUED', progressPercent: 0, transcodeError: null,
     playlistId: null, playlistTitle: null,
     showId: null, seasonId: null, showTitle: null, seasonNumber: null,
     queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
@@ -37,7 +36,7 @@ function movieItem(overrides = {}) {
 function episodeItem(overrides = {}) {
   return {
     id: 2, mediaType: 'EPISODE', mediaId: 99, title: 'Breaking Bad S01E01 - Pilot',
-    status: 'PENDING', tdarrStatus: 'NONE', tdarrError: null,
+    status: 'QUEUED', progressPercent: 0, transcodeError: null,
     playlistId: null, playlistTitle: null,
     showId: 50, seasonId: 100, showTitle: 'Breaking Bad', seasonNumber: 1,
     queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
@@ -184,45 +183,75 @@ describe('QueueView', () => {
 
   // ── Status sections within expanded group ────────────────────────────────────
 
-  it('IN_PROGRESS items appear in "In Progress" sub-section', async () => {
+  it('TRANSCODING items appear in "Transcoding" sub-section', async () => {
     const { wrapper } = factory([
-      movieItem({ playlistId: 5, playlistTitle: 'P', status: 'IN_PROGRESS' })
+      movieItem({ playlistId: 5, playlistTitle: 'P', status: 'TRANSCODING', progressPercent: 42 })
     ])
     await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
-    expect(wrapper.find('[data-testid="sub-label-IN_PROGRESS"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sub-label-TRANSCODING"]').exists()).toBe(true)
   })
 
-  it('DONE and TRANSCODED items both appear in Done sub-section', async () => {
+  it('QUEUED items appear in "Queued" sub-section', async () => {
     const { wrapper } = factory([
-      movieItem({ id: 1, playlistId: 5, playlistTitle: 'P', status: 'DONE', tdarrStatus: 'NONE', title: 'Film A' }),
-      movieItem({ id: 2, playlistId: 5, playlistTitle: 'P', mediaId: 11, status: 'DONE', tdarrStatus: 'TRANSCODED', title: 'Film B' }),
+      movieItem({ id: 1, playlistId: 5, playlistTitle: 'P', status: 'QUEUED', title: 'Film A' }),
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="sub-label-QUEUED"]').exists()).toBe(true)
+  })
+
+  it('DONE items appear in Done sub-section', async () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, playlistId: 5, playlistTitle: 'P', status: 'DONE', title: 'Film A' }),
+      movieItem({ id: 2, playlistId: 5, playlistTitle: 'P', mediaId: 11, status: 'DONE', title: 'Film B' }),
     ])
     await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
     expect(wrapper.find('[data-testid="sub-label-DONE"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-testid="queue-item-row"]')).toHaveLength(2)
-    // No TRANSCODED sub-section (both are in Done)
-    expect(wrapper.find('[data-testid="sub-label-TRANSCODED"]').exists()).toBe(false)
   })
 
-  it('TDARR_ERROR item shows retry button inside Done section', async () => {
+  it('ERROR item shows retry button inside Done section', async () => {
     const { wrapper } = factory([
       movieItem({ id: 1, playlistId: 5, playlistTitle: 'P', status: 'ERROR',
-                  tdarrStatus: 'TDARR_ERROR', tdarrError: 'codec error' })
+                  transcodeError: 'codec error' })
     ])
     await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
     expect(wrapper.find('[data-testid="retry-btn"]').exists()).toBe(true)
   })
 
+  it('TRANSCODING item shows progress bar', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'P', status: 'TRANSCODING', progressPercent: 55 })
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="progress-bar"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('55%')
+  })
+
+  it('QUEUED item shows queued badge', () => {
+    const { wrapper } = factory([movieItem({ status: 'QUEUED' })])
+    expect(wrapper.find('.badge-queued').exists()).toBe(true)
+  })
+
+  it('DONE item shows done badge', () => {
+    const { wrapper } = factory([movieItem({ status: 'DONE' })])
+    expect(wrapper.find('.badge-done').exists()).toBe(true)
+  })
+
+  it('ERROR item shows error badge', () => {
+    const { wrapper } = factory([movieItem({ status: 'ERROR' })])
+    expect(wrapper.find('.badge-error').exists()).toBe(true)
+  })
+
   // ── Filter bar ───────────────────────────────────────────────────────────────
 
-  it('filter bar has 4 status chips (no TRANSCODING/TRANSCODED)', () => {
+  it('filter bar has 4 status chips: QUEUED/TRANSCODING/DONE/ERROR', () => {
     const { wrapper } = factory([])
-    expect(wrapper.find('[data-testid="chip-status-PENDING"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="chip-status-COPYING"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-QUEUED"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="chip-status-TRANSCODING"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="chip-status-DONE"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="chip-status-ERROR"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="chip-status-TRANSCODING"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="chip-status-TRANSCODED"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chip-status-PENDING"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chip-status-COPYING"]').exists()).toBe(false)
   })
 
   it('MOVIE type chip hides show groups', async () => {
@@ -251,11 +280,22 @@ describe('QueueView', () => {
   it('count badge reflects filtered count', async () => {
     const { wrapper } = factory([
       movieItem({ id: 1, title: 'A' }),
-      movieItem({ id: 2, mediaId: 11, title: 'B', status: 'DONE', tdarrStatus: 'NONE',
+      movieItem({ id: 2, mediaId: 11, title: 'B', status: 'DONE',
                   completedAt: '2026-01-01T01:00:00Z' })
     ])
     await wrapper.find('[data-testid="chip-status-DONE"]').trigger('click')
     expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+  })
+
+  it('TRANSCODING filter chip shows only transcoding items', async () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, title: 'Inception', status: 'QUEUED' }),
+      movieItem({ id: 2, mediaId: 11, title: 'The Matrix', status: 'TRANSCODING', progressPercent: 30 }),
+    ])
+    await wrapper.find('[data-testid="chip-status-TRANSCODING"]').trigger('click')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+    expect(wrapper.text()).toContain('The Matrix')
+    expect(wrapper.text()).not.toContain('Inception')
   })
 
   // ── Item actions ─────────────────────────────────────────────────────────────
@@ -286,6 +326,14 @@ describe('QueueView', () => {
   it('remove button click does not navigate', async () => {
     const { wrapper } = factory([movieItem()])
     await wrapper.find('[data-testid="remove-btn-1"]').trigger('click')
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  it('retry button click calls retryQueueItem and does not navigate', async () => {
+    const { wrapper } = factory([movieItem({ status: 'ERROR', transcodeError: 'oops' })])
+    await wrapper.find('[data-testid="retry-btn"]').trigger('click')
+    await flushPromises()
+    expect(downloadApi.retryQueueItem).toHaveBeenCalledWith(1)
     expect(pushMock).not.toHaveBeenCalled()
   })
 

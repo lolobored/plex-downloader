@@ -20,11 +20,6 @@ export async function removeQueueItem(id) {
   await http.delete(`/api/download/${id}`)
 }
 
-export async function refreshTdarrStatus(id) {
-  const { data } = await http.post(`/api/download/${id}/tdarr-refresh`)
-  return data  // updated DownloadQueueItem
-}
-
 export async function retryQueueItem(id) {
   const { data } = await http.post(`/api/download/${id}/retry`)
   return data

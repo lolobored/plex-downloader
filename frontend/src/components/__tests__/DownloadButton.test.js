@@ -21,8 +21,8 @@ describe('DownloadButton', () => {
     expect(w.text()).toContain('⬇')
   })
 
-  it('shows in-queue state when PENDING', () => {
-    const w = factory({ status: 'PENDING' })
+  it('shows in-queue state when QUEUED', () => {
+    const w = factory({ status: 'QUEUED' })
     expect(w.text()).toContain('⏳')
   })
 
@@ -31,8 +31,8 @@ describe('DownloadButton', () => {
     expect(w.text()).toContain('✓')
   })
 
-  it('shows in-progress state when IN_PROGRESS', () => {
-    const w = factory({ status: 'IN_PROGRESS' })
+  it('shows transcoding state when TRANSCODING', () => {
+    const w = factory({ status: 'TRANSCODING' })
     expect(w.text()).toContain('⏳')
   })
 

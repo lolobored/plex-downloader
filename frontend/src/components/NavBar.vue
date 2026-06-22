@@ -31,7 +31,7 @@ const auth     = useAuthStore()
 const dlStore  = useDownloadStore()
 
 const pendingCount = computed(() =>
-  dlStore.queueItems.filter(i => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length
+  dlStore.queueItems.filter(i => i.status === 'QUEUED' || i.status === 'TRANSCODING').length
 )
 
 function logout() {

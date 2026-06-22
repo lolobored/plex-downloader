@@ -2,7 +2,7 @@
   <button
     class="dl-btn"
     :class="[`status-${status ?? 'idle'}`, { small }]"
-    :disabled="status === 'PENDING' || status === 'IN_PROGRESS' || status === 'DONE'"
+    :disabled="status === 'QUEUED' || status === 'TRANSCODING' || status === 'DONE'"
     @click.stop="handleClick"
     :title="label"
   >
@@ -26,8 +26,8 @@ const status = computed(() => dlStore.statusFor(props.type, props.mediaId))
 
 const icon = computed(() => {
   switch (status.value) {
-    case 'PENDING':     return '⏳'
-    case 'IN_PROGRESS': return '⏳'
+    case 'QUEUED':      return '⏳'
+    case 'TRANSCODING': return '⏳'
     case 'DONE':        return '✓'
     case 'ERROR':       return '✗'
     default:            return '⬇'
@@ -36,8 +36,8 @@ const icon = computed(() => {
 
 const label = computed(() => {
   switch (status.value) {
-    case 'PENDING':     return 'In Queue'
-    case 'IN_PROGRESS': return 'Copying…'
+    case 'QUEUED':      return 'In Queue'
+    case 'TRANSCODING': return 'Transcoding…'
     case 'DONE':        return 'Done'
     case 'ERROR':       return 'Error'
     default:            return 'Download'
@@ -63,8 +63,8 @@ async function handleClick() {
 .dl-btn:disabled { cursor: default; }
 .status-idle        { background: var(--accent); color: #000; }
 .status-idle:hover  { opacity: .85; }
-.status-PENDING     { background: var(--accent-blue); color: #fff; }
-.status-IN_PROGRESS { background: var(--accent-blue); color: #fff; }
+.status-QUEUED      { background: var(--accent-blue); color: #fff; }
+.status-TRANSCODING { background: var(--accent-blue); color: #fff; }
 .status-DONE        { background: var(--green); color: #fff; }
 .status-ERROR       { background: var(--red); color: #fff; }
 </style>
