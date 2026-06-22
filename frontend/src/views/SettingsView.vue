@@ -77,19 +77,6 @@
     <section class="card-section">
       <h3>Transcoding</h3>
 
-      <div class="field">
-        <label>Max concurrent transcodes</label>
-        <input
-          name="maxConcurrent"
-          v-model.number="form.maxConcurrent"
-          type="number"
-          min="1"
-          placeholder="2"
-        />
-      </div>
-      <button class="btn-save" @click="save" :disabled="saving">Save</button>
-      <p v-if="saveOk" class="ok">Saved.</p>
-
       <hr class="section-divider" />
 
       <h4 class="sub-heading">Quality Profiles</h4>
@@ -274,9 +261,8 @@ async function removeProfile(id) {
 }
 
 const form = reactive({
-  plexUrl:       '',
-  syncCron:      '',
-  maxConcurrent: 2
+  plexUrl:  '',
+  syncCron: ''
 })
 
 onMounted(async () => {
@@ -284,7 +270,6 @@ onMounted(async () => {
     const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
     form.plexUrl      = s['plex.server.url']  ?? ''
     form.syncCron     = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
-    form.maxConcurrent = Number(s['transcode.max.concurrent'] ?? '2')
     const storedLibs = s['plex.sync.libraries'] ?? ''
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
     syncStatus.value = ss
@@ -304,8 +289,7 @@ async function save() {
   const payload = {
     'plex.server.url':           form.plexUrl,
     'plex.sync.cron':            form.syncCron,
-    'plex.sync.libraries':       selectedLibraryKeys.value.join(','),
-    'transcode.max.concurrent':  String(form.maxConcurrent)
+    'plex.sync.libraries':       selectedLibraryKeys.value.join(',')
   }
   try {
     await putSettings(payload)

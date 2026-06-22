@@ -5,6 +5,7 @@ import { useDownloadStore } from '../../stores/download.js'
 import QueueView from '../QueueView.vue'
 import * as downloadApi from '../../api/download.js'
 import * as playlistApi from '../../api/playlists.js'
+import * as transcodeApi from '../../api/transcode.js'
 import { useRouter } from 'vue-router'
 
 vi.mock('../../api/download.js', () => ({
@@ -16,6 +17,10 @@ vi.mock('../../api/download.js', () => ({
 vi.mock('../../api/playlists.js', () => ({
   unsubscribe:           vi.fn().mockResolvedValue(undefined),
   getPlaylistQueueCount: vi.fn().mockResolvedValue(0)
+}))
+vi.mock('../../api/transcode.js', () => ({
+  getConcurrency: vi.fn().mockResolvedValue(2),
+  setConcurrency: vi.fn().mockResolvedValue(3)
 }))
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(),
@@ -61,8 +66,9 @@ describe('QueueView', () => {
     document.body.innerHTML = ''
   })
 
-  function factory(items = []) {
-    const pinia = createTestingPinia({ createSpy: vi.fn })
+  function factory(items = [], role = 'USER') {
+    const pinia = createTestingPinia({ createSpy: vi.fn,
+      initialState: { auth: { role } } })
     const store = useDownloadStore(pinia)
     store.queueItems = items
     store.fetchQueue = vi.fn()
@@ -403,5 +409,56 @@ describe('QueueView', () => {
     expect(msg.textContent).not.toContain('download')
     wrapper.unmount()
     document.body.innerHTML = ''
+  })
+
+  // ── Concurrency control ──────────────────────────────────────────────────────
+
+  it('loads concurrency on mount and displays value', async () => {
+    const { wrapper } = factory([], 'ADMIN')
+    await flushPromises()
+    expect(transcodeApi.getConcurrency).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="concurrency-value"]').text()).toBe('2')
+  })
+
+  it('shows concurrency label', async () => {
+    const { wrapper } = factory([], 'ADMIN')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="concurrency-label"]').exists()).toBe(true)
+  })
+
+  it('increment button calls setConcurrency with n+1 and updates display', async () => {
+    vi.mocked(transcodeApi.setConcurrency).mockResolvedValue(3)
+    const { wrapper } = factory([], 'ADMIN')
+    await flushPromises()
+    await wrapper.find('[data-testid="concurrency-btn-inc"]').trigger('click')
+    await flushPromises()
+    expect(transcodeApi.setConcurrency).toHaveBeenCalledWith(3)
+    expect(wrapper.find('[data-testid="concurrency-value"]').text()).toBe('3')
+  })
+
+  it('decrement button calls setConcurrency with n-1 and updates display', async () => {
+    vi.mocked(transcodeApi.getConcurrency).mockResolvedValue(3)
+    vi.mocked(transcodeApi.setConcurrency).mockResolvedValue(2)
+    const { wrapper } = factory([], 'ADMIN')
+    await flushPromises()
+    await wrapper.find('[data-testid="concurrency-btn-dec"]').trigger('click')
+    await flushPromises()
+    expect(transcodeApi.setConcurrency).toHaveBeenCalledWith(2)
+    expect(wrapper.find('[data-testid="concurrency-value"]').text()).toBe('2')
+  })
+
+  it('decrement button disabled when value is 1', async () => {
+    vi.mocked(transcodeApi.getConcurrency).mockResolvedValue(1)
+    const { wrapper } = factory([], 'ADMIN')
+    await flushPromises()
+    const btn = wrapper.find('[data-testid="concurrency-btn-dec"]')
+    expect(btn.element.disabled).toBe(true)
+  })
+
+  it('stepper buttons hidden for non-admin', async () => {
+    const { wrapper } = factory([], 'USER')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="concurrency-btn-dec"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="concurrency-btn-inc"]').exists()).toBe(false)
   })
 })

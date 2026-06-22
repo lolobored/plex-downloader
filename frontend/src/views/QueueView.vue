@@ -1,6 +1,21 @@
 <template>
   <div>
-    <h2>Download Queue <span v-if="totalVisible > 0" class="count-badge" data-testid="count-badge">{{ totalVisible }}</span></h2>
+    <div class="queue-header">
+      <h2>Download Queue <span v-if="totalVisible > 0" class="count-badge" data-testid="count-badge">{{ totalVisible }}</span></h2>
+      <div class="concurrency-control" data-testid="concurrency-label">
+        <span class="concurrency-label-text">Concurrent transcodes</span>
+        <template v-if="authStore.isAdmin">
+          <button class="concurrency-btn" data-testid="concurrency-btn-dec"
+                  :disabled="maxConcurrent <= 1"
+                  @click="changeConcurrency(-1)">−</button>
+        </template>
+        <span class="concurrency-value" data-testid="concurrency-value">{{ maxConcurrent }}</span>
+        <template v-if="authStore.isAdmin">
+          <button class="concurrency-btn" data-testid="concurrency-btn-inc"
+                  @click="changeConcurrency(1)">+</button>
+        </template>
+      </div>
+    </div>
 
     <div class="filter-bar">
       <div class="filter-group">
@@ -142,12 +157,30 @@
 import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { removeQueueItem, retryQueueItem } from '@/api/download.js'
 import { unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
+import { getConcurrency, setConcurrency } from '@/api/transcode.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 
-const router  = useRouter()
-const dlStore = useDownloadStore()
+const router    = useRouter()
+const dlStore   = useDownloadStore()
+const authStore = useAuthStore()
+const maxConcurrent = ref(2)
+
+async function loadConcurrency() {
+  try { maxConcurrent.value = await getConcurrency() } catch (e) { /* ignore */ }
+}
+
+async function changeConcurrency(delta) {
+  const next = Math.max(1, maxConcurrent.value + delta)
+  try {
+    maxConcurrent.value = await setConcurrency(next)
+  } catch (e) {
+    console.error('setConcurrency failed', e)
+  }
+}
+
 const removing  = ref(new Set())
 const retrying  = ref(new Set())
 const openGroups = ref(new Set())
@@ -392,12 +425,24 @@ let pollTimer = null
 onMounted(async () => {
   try { await dlStore.fetchQueue() } catch (e) { console.error('Initial queue fetch failed:', e) }
   pollTimer = setInterval(() => dlStore.fetchQueue(), 2000)
+  await loadConcurrency()
 })
 onUnmounted(() => clearInterval(pollTimer))
 </script>
 
 <style scoped>
-h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 24px; }
+h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
+.queue-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.concurrency-control { display: flex; align-items: center; gap: 8px; font-size: .85rem;
+                       color: var(--text-muted); background: var(--surface2);
+                       border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; }
+.concurrency-label-text { font-size: .8rem; color: var(--text-muted); white-space: nowrap; }
+.concurrency-value { font-weight: 700; color: var(--text); min-width: 20px; text-align: center; font-size: .95rem; }
+.concurrency-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text);
+                   border-radius: 4px; width: 26px; height: 26px; font-size: 1rem; cursor: pointer;
+                   display: flex; align-items: center; justify-content: center; }
+.concurrency-btn:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); }
+.concurrency-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .count-badge { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
                font-size: .75rem; font-weight: 600; border-radius: 10px; padding: 2px 8px;
                margin-left: 8px; vertical-align: middle; }

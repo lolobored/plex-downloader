@@ -32,7 +32,6 @@ function fullSettings(overrides = {}) {
     'plex.server.url':           'http://localhost:32400',
     'plex.sync.cron':            '0 0 */6 * * *',
     'plex.sync.libraries':       '1',
-    'transcode.max.concurrent':  '3',
     ...overrides
   }
 }
@@ -145,25 +144,6 @@ describe('SettingsView', () => {
     const w = factory()
     await flushPromises()
     expect(w.text()).toContain('Transcoding')
-  })
-
-  it('max-concurrent input reflects transcode.max.concurrent from settings', async () => {
-    const w = factory()
-    await flushPromises()
-    const input = w.find('input[name="maxConcurrent"]')
-    expect(input.exists()).toBe(true)
-    expect(input.element.value).toBe('3')
-  })
-
-  it('save payload includes transcode.max.concurrent and only expected keys', async () => {
-    const w = factory()
-    await flushPromises()
-    await w.find('.btn-save').trigger('click')
-    await flushPromises()
-    const payload = putSettings.mock.calls[0][0]
-    expect(payload).toHaveProperty('transcode.max.concurrent', '3')
-    const expectedKeys = ['plex.server.url', 'plex.sync.cron', 'plex.sync.libraries', 'transcode.max.concurrent']
-    expect(Object.keys(payload).sort()).toEqual(expectedKeys.sort())
   })
 
   it('renders quality profile list from getQualityProfiles', async () => {

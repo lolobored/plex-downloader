@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
 
 @Slf4j
 @Component
@@ -18,7 +17,8 @@ public class TranscodeQueueRunner {
 
     private final DownloadQueueRepository queueRepo;
     private final TranscodeService transcodeService;
-    private final Semaphore permits;
+    private final SettingsService settings;
+    private final ResizableSemaphore permits;
     private final ExecutorService pool = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "transcode-worker");
         t.setDaemon(true);
@@ -30,9 +30,21 @@ public class TranscodeQueueRunner {
                                 SettingsService settings) {
         this.queueRepo = queueRepo;
         this.transcodeService = transcodeService;
+        this.settings = settings;
         int max = parseMax(settings.get("transcode.max.concurrent").orElse("2"));
-        this.permits = new Semaphore(max);
+        this.permits = new ResizableSemaphore(max);
         log.info("Transcode worker: max concurrent = {}", max);
+    }
+
+    public int getMaxConcurrent() {
+        return permits.getMaxPermits();
+    }
+
+    public void setMaxConcurrent(int n) {
+        int clamped = Math.max(1, n);
+        permits.setMaxPermits(clamped);
+        settings.set("transcode.max.concurrent", String.valueOf(clamped));
+        log.info("Transcode worker: max concurrent changed to {}", clamped);
     }
 
     private int parseMax(String v) {

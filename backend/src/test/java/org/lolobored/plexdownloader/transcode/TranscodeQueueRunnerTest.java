@@ -38,6 +38,28 @@ class TranscodeQueueRunnerTest {
     }
 
     @Test
+    void setMaxConcurrentUpdatesGetterAndPersists() {
+        TranscodeQueueRunner r = runner();
+        r.setMaxConcurrent(4);
+        assertThat(r.getMaxConcurrent()).isEqualTo(4);
+        verify(settings).set("transcode.max.concurrent", "4");
+    }
+
+    @Test
+    void setMaxConcurrentClampsToOneAndPersists() {
+        TranscodeQueueRunner r = runner();
+        r.setMaxConcurrent(0);
+        assertThat(r.getMaxConcurrent()).isEqualTo(1);
+        verify(settings).set("transcode.max.concurrent", "1");
+    }
+
+    @Test
+    void getMaxConcurrentReflectsInitialSetting() {
+        TranscodeQueueRunner r = runner();
+        assertThat(r.getMaxConcurrent()).isEqualTo(2);
+    }
+
+    @Test
     void recover_resetsTranscodingAndResubmitsQueued() {
         DownloadQueueItem stuck = new DownloadQueueItem();
         stuck.setId(1L); stuck.setStatus(DownloadQueueItem.Status.TRANSCODING);
