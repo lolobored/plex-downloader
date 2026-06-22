@@ -118,7 +118,6 @@ public class PlaylistController {
         }
 
         String queueStatus = null;
-        String tdarrStatus = null;
         if (mediaId != null) {
             try {
                 DownloadQueueItem.MediaType type = DownloadQueueItem.MediaType.valueOf(pi.getMediaType());
@@ -126,7 +125,6 @@ public class PlaylistController {
                     queueRepo.findByUser_IdAndMediaTypeAndMediaId(userId, type, mediaId);
                 if (qiOpt.isPresent()) {
                     queueStatus = qiOpt.get().getStatus().name();
-                    tdarrStatus = qiOpt.get().getTdarrStatus() != null ? qiOpt.get().getTdarrStatus().name() : null;
                 }
             } catch (IllegalArgumentException ignored) {
                 // unknown mediaType — skip queue lookup
@@ -134,6 +132,6 @@ public class PlaylistController {
         }
 
         return new PlaylistItemResponse(pi.getId(), pi.getPlexId(), pi.getMediaType(),
-            pi.getOrdinal(), title, year, queueStatus, tdarrStatus, mediaId, showId, seasonId);
+            pi.getOrdinal(), title, year, queueStatus, mediaId, showId, seasonId);
     }
 }

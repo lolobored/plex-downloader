@@ -1,26 +1,21 @@
 package org.lolobored.plexdownloader.service;
 
-import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.repository.*;
+import org.lolobored.plexdownloader.transcode.TranscodeRequestedEvent;
 import java.util.HashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,43 +27,46 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DownloadService {
 
-    private DownloadService self;
     private final MovieRepository movieRepo;
     private final EpisodeRepository episodeRepo;
     private final SeasonRepository seasonRepo;
     private final TvShowRepository showRepo;
     private final DownloadQueueRepository queueRepo;
     private final SettingsService settings;
-    private final TdarrClient tdarrClient;
+    private final QualityProfileService qualityProfileService;
+    private final ApplicationEventPublisher events;
     private final PlaylistRepository playlistRepo;
 
-    @Autowired
-    @Lazy
-    public void setSelf(DownloadService self) {
-        this.self = self;
-    }
-
     public List<Long> enqueueMovie(Long movieId, User user) {
-        return enqueueMovie(movieId, user, null);
+        return enqueueMovie(movieId, user, null, null);
     }
 
     public List<Long> enqueueMovie(Long movieId, User user, Long playlistId) {
+        return enqueueMovie(movieId, user, playlistId, null);
+    }
+
+    public List<Long> enqueueMovie(Long movieId, User user, Long playlistId, Long qualityProfileId) {
         Movie movie = movieRepo.findById(movieId)
             .orElseThrow(() -> new IllegalArgumentException("Movie not found: " + movieId));
+        QualityProfile profile = qualityProfileService.resolveOrDefault(qualityProfileId);
         String subDir = "movies/" + Path.of(movie.getFilePath()).getParent().getFileName().toString();
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.MOVIE,
-            movieId, movie.getFilePath(), subDir, movie.getTitle());
+            movieId, movie.getFilePath(), subDir, movie.getTitle(), profile);
         item.setPlaylistId(playlistId);
         item = queueRepo.save(item);
-        self.executeCopyAsync(item.getId());
+        events.publishEvent(new TranscodeRequestedEvent(item.getId()));
         return List.of(item.getId());
     }
 
     public List<Long> enqueueEpisode(Long episodeId, User user) {
-        return enqueueEpisode(episodeId, user, null);
+        return enqueueEpisode(episodeId, user, null, null);
     }
 
     public List<Long> enqueueEpisode(Long episodeId, User user, Long playlistId) {
+        return enqueueEpisode(episodeId, user, playlistId, null);
+    }
+
+    public List<Long> enqueueEpisode(Long episodeId, User user, Long playlistId, Long qualityProfileId) {
         Episode ep = episodeRepo.findById(episodeId)
             .orElseThrow(() -> new IllegalArgumentException("Episode not found: " + episodeId));
         Season season = seasonRepo.findById(ep.getSeason().getId())
@@ -80,21 +78,27 @@ public class DownloadService {
         String epTitle = show.getTitle() + " S" + String.format("%02d", season.getSeasonNumber())
                          + "E" + String.format("%02d", ep.getEpisodeNumber())
                          + (ep.getTitle() != null ? " - " + ep.getTitle() : "");
+        QualityProfile profile = qualityProfileService.resolveOrDefault(qualityProfileId);
         DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
-            episodeId, ep.getFilePath(), subDir, epTitle);
+            episodeId, ep.getFilePath(), subDir, epTitle, profile);
         item.setPlaylistId(playlistId);
         item = queueRepo.save(item);
-        self.executeCopyAsync(item.getId());
+        events.publishEvent(new TranscodeRequestedEvent(item.getId()));
         return List.of(item.getId());
     }
 
     public List<Long> enqueueSeason(Long seasonId, User user) {
+        return enqueueSeason(seasonId, user, null);
+    }
+
+    public List<Long> enqueueSeason(Long seasonId, User user, Long qualityProfileId) {
         Season season = seasonRepo.findById(seasonId)
             .orElseThrow(() -> new IllegalArgumentException("Season not found: " + seasonId));
         TvShow show = showRepo.findById(season.getShow().getId())
             .orElseThrow(() -> new IllegalArgumentException("Show not found for season: " + seasonId));
         List<Episode> episodes = episodeRepo.findBySeasonIdOrderByEpisodeNumber(seasonId);
         if (episodes.isEmpty()) throw new IllegalArgumentException("Season has no episodes: " + seasonId);
+        QualityProfile profile = qualityProfileService.resolveOrDefault(qualityProfileId);
         List<Long> ids = new ArrayList<>();
         for (Episode ep : episodes) {
             String subDir = "tvshows/" + Path.of(ep.getFilePath()).getParent().getParent().getFileName().toString()
@@ -103,20 +107,24 @@ public class DownloadService {
                              + "E" + String.format("%02d", ep.getEpisodeNumber())
                              + (ep.getTitle() != null ? " - " + ep.getTitle() : "");
             DownloadQueueItem item = buildItem(user, DownloadQueueItem.MediaType.EPISODE,
-                ep.getId(), ep.getFilePath(), subDir, epTitle);
+                ep.getId(), ep.getFilePath(), subDir, epTitle, profile);
             item = queueRepo.save(item);
-            self.executeCopyAsync(item.getId());
+            events.publishEvent(new TranscodeRequestedEvent(item.getId()));
             ids.add(item.getId());
         }
         return ids;
     }
 
     public List<Long> enqueueShow(Long showId, User user) {
+        return enqueueShow(showId, user, null);
+    }
+
+    public List<Long> enqueueShow(Long showId, User user, Long qualityProfileId) {
         List<Season> seasons = seasonRepo.findByShowIdOrderBySeasonNumber(showId);
         if (seasons.isEmpty()) throw new IllegalArgumentException("Show not found or empty: " + showId);
         List<Long> ids = new ArrayList<>();
         for (Season season : seasons) {
-            ids.addAll(enqueueSeason(season.getId(), user));
+            ids.addAll(enqueueSeason(season.getId(), user, qualityProfileId));
         }
         return ids;
     }
@@ -181,10 +189,12 @@ public class DownloadService {
 
     private DownloadQueueItem buildItem(User user, DownloadQueueItem.MediaType type,
                                         Long mediaId, String plexFilePath, String subDir,
-                                        String title) {
+                                        String title, QualityProfile profile) {
         String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
-        String filename = Path.of(plexFilePath).getFileName().toString();
-        String destPath = Path.of(conversionDir, "in-flight", subDir, filename).toString();
+        String srcName = Path.of(plexFilePath).getFileName().toString();
+        String stem = srcName.replaceFirst("\\.[^.]+$", "");
+        String outName = stem + profile.getContainer().extension();
+        String destPath = Path.of(conversionDir, "libraries", subDir, outName).toString();
 
         int nextPos = queueRepo.findMaxQueuePosition().orElse(0) + 1;
 
@@ -195,8 +205,9 @@ public class DownloadService {
         item.setTitle(title);
         item.setSourceFilePath(plexFilePath);
         item.setDestFilePath(destPath);
+        item.setQualityProfile(profile);
         item.setQueuePosition(nextPos);
-        item.setStatus(DownloadQueueItem.Status.PENDING);
+        item.setStatus(DownloadQueueItem.Status.QUEUED);
         return item;
     }
 
@@ -208,9 +219,9 @@ public class DownloadService {
         if (!item.getUser().getId().equals(user.getId()) && user.getRole() != User.Role.ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
         }
-        if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+        if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Copy in progress, retry when DONE");
+                "Transcode in progress, cancel via the worker");
         }
         doCancelItem(item);
     }
@@ -220,7 +231,7 @@ public class DownloadService {
         List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndShowId(userId, showId);
         int cancelled = 0;
         for (DownloadQueueItem item : items) {
-            if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+            if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
                 item.setCancellationRequested(true);
                 queueRepo.save(item);
             } else {
@@ -236,7 +247,7 @@ public class DownloadService {
         List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndSeasonId(userId, seasonId);
         int cancelled = 0;
         for (DownloadQueueItem item : items) {
-            if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+            if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
                 item.setCancellationRequested(true);
                 queueRepo.save(item);
             } else {
@@ -249,123 +260,33 @@ public class DownloadService {
 
     // Package-private for testing
     void doCancelItem(DownloadQueueItem item) {
-        // Delete in-flight file (always attempt — may already be gone after transcoding)
         if (item.getDestFilePath() != null) {
             try {
                 Files.deleteIfExists(Path.of(item.getDestFilePath()));
             } catch (IOException e) {
-                log.warn("Could not delete in-flight file {}: {}", item.getDestFilePath(), e.getMessage());
+                log.warn("Could not delete output file {}: {}", item.getDestFilePath(), e.getMessage());
             }
         }
-
-        if (item.getTdarrStatus() == DownloadQueueItem.TdarrStatus.TRANSCODED) {
-            String librariesPath = item.getOutputFilePath();
-            if (librariesPath == null && item.getDestFilePath() != null) {
-                Path derived = deriveLibrariesPath(item.getDestFilePath());
-                if (derived != null) librariesPath = derived.toString();
-            }
-            if (librariesPath != null) {
-                final String lp = librariesPath;
-                try {
-                    Files.deleteIfExists(Path.of(lp));
-                } catch (IOException e) {
-                    log.warn("Could not delete transcoded file {}: {}", lp, e.getMessage());
-                }
-                try {
-                    tdarrClient.deleteFile(lp);
-                } catch (Exception e) {
-                    log.warn("Tdarr eviction (libraries) failed for item {}: {}", item.getId(), e.getMessage());
-                }
-            } else {
-                log.warn("Item {} is TRANSCODED but could not resolve libraries path", item.getId());
-            }
-        } else {
-            if (item.getDestFilePath() != null) {
-                try {
-                    tdarrClient.deleteFile(item.getDestFilePath());
-                } catch (Exception e) {
-                    log.warn("Tdarr eviction failed for item {}: {}", item.getId(), e.getMessage());
-                }
-            }
-        }
-
         queueRepo.delete(item);
     }
 
-    @Async("downloadExecutor")
-    public void executeCopyAsync(Long itemId) {
-        DownloadQueueItem item = queueRepo.findById(itemId).orElse(null);
-        if (item == null) return;
-
-        item.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+    @Transactional
+    public DownloadQueueItem retry(Long id, User user) {
+        DownloadQueueItem item = queueRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Queue item not found"));
+        if (item.getUser() == null || !item.getUser().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
+        }
+        if (item.getStatus() != DownloadQueueItem.Status.ERROR) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item is not in ERROR state");
+        }
+        item.setStatus(DownloadQueueItem.Status.QUEUED);
+        item.setErrorMessage(null);
+        item.setTranscodeError(null);
+        item.setProgressPercent(null);
         queueRepo.save(item);
-
-        boolean copySucceeded = false;
-        IOException copyError = null;
-        try {
-            Path source = Path.of(item.getSourceFilePath());
-            Path dest = Path.of(item.getDestFilePath());
-            if (!Files.exists(source)) {
-                throw new IOException("Source file not found: " + source);
-            }
-            Files.createDirectories(dest.getParent());
-            Path temp = Path.of(item.getDestFilePath() + ".tmp");
-            try {
-                Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
-                try {
-                    Files.move(temp, dest, StandardCopyOption.ATOMIC_MOVE);
-                } catch (AtomicMoveNotSupportedException e) {
-                    Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
-                }
-            } catch (IOException e) {
-                Files.deleteIfExists(temp);
-                throw e;
-            }
-            copySucceeded = true;
-        } catch (IOException e) {
-            copyError = e;
-            log.error("Copy failed for item {}: {}", itemId, e.getMessage());
-        }
-
-        // Re-read to detect cancellationRequested flag set by an unsubscribe during copy
-        DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
-        if (fresh == null) return;  // record deleted externally — do not re-create
-        if (fresh.isCancellationRequested()) {
-            doCancelItem(fresh);
-            return;
-        }
-
-        if (copySucceeded) {
-            fresh.setStatus(DownloadQueueItem.Status.DONE);
-            fresh.setCompletedAt(Instant.now());
-        } else {
-            fresh.setStatus(DownloadQueueItem.Status.ERROR);
-            fresh.setErrorMessage(copyError.getMessage());
-        }
-        queueRepo.save(fresh);
-    }
-
-    /**
-     * Derives the libraries-equivalent path for an in-flight file.
-     * Walks the parent dir to handle extension changes (e.g. .m4v → .mp4 after transcoding).
-     */
-    private Path deriveLibrariesPath(String destFilePath) {
-        String candidate = destFilePath.replace("/in-flight/", "/libraries/");
-        if (candidate.equals(destFilePath)) return null;
-        Path exact = Path.of(candidate);
-        if (Files.exists(exact)) return exact;
-        Path parent = exact.getParent();
-        String stem = exact.getFileName().toString().replaceFirst("\\.[^.]+$", "");
-        if (!Files.isDirectory(parent)) return null;
-        try (var stream = Files.list(parent)) {
-            return stream
-                .filter(p -> p.getFileName().toString().startsWith(stem))
-                .findFirst()
-                .orElse(null);
-        } catch (IOException e) {
-            log.warn("Could not search libraries dir {}: {}", parent, e.getMessage());
-            return null;
-        }
+        events.publishEvent(new TranscodeRequestedEvent(id));
+        return item;
     }
 
 }

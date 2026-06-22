@@ -1,7 +1,6 @@
 package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
-import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
 import org.lolobored.plexdownloader.service.LibrarySyncScheduler;
@@ -27,7 +26,6 @@ public class AdminController {
     private final LibrarySyncService syncService;
     private final LibrarySyncScheduler syncScheduler;
     private final PlexMediaServerClient plexClient;
-    private final TdarrClient tdarrClient;
 
     @GetMapping("/settings")
     public Map<String, String> getSettings() {
@@ -35,9 +33,7 @@ public class AdminController {
         result.put("plex.server.url",     settingsService.get("plex.server.url").orElse(""));
         result.put("plex.sync.cron",      settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
         result.put("plex.sync.libraries", settingsService.get("plex.sync.libraries").orElse(""));
-        result.put("tdarr.server.url",    settingsService.get("tdarr.server.url").orElse(""));
-        result.put("tdarr.api.key",       settingsService.get("tdarr.api.key").orElse(""));
-        result.put("tdarr.sync.cron",     settingsService.get("tdarr.sync.cron").orElse("0 */30 * * * *"));
+        result.put("transcode.max.concurrent", settingsService.get("transcode.max.concurrent").orElse("2"));
         return result;
     }
 
@@ -47,16 +43,6 @@ public class AdminController {
         return url != null && !url.isBlank()
             ? plexClient.getLibraries(url)
             : plexClient.getLibraries();
-    }
-
-    @GetMapping("/tdarr/test")
-    public Map<String, Object> testTdarr(@RequestParam(required = false) String url,
-                                         @RequestParam(required = false) String apiKey) {
-        String target = (url != null && !url.isBlank()) ? url
-            : settingsService.get("tdarr.server.url").orElse("");
-        TdarrClient.PingResult result = tdarrClient.ping(target, apiKey);
-        return result.ok() ? Map.of("ok", true, "detail", result.detail())
-                           : Map.of("ok", false, "error", result.detail());
     }
 
     @PutMapping("/settings")

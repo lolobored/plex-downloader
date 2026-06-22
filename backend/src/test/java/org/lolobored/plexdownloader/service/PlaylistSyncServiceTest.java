@@ -2,7 +2,6 @@
 package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
-import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.client.dto.PlexItem;
 import org.lolobored.plexdownloader.client.dto.PlexPlaylist;
 import org.lolobored.plexdownloader.model.*;
@@ -33,7 +32,6 @@ class PlaylistSyncServiceTest {
     @Mock EpisodeRepository episodeRepo;
     @Mock DownloadQueueRepository queueRepo;
     @Mock DownloadService downloadService;
-    @Mock TdarrClient tdarrClient;
     @InjectMocks PlaylistSyncService service;
 
     private PlexPlaylist plexPlaylist(String key) {
@@ -100,7 +98,7 @@ class PlaylistSyncServiceTest {
     }
 
     @Test
-    void syncAll_cancelsRemovedItem_deletesFileAndTdarr(@TempDir Path tempDir) throws Exception {
+    void syncAll_cancelsRemovedItem_deletesFile(@TempDir Path tempDir) throws Exception {
         when(plexClient.getPlaylists()).thenReturn(List.of(plexPlaylist("pl1")));
         Playlist local = localPlaylist(10L, "pl1");
         when(playlistRepo.findByPlexId("pl1")).thenReturn(Optional.of(local));
@@ -128,7 +126,6 @@ class PlaylistSyncServiceTest {
 
         verify(itemRepo).deleteByPlaylistIdAndPlexId(10L, "m1");
         verify(queueRepo).delete(qi);
-        verify(tdarrClient).deleteFile(destFile.toString());
         assertThat(destFile).doesNotExist();
     }
 
@@ -241,28 +238,28 @@ class PlaylistSyncServiceTest {
     }
 
     @Test
-    void cancelAllForUser_cancelsNonInProgressItems() {
-        DownloadQueueItem pending = new DownloadQueueItem();
-        pending.setId(1L); pending.setStatus(DownloadQueueItem.Status.PENDING);
-        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(pending));
+    void cancelAllForUser_cancelsNonTranscodingItems() {
+        DownloadQueueItem queued = new DownloadQueueItem();
+        queued.setId(1L); queued.setStatus(DownloadQueueItem.Status.QUEUED);
+        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(queued));
 
         int result = service.cancelAllForUser(1L, 5L);
 
         assertThat(result).isEqualTo(1);
-        verify(downloadService).doCancelItem(pending);
+        verify(downloadService).doCancelItem(queued);
         verify(queueRepo, never()).save(any());
     }
 
     @Test
-    void cancelAllForUser_flagsInProgressForDeferredCancel() {
-        DownloadQueueItem inProgress = new DownloadQueueItem();
-        inProgress.setId(2L); inProgress.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
-        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(inProgress));
+    void cancelAllForUser_flagsTranscodingForDeferredCancel() {
+        DownloadQueueItem transcoding = new DownloadQueueItem();
+        transcoding.setId(2L); transcoding.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        when(queueRepo.findAllByUserIdAndPlaylistId(1L, 5L)).thenReturn(List.of(transcoding));
 
         service.cancelAllForUser(1L, 5L);
 
-        verify(queueRepo).save(inProgress);
-        assertThat(inProgress.isCancellationRequested()).isTrue();
+        verify(queueRepo).save(transcoding);
+        assertThat(transcoding.isCancellationRequested()).isTrue();
         verify(downloadService, never()).doCancelItem(any());
     }
 

@@ -8,8 +8,9 @@ public record DownloadQueueItemResponse(
     DownloadQueueItem.MediaType mediaType,
     Long mediaId,
     DownloadQueueItem.Status status,
-    DownloadQueueItem.TdarrStatus tdarrStatus,
-    String tdarrError,
+    Integer progressPercent,
+    String transcodeError,
+    String qualityProfileName,
     String title,
     Integer queuePosition,
     String errorMessage,
@@ -29,7 +30,8 @@ public record DownloadQueueItemResponse(
             String showTitle, Integer seasonNumber) {
         return new DownloadQueueItemResponse(
             item.getId(), item.getMediaType(), item.getMediaId(),
-            item.getStatus(), item.getTdarrStatus(), item.getTdarrError(),
+            item.getStatus(), item.getProgressPercent(), item.getTranscodeError(),
+            item.getQualityProfile() != null ? item.getQualityProfile().getName() : null,
             item.getTitle(), item.getQueuePosition(), item.getErrorMessage(),
             item.getRequestedAt(), item.getCompletedAt(),
             showId, seasonId,

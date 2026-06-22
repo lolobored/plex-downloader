@@ -5,10 +5,8 @@ import org.lolobored.plexdownloader.config.JwtAuthFilter;
 import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.model.User;
-import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import org.lolobored.plexdownloader.service.DownloadService;
 import org.lolobored.plexdownloader.service.JwtService;
-import org.lolobored.plexdownloader.service.TdarrSyncScheduler;
 import org.lolobored.plexdownloader.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,7 +29,6 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -45,8 +42,6 @@ class DownloadControllerTest {
     MockMvc mockMvc;
     @Autowired WebApplicationContext webApplicationContext;
     @MockitoBean DownloadService downloadService;
-    @MockitoBean TdarrSyncScheduler tdarrSync;
-    @MockitoBean DownloadQueueRepository queueRepo;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
@@ -79,7 +74,7 @@ class DownloadControllerTest {
     void getQueue_returnsEnrichedItems() throws Exception {
         DownloadQueueItemResponse resp = new DownloadQueueItemResponse(
             1L, DownloadQueueItem.MediaType.EPISODE, 99L,
-            DownloadQueueItem.Status.PENDING, DownloadQueueItem.TdarrStatus.NONE,
+            DownloadQueueItem.Status.QUEUED, null, null,
             null, "Show S01E01", 1, null,
             java.time.Instant.parse("2026-01-01T00:00:00Z"), null,
             10L, 20L,
@@ -96,37 +91,22 @@ class DownloadControllerTest {
     }
 
     @Test
-    void retry_returns200AndUpdatedItem_whenOwnerAndTdarrError() throws Exception {
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(5L);
-        item.setUser(user);
-        item.setStatus(DownloadQueueItem.Status.ERROR);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
-
+    void retry_returns200AndUpdatedItem_whenOwnerAndErrorState() throws Exception {
         DownloadQueueItem reset = new DownloadQueueItem();
         reset.setId(5L);
-        reset.setStatus(DownloadQueueItem.Status.DONE);
-        reset.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
+        reset.setStatus(DownloadQueueItem.Status.QUEUED);
 
-        when(queueRepo.findById(5L)).thenReturn(Optional.of(item));
-        when(tdarrSync.requeueOne(5L)).thenReturn(reset);
+        when(downloadService.retry(5L, user)).thenReturn(reset);
 
         mockMvc.perform(post("/api/download/5/retry"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("DONE"))
-            .andExpect(jsonPath("$.tdarrStatus").value("NONE"));
+            .andExpect(jsonPath("$.status").value("QUEUED"));
     }
 
     @Test
     void retry_returns403_whenNotOwner() throws Exception {
-        User other = new User(); other.setId(99L);
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(6L);
-        item.setUser(other);
-        item.setStatus(DownloadQueueItem.Status.ERROR);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
-
-        when(queueRepo.findById(6L)).thenReturn(Optional.of(item));
+        when(downloadService.retry(eq(6L), any())).thenThrow(
+            new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item"));
 
         mockMvc.perform(post("/api/download/6/retry"))
             .andExpect(status().isForbidden());
@@ -134,39 +114,17 @@ class DownloadControllerTest {
 
     @Test
     void retry_returns404_whenItemNotFound() throws Exception {
-        when(queueRepo.findById(99L)).thenReturn(Optional.empty());
+        when(downloadService.retry(eq(99L), any())).thenThrow(
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "Queue item not found"));
 
         mockMvc.perform(post("/api/download/99/retry"))
             .andExpect(status().isNotFound());
     }
 
     @Test
-    void retry_returns403_whenAdminTriesOtherUsersItem() throws Exception {
-        user.setRole(User.Role.ADMIN);
-        User other = new User(); other.setId(99L);
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(8L);
-        item.setUser(other);
-        item.setStatus(DownloadQueueItem.Status.ERROR);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TDARR_ERROR);
-
-        when(queueRepo.findById(8L)).thenReturn(Optional.of(item));
-
-        mockMvc.perform(post("/api/download/8/retry"))
-            .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void retry_returns400_whenNotInTdarrErrorState() throws Exception {
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(7L);
-        item.setUser(user);
-        item.setStatus(DownloadQueueItem.Status.DONE);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.PROCESSING);
-
-        when(queueRepo.findById(7L)).thenReturn(Optional.of(item));
-        when(tdarrSync.requeueOne(7L)).thenThrow(
-            new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item is not in TDARR_ERROR state"));
+    void retry_returns400_whenNotInErrorState() throws Exception {
+        when(downloadService.retry(eq(7L), any())).thenThrow(
+            new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item is not in ERROR state"));
 
         mockMvc.perform(post("/api/download/7/retry"))
             .andExpect(status().isBadRequest());

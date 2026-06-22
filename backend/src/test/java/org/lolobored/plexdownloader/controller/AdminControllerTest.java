@@ -2,8 +2,6 @@ package org.lolobored.plexdownloader.controller;
 
 import tools.jackson.databind.ObjectMapper;
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
-import org.lolobored.plexdownloader.client.TdarrClient;
-import org.lolobored.plexdownloader.client.TdarrClient.PingResult;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.config.JwtAuthFilter;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
@@ -36,7 +34,6 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -52,7 +49,6 @@ class AdminControllerTest {
     @MockitoBean LibrarySyncService syncService;
     @MockitoBean LibrarySyncScheduler syncScheduler;
     @MockitoBean PlexMediaServerClient plexClient;
-    @MockitoBean TdarrClient tdarrClient;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
@@ -93,22 +89,21 @@ class AdminControllerTest {
     }
 
     @Test
-    void getSettingsReturnsExpectedKeysWithoutToken() throws Exception {
+    void getSettingsReturnsExpectedKeys() throws Exception {
         when(settingsService.get(anyString())).thenReturn(Optional.empty());
         when(settingsService.get("plex.server.url")).thenReturn(Optional.of("http://plex:32400"));
         when(settingsService.get("plex.sync.libraries")).thenReturn(Optional.of("1,2"));
-        when(settingsService.get("tdarr.server.url")).thenReturn(Optional.of("http://tdarr:8265"));
-        when(settingsService.get("tdarr.sync.cron")).thenReturn(Optional.of("0 */30 * * * *"));
+        when(settingsService.get("transcode.max.concurrent")).thenReturn(Optional.of("2"));
 
         mockMvc.perform(get("/api/admin/settings"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$['plex.server.url']").value("http://plex:32400"))
             .andExpect(jsonPath("$['plex.sync.libraries']").value("1,2"))
-            .andExpect(jsonPath("$['tdarr.server.url']").value("http://tdarr:8265"))
-            .andExpect(jsonPath("$['tdarr.sync.cron']").value("0 */30 * * * *"))
+            .andExpect(jsonPath("$['transcode.max.concurrent']").value("2"))
             .andExpect(jsonPath("$['plex.server.token']").doesNotExist())
-            .andExpect(jsonPath("$['plex.path.prefix.movies.plex']").doesNotExist())
-            .andExpect(jsonPath("$['tdarr.path.prefix.conversion']").doesNotExist());
+            .andExpect(jsonPath("$['tdarr.server.url']").doesNotExist())
+            .andExpect(jsonPath("$['tdarr.api.key']").doesNotExist())
+            .andExpect(jsonPath("$['tdarr.sync.cron']").doesNotExist());
     }
 
     @Test
@@ -161,26 +156,5 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/api/admin/sync"))
             .andExpect(status().isConflict());
-    }
-
-    @Test
-    void getTdarrTestReturnsOkWhenPingSucceeds() throws Exception {
-        when(tdarrClient.ping(eq("http://tdarr:8265"), any()))
-            .thenReturn(new TdarrClient.PingResult(true, "Connected"));
-
-        mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.ok").value(true));
-    }
-
-    @Test
-    void getTdarrTestReturnsNotOkWhenPingFails() throws Exception {
-        when(tdarrClient.ping(eq("http://tdarr:8265"), any()))
-            .thenReturn(new TdarrClient.PingResult(false, "Connection failed: refused"));
-
-        mockMvc.perform(get("/api/admin/tdarr/test").param("url", "http://tdarr:8265"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.ok").value(false))
-            .andExpect(jsonPath("$.error").exists());
     }
 }

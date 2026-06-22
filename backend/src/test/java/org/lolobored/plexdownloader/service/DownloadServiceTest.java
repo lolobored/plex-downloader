@@ -1,12 +1,11 @@
 package org.lolobored.plexdownloader.service;
 
-import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.model.*;
 import org.lolobored.plexdownloader.model.Playlist;
 import org.lolobored.plexdownloader.model.Season;
 import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
-import org.junit.jupiter.api.BeforeEach;
+import org.lolobored.plexdownloader.transcode.TranscodeRequestedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -17,8 +16,6 @@ import org.mockito.quality.Strictness;
 
 import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 
-import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -28,7 +25,6 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,50 +37,37 @@ class DownloadServiceTest {
     @Mock TvShowRepository showRepo;
     @Mock DownloadQueueRepository queueRepo;
     @Mock SettingsService settings;
-    @Mock TdarrClient tdarrClient;
+    @Mock QualityProfileService qualityProfileService;
+    @Mock org.springframework.context.ApplicationEventPublisher events;
     @Mock PlaylistRepository playlistRepo;
-    @Spy @InjectMocks DownloadService service;
-
-    @BeforeEach
-    void injectSelf() throws Exception {
-        Field selfField = DownloadService.class.getDeclaredField("self");
-        selfField.setAccessible(true);
-        selfField.set(service, service);
-    }
+    @InjectMocks DownloadService service;
 
     @TempDir Path tempDir;
 
+    private QualityProfile defaultProfile() {
+        QualityProfile p = new QualityProfile();
+        p.setId(1L); p.setName("Default");
+        p.setContainer(QualityProfile.Container.MKV);
+        return p;
+    }
+
     @Test
-    void enqueuesMovieAndReturnsJobId() throws IOException {
-        Path sourceFile = tempDir.resolve("movie.mkv");
-        Files.writeString(sourceFile, "fake");
-
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
-
+    void enqueueMovie_buildsLibrariesOutputPathWithProfileExtension() {
         Movie movie = new Movie();
-        movie.setId(1L);
-        movie.setPlexId("12345");
-        movie.setFilePath("/plex/movies/Some Movie (2024)/movie.mkv");
-
-        User user = new User();
-        user.setId(1L);
-
+        movie.setId(1L); movie.setTitle("The Dark Knight");
+        movie.setFilePath("/plex/movies/The Dark Knight (2008)/dark.avi");
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
-        when(queueRepo.save(any())).thenAnswer(inv -> {
-            DownloadQueueItem item = inv.getArgument(0);
-            item.setId(99L);
-            return item;
-        });
+        when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(2L); return i; });
 
-        List<Long> jobIds = service.enqueueMovie(1L, user);
+        service.enqueueMovie(1L, new User());
 
-        assertThat(jobIds).containsExactly(99L);
         verify(queueRepo).save(argThat(item ->
-            item.getMediaType() == DownloadQueueItem.MediaType.MOVIE
-            && item.getStatus() == DownloadQueueItem.Status.PENDING
-            && "/plex/movies/Some Movie (2024)/movie.mkv".equals(item.getSourceFilePath())
-        ));
+            item.getDestFilePath().replace('\\','/').contains("/libraries/movies/The Dark Knight (2008)/dark.mkv")
+            && item.getStatus() == DownloadQueueItem.Status.QUEUED));
+        verify(events).publishEvent(any(TranscodeRequestedEvent.class));
     }
 
     @Test
@@ -100,35 +83,32 @@ class DownloadServiceTest {
     }
 
     @Test
-    void downloadQueueItem_hasDefaultTdarrStatusNone() {
-        DownloadQueueItem item = new DownloadQueueItem();
-        assertThat(item.getTdarrStatus()).isEqualTo(DownloadQueueItem.TdarrStatus.NONE);
-    }
-
-    @Test
-    void enqueueMovie_buildsStructuredPath() {
+    void enqueueMovie_defaultStatusIsQueued() {
         Movie movie = new Movie();
         movie.setId(1L);
-        movie.setTitle("The Dark Knight");
-        movie.setFilePath("/plex/movies/The Dark Knight (2008)/dark.mkv");
+        movie.setTitle("Some Movie");
+        movie.setFilePath("/plex/movies/Some Movie (2024)/movie.mkv");
 
         User user = new User();
         user.setId(1L);
 
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
-        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
-            DownloadQueueItem i = inv.getArgument(0);
-            i.setId(2L);
-            return i;
+            DownloadQueueItem item = inv.getArgument(0);
+            item.setId(99L);
+            return item;
         });
 
-        service.enqueueMovie(1L, user);
+        List<Long> jobIds = service.enqueueMovie(1L, user);
 
+        assertThat(jobIds).containsExactly(99L);
         verify(queueRepo).save(argThat(item ->
-            item.getDestFilePath() != null &&
-            item.getDestFilePath().replace('\\', '/').contains("/in-flight/movies/The Dark Knight (2008)/dark.mkv")
+            item.getMediaType() == DownloadQueueItem.MediaType.MOVIE
+            && item.getStatus() == DownloadQueueItem.Status.QUEUED
+            && "/plex/movies/Some Movie (2024)/movie.mkv".equals(item.getSourceFilePath())
         ));
     }
 
@@ -154,6 +134,7 @@ class DownloadServiceTest {
         when(episodeRepo.findById(1L)).thenReturn(Optional.of(ep));
         when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
         when(showRepo.findById(100L)).thenReturn(Optional.of(show));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conv"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
@@ -166,12 +147,12 @@ class DownloadServiceTest {
 
         verify(queueRepo).save(argThat(item ->
             item.getDestFilePath() != null &&
-            item.getDestFilePath().replace('\\', '/').contains("/in-flight/tvshows/Breaking Bad/Season 01/s01e01.mkv")
+            item.getDestFilePath().replace('\\', '/').contains("/libraries/tvshows/Breaking Bad/Season 01/s01e01.mkv")
         ));
     }
 
     @Test
-    void enqueueMovie_destPathContainsInFlight() {
+    void enqueueMovie_destPathContainsLibraries() {
         Movie movie = new Movie();
         movie.setId(1L);
         movie.setTitle("Inception");
@@ -181,6 +162,7 @@ class DownloadServiceTest {
         user.setId(1L);
 
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("plex.conversion.dir")).thenReturn(Optional.of("/conversion"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(1L); return i; });
@@ -188,81 +170,34 @@ class DownloadServiceTest {
         service.enqueueMovie(1L, user);
 
         verify(queueRepo).save(argThat(item ->
-            item.getDestFilePath().replace('\\', '/').contains("/in-flight/")
+            item.getDestFilePath().replace('\\', '/').contains("/libraries/")
         ));
     }
 
     @Test
-    void cancel_deletesPendingItemAndInFlightFile(@TempDir Path tmp) throws Exception {
-        Path inFlightFile = tmp.resolve("film.mkv");
-        Files.writeString(inFlightFile, "data");
-
+    void cancel_deletesOutputAndRow(@TempDir Path tmp) throws Exception {
+        Path out = tmp.resolve("film.mkv");
+        Files.writeString(out, "data");
         DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(10L);
-        item.setStatus(DownloadQueueItem.Status.PENDING);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        item.setDestFilePath(inFlightFile.toString());
+        item.setId(10L); item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setDestFilePath(out.toString());
         User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
         item.setUser(owner);
-
         when(queueRepo.findById(10L)).thenReturn(Optional.of(item));
 
         User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
         service.cancel(10L, caller);
 
-        assertThat(inFlightFile).doesNotExist();
+        assertThat(out).doesNotExist();
         verify(queueRepo).delete(item);
     }
 
     @Test
-    void cancel_evictsTdarrAndDeletesInFlightWhenProcessing() throws Exception {
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(11L);
-        item.setStatus(DownloadQueueItem.Status.DONE);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.PROCESSING);
-        item.setDestFilePath("/conversion/in-flight/films/film.mkv");
-        User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
-        item.setUser(owner);
-
-        when(queueRepo.findById(11L)).thenReturn(Optional.of(item));
-
-        User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
-        service.cancel(11L, caller);
-
-        verify(tdarrClient).deleteFile("/conversion/in-flight/films/film.mkv");
-        verify(queueRepo).delete(item);
-    }
-
-    @Test
-    void cancel_deletesOutputFileWhenTranscoded(@TempDir Path tmp) throws Exception {
-        Path outputFile = tmp.resolve("film.mp4");
-        Files.writeString(outputFile, "transcoded");
-
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(12L);
-        item.setStatus(DownloadQueueItem.Status.DONE);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.TRANSCODED);
-        item.setOutputFilePath(outputFile.toString());
-        item.setDestFilePath("/conversion/in-flight/films/film.mkv");
-        User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
-        item.setUser(owner);
-
-        when(queueRepo.findById(12L)).thenReturn(Optional.of(item));
-
-        User caller = new User(); caller.setId(1L); caller.setRole(User.Role.USER);
-        service.cancel(12L, caller);
-
-        assertThat(outputFile).doesNotExist();
-        verify(tdarrClient).deleteFile(outputFile.toString()); // evict libraries entry
-        verify(queueRepo).delete(item);
-    }
-
-    @Test
-    void cancel_throws409WhenInProgress() {
+    void cancel_throws409WhenTranscoding() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(13L);
-        item.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
-        item.setDestFilePath("/conversion/in-flight/films/film.mkv");
+        item.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        item.setDestFilePath("/conversion/libraries/films/film.mkv");
         User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
         item.setUser(owner);
 
@@ -289,8 +224,7 @@ class DownloadServiceTest {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(14L);
         item.setStatus(DownloadQueueItem.Status.DONE);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        item.setDestFilePath("/conversion/in-flight/films/film.mkv");
+        item.setDestFilePath("/conversion/libraries/films/film.mkv");
         User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
         item.setUser(owner);
 
@@ -307,8 +241,7 @@ class DownloadServiceTest {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(15L);
         item.setStatus(DownloadQueueItem.Status.DONE);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        item.setDestFilePath("/conversion/in-flight/films/film.mkv");
+        item.setDestFilePath("/conversion/libraries/films/film.mkv");
         User owner = new User(); owner.setId(1L); owner.setRole(User.Role.USER);
         item.setUser(owner);
 
@@ -321,32 +254,30 @@ class DownloadServiceTest {
     }
 
     @Test
-    void cancelAllForShow_cancelsNonInProgressItems(@TempDir Path tmp) throws Exception {
-        Path inFlightFile = tmp.resolve("ep.mkv");
-        Files.writeString(inFlightFile, "data");
+    void cancelAllForShow_cancelsNonTranscodingItems(@TempDir Path tmp) throws Exception {
+        Path outFile = tmp.resolve("ep.mkv");
+        Files.writeString(outFile, "data");
 
-        DownloadQueueItem pending = new DownloadQueueItem();
-        pending.setId(20L);
-        pending.setStatus(DownloadQueueItem.Status.PENDING);
-        pending.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        pending.setDestFilePath(inFlightFile.toString());
+        DownloadQueueItem queued = new DownloadQueueItem();
+        queued.setId(20L);
+        queued.setStatus(DownloadQueueItem.Status.QUEUED);
+        queued.setDestFilePath(outFile.toString());
 
-        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(pending));
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(queued));
 
         int count = service.cancelAllForShow(1L, 10L);
 
         assertThat(count).isEqualTo(1);
-        verify(queueRepo).delete(pending);
-        assertThat(inFlightFile).doesNotExist();
+        verify(queueRepo).delete(queued);
+        assertThat(outFile).doesNotExist();
     }
 
     @Test
-    void cancelAllForShow_flagsInProgressForDeferredCancel() {
+    void cancelAllForShow_flagsTranscodingForDeferredCancel() {
         DownloadQueueItem active = new DownloadQueueItem();
         active.setId(21L);
-        active.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
-        active.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        active.setDestFilePath("/conv/in-flight/ep.mkv");
+        active.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        active.setDestFilePath("/conv/libraries/ep.mkv");
 
         when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(active));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -371,74 +302,37 @@ class DownloadServiceTest {
 
     @Test
     void cancelAllForShow_handlesMixedStatuses(@TempDir Path tmp) throws Exception {
-        Path inFlightFile = tmp.resolve("ep.mkv");
-        Files.writeString(inFlightFile, "data");
+        Path outFile = tmp.resolve("ep.mkv");
+        Files.writeString(outFile, "data");
 
-        DownloadQueueItem pending = new DownloadQueueItem();
-        pending.setId(22L);
-        pending.setStatus(DownloadQueueItem.Status.PENDING);
-        pending.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        pending.setDestFilePath(inFlightFile.toString());
+        DownloadQueueItem queued = new DownloadQueueItem();
+        queued.setId(22L);
+        queued.setStatus(DownloadQueueItem.Status.QUEUED);
+        queued.setDestFilePath(outFile.toString());
 
         DownloadQueueItem active = new DownloadQueueItem();
         active.setId(23L);
-        active.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
-        active.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        active.setDestFilePath("/conv/in-flight/ep2.mkv");
+        active.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        active.setDestFilePath("/conv/libraries/ep2.mkv");
 
-        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(pending, active));
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(queued, active));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         int count = service.cancelAllForShow(1L, 10L);
 
         assertThat(count).isEqualTo(2);
-        verify(queueRepo).delete(pending);         // PENDING cancelled immediately
-        assertThat(inFlightFile).doesNotExist();
-        assertThat(active.isCancellationRequested()).isTrue(); // IN_PROGRESS deferred
+        verify(queueRepo).delete(queued);         // QUEUED cancelled immediately
+        assertThat(outFile).doesNotExist();
+        assertThat(active.isCancellationRequested()).isTrue(); // TRANSCODING deferred
         verify(queueRepo).save(active);
         verify(queueRepo, never()).delete(active);
-    }
-
-    @Test
-    void executeCopyAsync_cancelsAfterCopyWhenFlagged() throws Exception {
-        Path sourceFile = tempDir.resolve("source.mkv");
-        Files.writeString(sourceFile, "content");
-        Path destFile = tempDir.resolve("out").resolve("out.mkv");
-
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(30L);
-        item.setSourceFilePath(sourceFile.toString());
-        item.setDestFilePath(destFile.toString());
-        item.setStatus(DownloadQueueItem.Status.PENDING);
-        item.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-
-        // fresh re-read returns item with cancellationRequested = true
-        DownloadQueueItem freshItem = new DownloadQueueItem();
-        freshItem.setId(30L);
-        freshItem.setSourceFilePath(sourceFile.toString());
-        freshItem.setDestFilePath(destFile.toString());
-        freshItem.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
-        freshItem.setTdarrStatus(DownloadQueueItem.TdarrStatus.NONE);
-        freshItem.setCancellationRequested(true);
-
-        when(queueRepo.findById(30L))
-            .thenReturn(Optional.of(item))    // first call: load item
-            .thenReturn(Optional.of(freshItem)); // second call: re-read after copy
-        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        service.executeCopyAsync(30L);
-
-        // item should be deleted, not saved as DONE
-        verify(queueRepo).delete(freshItem);
-        verify(queueRepo, never()).save(argThat(i ->
-            i instanceof DownloadQueueItem qi && qi.getStatus() == DownloadQueueItem.Status.DONE));
     }
 
     @Test
     void cancelAllForSeason_cancelsPendingItems() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(1L);
-        item.setStatus(DownloadQueueItem.Status.PENDING);
+        item.setStatus(DownloadQueueItem.Status.QUEUED);
 
         when(queueRepo.findAllByUserIdAndSeasonId(1L, 100L)).thenReturn(List.of(item));
 
@@ -449,10 +343,10 @@ class DownloadServiceTest {
     }
 
     @Test
-    void cancelAllForSeason_setsFlag_forInProgressItems() {
+    void cancelAllForSeason_setsFlag_forTranscodingItems() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(2L);
-        item.setStatus(DownloadQueueItem.Status.IN_PROGRESS);
+        item.setStatus(DownloadQueueItem.Status.TRANSCODING);
 
         when(queueRepo.findAllByUserIdAndSeasonId(1L, 100L)).thenReturn(List.of(item));
 
@@ -468,7 +362,7 @@ class DownloadServiceTest {
         item.setId(1L);
         item.setMediaType(DownloadQueueItem.MediaType.MOVIE);
         item.setMediaId(5L);
-        item.setStatus(DownloadQueueItem.Status.PENDING);
+        item.setStatus(DownloadQueueItem.Status.QUEUED);
 
         when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
         when(playlistRepo.findAllById(any())).thenReturn(List.of());
@@ -510,38 +404,13 @@ class DownloadServiceTest {
     }
 
     @Test
-    void executeCopyAsync_atomicRename_cleansUpTempFile() throws Exception {
-        Path sourceFile = tempDir.resolve("source.mkv");
-        Files.writeString(sourceFile, "video-content");
-        Path destDir = tempDir.resolve("dest");
-        Path destFile = destDir.resolve("output.mkv");
-
-        DownloadQueueItem item = new DownloadQueueItem();
-        item.setId(5L);
-        item.setSourceFilePath(sourceFile.toString());
-        item.setDestFilePath(destFile.toString());
-        item.setStatus(DownloadQueueItem.Status.PENDING);
-
-        when(queueRepo.findById(5L)).thenReturn(Optional.of(item));
-        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        service.executeCopyAsync(5L);
-
-        assertThat(destFile).exists();
-        assertThat(destDir.resolve("output.mkv.tmp")).doesNotExist();
-        assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
-    }
-
-    @Test
-    void enqueueMovie_withPlaylistId_setsPlaylistIdOnItem() throws IOException {
-        Path sourceFile = tempDir.resolve("movie.mkv");
-        Files.writeString(sourceFile, "fake");
-
+    void enqueueMovie_withPlaylistId_setsPlaylistIdOnItem() {
         Movie movie = new Movie();
         movie.setId(1L);
         movie.setTitle("Inception");
-        movie.setFilePath(sourceFile.toString());
+        movie.setFilePath("/movies/Inception (2010)/inception.mkv");
 
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
@@ -558,15 +427,13 @@ class DownloadServiceTest {
     }
 
     @Test
-    void enqueueMovie_withoutPlaylistId_setsNullPlaylistId() throws IOException {
-        Path sourceFile = tempDir.resolve("movie2.mkv");
-        Files.writeString(sourceFile, "fake");
-
+    void enqueueMovie_withoutPlaylistId_setsNullPlaylistId() {
         Movie movie = new Movie();
         movie.setId(2L);
         movie.setTitle("The Matrix");
-        movie.setFilePath(sourceFile.toString());
+        movie.setFilePath("/movies/The Matrix (1999)/matrix.mkv");
 
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("plex.conversion.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(movieRepo.findById(2L)).thenReturn(Optional.of(movie));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
@@ -610,5 +477,20 @@ class DownloadServiceTest {
         assertThat(result.get(0).seasonNumber()).isEqualTo(1);
         assertThat(result.get(0).playlistId()).isEqualTo(5L);
         assertThat(result.get(0).playlistTitle()).isEqualTo("Action Movies");
+    }
+
+    @Test
+    void retry_resetsErrorToQueuedAndRepublishes() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(7L); item.setStatus(DownloadQueueItem.Status.ERROR);
+        User owner = new User(); owner.setId(1L); item.setUser(owner);
+        when(queueRepo.findById(7L)).thenReturn(Optional.of(item));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        User caller = new User(); caller.setId(1L);
+        service.retry(7L, caller);
+
+        assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        verify(events).publishEvent(any(TranscodeRequestedEvent.class));
     }
 }

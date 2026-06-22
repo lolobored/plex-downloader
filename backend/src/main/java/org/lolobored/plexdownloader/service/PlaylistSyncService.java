@@ -1,7 +1,6 @@
 package org.lolobored.plexdownloader.service;
 
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
-import org.lolobored.plexdownloader.client.TdarrClient;
 import org.lolobored.plexdownloader.client.dto.PlexItem;
 import org.lolobored.plexdownloader.client.dto.PlexPlaylist;
 import org.lolobored.plexdownloader.model.*;
@@ -33,7 +32,6 @@ public class PlaylistSyncService {
     private final EpisodeRepository episodeRepo;
     private final DownloadQueueRepository queueRepo;
     private final DownloadService downloadService;
-    private final TdarrClient tdarrClient;
 
     @Autowired
     @Lazy
@@ -194,8 +192,6 @@ public class PlaylistSyncService {
             if (destPath != null) {
                 try { Files.deleteIfExists(Path.of(destPath)); }
                 catch (IOException e) { log.warn("Could not delete file {}: {}", destPath, e.getMessage()); }
-                try { tdarrClient.deleteFile(destPath); }
-                catch (Exception e) { log.warn("Tdarr deleteFile failed for {}: {}", destPath, e.getMessage()); }
             }
         });
     }
@@ -209,7 +205,7 @@ public class PlaylistSyncService {
         List<DownloadQueueItem> items = queueRepo.findAllByUserIdAndPlaylistId(userId, playlistId);
         int cancelled = 0;
         for (DownloadQueueItem item : items) {
-            if (item.getStatus() == DownloadQueueItem.Status.IN_PROGRESS) {
+            if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
                 item.setCancellationRequested(true);
                 queueRepo.save(item);
             } else {

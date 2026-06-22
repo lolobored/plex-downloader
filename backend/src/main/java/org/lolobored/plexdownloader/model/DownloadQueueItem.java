@@ -20,14 +20,22 @@ public class DownloadQueueItem {
     @Column(name = "media_id", nullable = false)
     private Long mediaId;
     @Enumerated(EnumType.STRING)
-    private Status status = Status.PENDING;
-    @Enumerated(EnumType.STRING)
-    @Column(name = "tdarr_status", nullable = false)
-    private TdarrStatus tdarrStatus = TdarrStatus.NONE;
-    @Column(name = "tdarr_error", columnDefinition = "TEXT")
-    private String tdarrError;
-    @Column(name = "output_file_path", columnDefinition = "TEXT")
-    private String outputFilePath;
+    @Column(nullable = false)
+    private Status status = Status.QUEUED;
+
+    @Column(name = "progress_percent")
+    private Integer progressPercent;
+
+    @Column(name = "transcode_error", columnDefinition = "TEXT")
+    private String transcodeError;
+
+    @Column(name = "transcode_started_at")
+    private Instant transcodeStartedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "quality_profile_id")
+    private QualityProfile qualityProfile;
+
     @Column(name = "title", columnDefinition = "TEXT")
     private String title;
     @Column(name = "queue_position")
@@ -48,6 +56,5 @@ public class DownloadQueueItem {
     private Long playlistId;
 
     public enum MediaType { MOVIE, EPISODE }
-    public enum Status { PENDING, IN_PROGRESS, DONE, ERROR }
-    public enum TdarrStatus { NONE, PROCESSING, TRANSCODED, TDARR_ERROR }
+    public enum Status { QUEUED, TRANSCODING, DONE, ERROR }
 }

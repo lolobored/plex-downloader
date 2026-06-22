@@ -8,24 +8,16 @@ import java.util.*;
 
 public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem, Long> {
 
-    List<DownloadQueueItem> findByStatusAndTdarrStatusNotIn(
-        DownloadQueueItem.Status status,
-        Collection<DownloadQueueItem.TdarrStatus> tdarrStatuses
-    );
-
     List<DownloadQueueItem> findAllByOrderByQueuePositionAsc();
 
     List<DownloadQueueItem> findAllByUserIdOrderByQueuePositionAsc(Long userId);
 
-    @Query("SELECT i FROM DownloadQueueItem i WHERE i.status = 'IN_PROGRESS'")
-    Optional<DownloadQueueItem> findInProgress();
-
-    @Query("SELECT MAX(i.queuePosition) FROM DownloadQueueItem i WHERE i.status = 'PENDING'")
+    @Query("SELECT MAX(i.queuePosition) FROM DownloadQueueItem i WHERE i.status = 'QUEUED'")
     Optional<Integer> findMaxQueuePosition();
 
     @Query("SELECT i.mediaId FROM DownloadQueueItem i " +
            "WHERE i.user.id = :userId AND i.mediaType = 'EPISODE' " +
-           "AND i.status IN ('PENDING', 'IN_PROGRESS', 'DONE') " +
+           "AND i.status IN ('QUEUED', 'TRANSCODING', 'DONE') " +
            "AND i.mediaId IN (SELECT e.id FROM Episode e WHERE e.season.show.id = :showId)")
     Set<Long> findActiveEpisodeIdsForShow(@Param("userId") Long userId, @Param("showId") Long showId);
 
@@ -50,7 +42,7 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
 
     @Query("SELECT i.mediaId FROM DownloadQueueItem i " +
            "WHERE i.user.id = :userId AND i.mediaType = 'EPISODE' " +
-           "AND i.status IN ('PENDING', 'IN_PROGRESS', 'DONE') " +
+           "AND i.status IN ('QUEUED', 'TRANSCODING', 'DONE') " +
            "AND i.mediaId IN (SELECT e.id FROM Episode e WHERE e.season.id = :seasonId)")
     Set<Long> findActiveEpisodeIdsForSeason(@Param("userId") Long userId,
                                              @Param("seasonId") Long seasonId);
