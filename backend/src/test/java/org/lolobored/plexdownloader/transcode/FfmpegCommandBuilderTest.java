@@ -7,7 +7,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class FfmpegCommandBuilderTest {
 
-    private final FfmpegCommandBuilder builder = new FfmpegCommandBuilder();
+    private final TranscodeConfig config = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128");
+    private final FfmpegCommandBuilder builder = new FfmpegCommandBuilder(config);
 
     private QualityProfile profile(QualityProfile.Codec codec, QualityProfile.AudioMode audio,
                                    QualityProfile.ResolutionCap cap, int quality) {
@@ -22,6 +23,10 @@ class FfmpegCommandBuilderTest {
                                    QualityProfile.ResolutionCap.KEEP, 23);
         List<String> args = builder.build(p, "/movies/a.avi", "/out/a.mkv", new MediaInfo(120, 1920, 1080));
 
+        assertThat(args.get(0)).isEqualTo("ffmpeg");
+        assertThat(args).containsSubsequence(
+            "-init_hw_device", "vaapi=va:/dev/dri/renderD128",
+            "-init_hw_device", "qsv=hw@va");
         assertThat(args).containsSubsequence("-hwaccel", "qsv", "-hwaccel_output_format", "qsv");
         assertThat(args).containsSubsequence("-i", "/movies/a.avi");
         assertThat(args).containsSubsequence("-c:v", "hevc_qsv", "-global_quality", "23");
@@ -45,7 +50,7 @@ class FfmpegCommandBuilderTest {
         QualityProfile p = profile(QualityProfile.Codec.HEVC_QSV, QualityProfile.AudioMode.COPY,
                                    QualityProfile.ResolutionCap.P720, 23);
         List<String> args = builder.build(p, "/m/c.mkv", "/out/c.mkv", new MediaInfo(60, 1920, 1080));
-        assertThat(args).containsSubsequence("-vf", "scale_qsv=-1:720");
+        assertThat(args).containsSubsequence("-vf", "vpp_qsv=w=-1:h=720");
     }
 
     @Test

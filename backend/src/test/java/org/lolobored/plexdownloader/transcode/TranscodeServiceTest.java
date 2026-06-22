@@ -30,7 +30,8 @@ class TranscodeServiceTest {
     @Mock DownloadQueueRepository queueRepo;
     @Mock MediaProbe mediaProbe;
     @Mock ProcessRunner processRunner;
-    @Spy FfmpegCommandBuilder commandBuilder = new FfmpegCommandBuilder();
+    @Spy FfmpegCommandBuilder commandBuilder =
+        new FfmpegCommandBuilder(new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128"));
     @Spy ProgressParser progressParser = new ProgressParser();
     @InjectMocks TranscodeService service;
 

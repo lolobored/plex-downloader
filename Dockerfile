@@ -17,25 +17,34 @@ COPY backend/src ./src
 COPY --from=frontend-build /app/dist ./src/main/resources/static
 RUN ./gradlew bootJar --no-daemon -x test -q
 
-# ── Stage 3: runtime image (Debian) with PostgreSQL + ffmpeg + Intel QSV ──────
+# ── Stage 3: runtime image (Debian) with PostgreSQL + jellyfin-ffmpeg (Intel QSV) ──
 FROM eclipse-temurin:21-jre-jammy
 
-# PostgreSQL, ffmpeg, VAAPI tools, gosu for privilege drop
-# Intel QSV runtime packages (intel-media-va-driver-non-free, libmfx-gen1.2, libvpl2)
-# are x86_64-only; install them conditionally so the image builds on arm64 too.
+# PostgreSQL + gosu (privilege drop) + diagnostics, then jellyfin-ffmpeg7:
+# a self-contained latest-ffmpeg build with oneVPL + the Intel iHD driver bundled —
+# the reliable path for Intel QuickSync transcode (distro ffmpeg 4.4 ships legacy
+# libmfx/MSDK, which fails on newer Intel Gen graphics: "set display handle -17").
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         postgresql postgresql-contrib \
-        ffmpeg \
-        vainfo \
-        gosu \
-        wget \
-    && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
-           apt-get install -y --no-install-recommends \
-               intel-media-va-driver-non-free \
-               libmfx-gen1.2 libvpl2; \
+        gosu wget vainfo \
+        ca-certificates gnupg curl \
+    && install -d /etc/apt/keyrings \
+    && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+         | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg \
+    && ARCH="$(dpkg --print-architecture)" \
+    && printf 'Types: deb\nURIs: https://repo.jellyfin.org/ubuntu\nSuites: jammy\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/jellyfin.gpg\n' "$ARCH" \
+         > /etc/apt/sources.list.d/jellyfin.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
+    && if [ "$ARCH" = "amd64" ]; then \
+           apt-get install -y --no-install-recommends intel-media-va-driver-non-free; \
        fi \
     && rm -rf /var/lib/apt/lists/*
+
+# Use the jellyfin-ffmpeg binaries (latest ffmpeg + bundled oneVPL/iHD) for transcode.
+ENV TRANSCODE_FFMPEG_BIN=/usr/lib/jellyfin-ffmpeg/ffmpeg \
+    TRANSCODE_FFPROBE_BIN=/usr/lib/jellyfin-ffmpeg/ffprobe
 
 # On Debian/Ubuntu, PostgreSQL binaries are under a versioned path — add to PATH
 ENV PATH="/usr/lib/postgresql/14/bin:${PATH}"

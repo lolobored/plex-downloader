@@ -12,12 +12,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class FfprobeMediaProbe implements MediaProbe {
 
     private final ProcessRunner processRunner;
+    private final TranscodeConfig config;
 
     @Override
     public MediaInfo probe(String sourcePath) {
         List<String> lines = new CopyOnWriteArrayList<>();
         List<String> cmd = List.of(
-            "ffprobe", "-v", "error",
+            config.ffprobe(), "-v", "error",
             "-select_streams", "v:0",
             "-show_entries", "stream=width,height",
             "-show_entries", "format=duration",
