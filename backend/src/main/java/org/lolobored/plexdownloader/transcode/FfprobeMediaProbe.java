@@ -1,0 +1,55 @@
+package org.lolobored.plexdownloader.transcode;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+@RequiredArgsConstructor
+public class FfprobeMediaProbe implements MediaProbe {
+
+    private final ProcessRunner processRunner;
+
+    @Override
+    public MediaInfo probe(String sourcePath) {
+        List<String> lines = new CopyOnWriteArrayList<>();
+        List<String> cmd = List.of(
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1",
+            sourcePath);
+        RunningTranscode rt = processRunner.start(cmd, lines::add, l -> {});
+        try {
+            rt.waitForExit();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return parse(new ArrayList<>(lines));
+    }
+
+    static MediaInfo parse(List<String> lines) {
+        int width = 0, height = 0;
+        double duration = 0.0;
+        for (String line : lines) {
+            if (line == null) continue;
+            int eq = line.indexOf('=');
+            if (eq < 0) continue;
+            String key = line.substring(0, eq).trim();
+            String val = line.substring(eq + 1).trim();
+            try {
+                switch (key) {
+                    case "width"    -> width = Integer.parseInt(val);
+                    case "height"   -> height = Integer.parseInt(val);
+                    case "duration" -> duration = Double.parseDouble(val);
+                    default -> { /* ignore */ }
+                }
+            } catch (NumberFormatException ignored) { /* skip */ }
+        }
+        return new MediaInfo(duration, width, height);
+    }
+}
