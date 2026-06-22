@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getQueue, enqueue as apiEnqueue } from '@/api/download.js'
+import { getQueue, enqueue as apiEnqueue, retryQueueItem as apiRetry } from '@/api/download.js'
 
 export const useDownloadStore = defineStore('download', () => {
   const queueItems = ref([])
@@ -16,10 +16,15 @@ export const useDownloadStore = defineStore('download', () => {
     return item?.status ?? null
   }
 
-  async function enqueue(type, id) {
-    await apiEnqueue(type, id)
+  async function enqueue(type, id, qualityProfileId = null) {
+    await apiEnqueue(type, id, qualityProfileId)
     await fetchQueue()
   }
 
-  return { queueItems, fetchQueue, statusFor, enqueue }
+  async function retry(itemId) {
+    await apiRetry(itemId)
+    await fetchQueue()
+  }
+
+  return { queueItems, fetchQueue, statusFor, enqueue, retry }
 })

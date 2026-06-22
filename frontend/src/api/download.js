@@ -1,9 +1,14 @@
 import http from './axios.js'
 
 // type: 'MOVIE' | 'EPISODE' | 'SEASON' | 'SHOW'
-export async function enqueue(type, id) {
-  const { data } = await http.post('/api/download', { type, id })
+export async function enqueue(type, id, qualityProfileId = null) {
+  const { data } = await http.post('/api/download', { type, id, qualityProfileId })
   return data  // { jobIds: number[], status: 'QUEUED' }
+}
+
+export async function getQualityProfiles() {
+  const { data } = await http.get('/api/quality-profiles')
+  return data  // QualityProfile[]
 }
 
 export async function getQueue() {

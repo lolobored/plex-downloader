@@ -3,10 +3,11 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useDownloadStore } from '../download.js'
 
 vi.mock('../../api/download.js', () => ({
-  getQueue: vi.fn(),
-  enqueue:  vi.fn()
+  getQueue:        vi.fn(),
+  enqueue:         vi.fn(),
+  retryQueueItem:  vi.fn()
 }))
-import { getQueue, enqueue } from '../../api/download.js'
+import { getQueue, enqueue, retryQueueItem } from '../../api/download.js'
 
 describe('download store', () => {
   beforeEach(() => {
@@ -45,7 +46,7 @@ describe('download store', () => {
     getQueue.mockResolvedValue([{ id: 5, mediaType: 'MOVIE', mediaId: 10, status: 'PENDING' }])
     const store = useDownloadStore()
     await store.enqueue('MOVIE', 10)
-    expect(enqueue).toHaveBeenCalledWith('MOVIE', 10)
+    expect(enqueue).toHaveBeenCalledWith('MOVIE', 10, null)
     expect(getQueue).toHaveBeenCalled()
   })
 })
