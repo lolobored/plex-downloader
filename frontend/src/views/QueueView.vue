@@ -241,6 +241,13 @@ const QueueItemRow = defineComponent({
             ])
           : null,
         h('span', { class: ['status-badge', statusClass].join(' ') }, statusLabel),
+        (item.status === 'DONE' && item.compressionRatio != null)
+          ? h('span', {
+              class: 'compression',
+              'data-testid': 'compression-rate',
+              title: 'Space saved vs source',
+            }, `${item.compressionRatio >= 0 ? '↓' : '↑'} ${Math.abs(item.compressionRatio).toFixed(1)}%`)
+          : null,
         isError
           ? h('button', {
               class: 'btn-retry',
@@ -533,6 +540,8 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
 .badge-transcoding { background: rgba(52,152,219,.18); color: #5dade2; border: 1px solid rgba(52,152,219,.3); }
 .badge-done        { background: rgba(39,174,96,.18);  color: #2ecc71;  border: 1px solid rgba(39,174,96,.3); }
 .badge-error       { background: rgba(231,76,60,.18);  color: #e74c3c;  border: 1px solid rgba(231,76,60,.3); }
+.compression { flex-shrink: 0; font-size: .72rem; font-weight: 600; color: #2ecc71;
+               font-variant-numeric: tabular-nums; }
 .progress { position: relative; flex: 1; height: 6px; background: rgba(52,152,219,.18);
             border-radius: 3px; overflow: hidden; min-width: 60px; max-width: 120px; }
 .progress-bar { height: 100%; background: #5dade2; border-radius: 3px; transition: width .5s ease; }

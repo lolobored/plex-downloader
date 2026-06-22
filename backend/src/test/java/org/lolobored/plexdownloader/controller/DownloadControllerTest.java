@@ -79,7 +79,8 @@ class DownloadControllerTest {
             java.time.Instant.parse("2026-01-01T00:00:00Z"), null,
             10L, 20L,
             null, null,
-            "Breaking Bad", 1
+            "Breaking Bad", 1,
+            null
         );
         when(downloadService.getQueue(1L)).thenReturn(List.of(resp));
 

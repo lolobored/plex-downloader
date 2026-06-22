@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: 015-queue-compression-ratio
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN compression_ratio DOUBLE PRECISION"

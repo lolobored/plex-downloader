@@ -36,6 +36,7 @@ function movieItem(overrides = {}) {
     playlistId: null, playlistTitle: null,
     showId: null, seasonId: null, showTitle: null, seasonNumber: null,
     queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
+    compressionRatio: null,
     ...overrides
   }
 }
@@ -46,6 +47,7 @@ function episodeItem(overrides = {}) {
     playlistId: null, playlistTitle: null,
     showId: 50, seasonId: 100, showTitle: 'Breaking Bad', seasonNumber: 1,
     queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
+    compressionRatio: null,
     ...overrides
   }
 }
@@ -242,6 +244,18 @@ describe('QueueView', () => {
   it('DONE item shows done badge', () => {
     const { wrapper } = factory([movieItem({ status: 'DONE' })])
     expect(wrapper.find('.badge-done').exists()).toBe(true)
+  })
+
+  it('DONE item shows compression rate when present', () => {
+    const { wrapper } = factory([movieItem({ status: 'DONE', compressionRatio: 42.5 })])
+    const el = wrapper.find('[data-testid="compression-rate"]')
+    expect(el.exists()).toBe(true)
+    expect(el.text()).toBe('↓ 42.5%')
+  })
+
+  it('DONE item without compression rate hides the badge', () => {
+    const { wrapper } = factory([movieItem({ status: 'DONE', compressionRatio: null })])
+    expect(wrapper.find('[data-testid="compression-rate"]').exists()).toBe(false)
   })
 
   it('ERROR item shows error badge', () => {

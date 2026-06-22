@@ -91,8 +91,9 @@ public class TranscodeService {
             fresh.setStatus(DownloadQueueItem.Status.DONE);
             fresh.setProgressPercent(100);
             fresh.setCompletedAt(Instant.now());
+            fresh.setCompressionRatio(compressionRatio(fresh.getSourceFilePath(), fresh.getDestFilePath()));
             queueRepo.save(fresh);
-            log.info("Transcode done: item={}", itemId);
+            log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
         } else {
             String tail;
             synchronized (stderrTail) { tail = String.join("\n", stderrTail); }
@@ -121,6 +122,20 @@ public class TranscodeService {
         item.setErrorMessage("Transcoding failed");
         queueRepo.save(item);
         log.error("Transcode failed: item={} {}", item.getId(), message);
+    }
+
+    /** Space saved as a percentage of source size, rounded to 1 decimal. Null if either size is unavailable. */
+    private Double compressionRatio(String source, String dest) {
+        try {
+            long srcSize = Files.size(Path.of(source));
+            long destSize = Files.size(Path.of(dest));
+            if (srcSize <= 0) return null;
+            double saved = (srcSize - destSize) * 100.0 / srcSize;
+            return Math.round(saved * 10.0) / 10.0;
+        } catch (IOException | RuntimeException e) {
+            log.warn("Could not compute compression ratio src={} dest={}: {}", source, dest, e.getMessage());
+            return null;
+        }
     }
 
     private void deletePartial(String dest) {

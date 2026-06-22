@@ -74,6 +74,31 @@ class TranscodeServiceTest {
     }
 
     @Test
+    void success_computesCompressionRatioFromFileSizes(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("src.avi");
+        Files.write(src, new byte[1000]);
+        Path dest = tmp.resolve("out.mkv");
+        DownloadQueueItem it = item(5L, dest.toString());
+        it.setSourceFilePath(src.toString());
+        when(queueRepo.findByIdWithProfile(5L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(5L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            Files.write(dest, new byte[400]); // 60% smaller than source
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        service.transcode(5L);
+
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
+        assertThat(it.getCompressionRatio()).isEqualTo(60.0);
+    }
+
+    @Test
     void failure_setsErrorAndDeletesPartialOutput(@TempDir Path tmp) throws Exception {
         Path dest = tmp.resolve("y.mkv");
         Files.writeString(dest, "partial");

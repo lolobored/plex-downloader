@@ -21,7 +21,8 @@ public record DownloadQueueItemResponse(
     Long playlistId,
     String playlistTitle,
     String showTitle,
-    Integer seasonNumber
+    Integer seasonNumber,
+    Double compressionRatio
 ) {
     public static DownloadQueueItemResponse from(
             DownloadQueueItem item,
@@ -36,7 +37,8 @@ public record DownloadQueueItemResponse(
             item.getRequestedAt(), item.getCompletedAt(),
             showId, seasonId,
             playlistId, playlistTitle,
-            showTitle, seasonNumber
+            showTitle, seasonNumber,
+            item.getCompressionRatio()
         );
     }
 }

@@ -54,6 +54,10 @@ public class DownloadQueueItem {
     @Column(name = "playlist_id")
     private Long playlistId;
 
+    /** Space saved as a percentage of the source size: (src - dest) / src * 100. Null until a successful transcode. */
+    @Column(name = "compression_ratio")
+    private Double compressionRatio;
+
     public enum MediaType { MOVIE, EPISODE }
     public enum Status { QUEUED, TRANSCODING, DONE, ERROR }
 }
