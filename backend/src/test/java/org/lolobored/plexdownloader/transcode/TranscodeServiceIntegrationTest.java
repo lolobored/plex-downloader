@@ -59,14 +59,17 @@ class TranscodeServiceIntegrationTest {
         profile.setAudioMode(QualityProfile.AudioMode.COPY);
         profile = profileRepo.save(profile);
 
-        java.nio.file.Path dest = java.nio.file.Files.createTempDirectory("transcode-it").resolve("out.mkv");
+        java.nio.file.Path tempBase = java.nio.file.Files.createTempDirectory("transcode-it");
+        java.nio.file.Path src = tempBase.resolve("source.avi");
+        java.nio.file.Files.write(src, new byte[]{0x00, 0x01, 0x02, 0x03});
+        java.nio.file.Path dest = tempBase.resolve("out.mkv");
 
         DownloadQueueItem item = new DownloadQueueItem();
         item.setUser(user);
         item.setMediaType(DownloadQueueItem.MediaType.MOVIE);
         item.setMediaId(1L);
         item.setTitle("It Movie");
-        item.setSourceFilePath("/movies/source.avi");
+        item.setSourceFilePath(src.toString());
         item.setDestFilePath(dest.toString());
         item.setQualityProfile(profile);
         item.setStatus(DownloadQueueItem.Status.QUEUED);

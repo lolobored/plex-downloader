@@ -66,6 +66,7 @@ class TranscodeQueueRunnerTest {
         DownloadQueueItem queued = new DownloadQueueItem();
         queued.setId(2L); queued.setStatus(DownloadQueueItem.Status.QUEUED);
 
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)).thenReturn(List.of());
         when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of(stuck));
         when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of());
         when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
@@ -86,6 +87,7 @@ class TranscodeQueueRunnerTest {
         copying.setId(10L); copying.setStatus(DownloadQueueItem.Status.COPYING);
         copying.setProgressPercent(100);
 
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)).thenReturn(List.of());
         when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of());
         when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of(copying));
         when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
@@ -98,5 +100,26 @@ class TranscodeQueueRunnerTest {
         assertThat(copying.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
         assertThat(copying.getProgressPercent()).isNull();
         verify(transcodeService, timeout(2000)).transcode(10L);
+    }
+
+    @Test
+    void recover_resetsFetchingToQueuedAndResubmits() {
+        DownloadQueueItem fetching = new DownloadQueueItem();
+        fetching.setId(20L); fetching.setStatus(DownloadQueueItem.Status.FETCHING);
+        fetching.setProgressPercent(0);
+
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)).thenReturn(List.of(fetching));
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of());
+        when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of());
+        when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
+            .thenReturn(List.of(fetching));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        TranscodeQueueRunner r = runner();
+        r.recover();
+
+        assertThat(fetching.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        assertThat(fetching.getProgressPercent()).isNull();
+        verify(transcodeService, timeout(2000)).transcode(20L);
     }
 }

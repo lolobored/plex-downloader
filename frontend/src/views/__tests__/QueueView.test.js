@@ -277,6 +277,47 @@ describe('QueueView', () => {
     expect(wrapper.find('[data-testid="chip-status-COPYING"]').exists()).toBe(false)
   })
 
+  // ── FETCHING status ───────────────────────────────────────────────────────────
+
+  it('FETCHING item shows fetching badge', () => {
+    const { wrapper } = factory([movieItem({ status: 'FETCHING' })])
+    expect(wrapper.find('.badge-fetching').exists()).toBe(true)
+    expect(wrapper.find('.badge-fetching').text()).toBe('fetching…')
+  })
+
+  it('FETCHING item is in the in-progress group (not pending or done)', async () => {
+    const { wrapper } = factory([
+      movieItem({ playlistId: 5, playlistTitle: 'P', status: 'FETCHING' })
+    ])
+    await wrapper.find('[data-testid="group-header-playlist-5"]').trigger('click')
+    expect(wrapper.find('[data-testid="sub-label-TRANSCODING"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sub-label-QUEUED"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sub-label-DONE"]').exists()).toBe(false)
+  })
+
+  it('FETCHING item has remove button disabled', () => {
+    const { wrapper } = factory([movieItem({ id: 1, status: 'FETCHING' })])
+    const removeBtn = wrapper.find('[data-testid="remove-btn-1"]')
+    expect(removeBtn.exists()).toBe(true)
+    expect(removeBtn.element.disabled).toBe(true)
+  })
+
+  it('FETCHING item does not show progress bar', () => {
+    const { wrapper } = factory([movieItem({ status: 'FETCHING' })])
+    expect(wrapper.find('[data-testid="progress-bar"]').exists()).toBe(false)
+  })
+
+  it('FETCHING item is shown when Transcoding filter chip is active', async () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, title: 'Inception', status: 'QUEUED' }),
+      movieItem({ id: 2, mediaId: 11, title: 'The Matrix', status: 'FETCHING' }),
+    ])
+    await wrapper.find('[data-testid="chip-status-TRANSCODING"]').trigger('click')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+    expect(wrapper.text()).toContain('The Matrix')
+    expect(wrapper.text()).not.toContain('Inception')
+  })
+
   // ── COPYING status ────────────────────────────────────────────────────────────
 
   it('COPYING item shows copying badge', () => {

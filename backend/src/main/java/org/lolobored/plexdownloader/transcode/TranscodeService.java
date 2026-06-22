@@ -11,6 +11,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -40,28 +41,42 @@ public class TranscodeService {
         DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
         if (item == null) { log.warn("Transcode skipped, item {} gone", itemId); return; }
 
-        item.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        // Compute temp paths: <tempDir>/plex-downloader/<itemId>/
+        //   src/<sourceFilename>  — local copy of NAS source
+        //   <outName>            — ffmpeg output (same as #61)
+        String outName = Path.of(item.getDestFilePath()).getFileName().toString();
+        Path tempItemDir = Path.of(transcodeConfig.tempDir(), "plex-downloader", itemId.toString());
+        Path tempSrcDir  = tempItemDir.resolve("src");
+        String sourceFilename = Path.of(item.getSourceFilePath()).getFileName().toString();
+        Path tempSrcFile = tempSrcDir.resolve(sourceFilename);
+        Path tempFile    = tempItemDir.resolve(outName);
+
+        // ── FETCHING: copy source from NAS to local temp ──────────────────────
+        item.setStatus(DownloadQueueItem.Status.FETCHING);
         item.setTranscodeStartedAt(Instant.now());
         item.setProgressPercent(0);
         item.setTranscodeError(null);
         queueRepo.save(item);
 
-        MediaInfo info = mediaProbe.probe(item.getSourceFilePath());
-
-        // Compute temp output path: <tempDir>/plex-downloader/<itemId>/<outName>
-        String outName = Path.of(item.getDestFilePath()).getFileName().toString();
-        Path tempItemDir = Path.of(transcodeConfig.tempDir(), "plex-downloader", itemId.toString());
-        Path tempFile = tempItemDir.resolve(outName);
-
         try {
-            Files.createDirectories(tempItemDir);
+            Files.createDirectories(tempSrcDir);
+            log.info("Fetching source to local temp: item={} src={}", itemId, item.getSourceFilePath());
+            Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);
+            log.info("Source fetched: item={} bytes={}", itemId, Files.size(tempSrcFile));
         } catch (IOException e) {
-            failItem(item, "Could not create temp dir: " + e.getMessage());
+            deleteTempDir(tempItemDir);
+            failItem(item, "Source copy failed: " + e.getMessage());
             return;
         }
 
+        // ── TRANSCODING: probe local copy, build cmd, run ffmpeg ─────────────
+        item.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        queueRepo.save(item);
+
+        MediaInfo info = mediaProbe.probe(tempSrcFile.toString());
+
         List<String> cmd = commandBuilder.build(item.getQualityProfile(),
-            item.getSourceFilePath(), tempFile.toString(), info);
+            tempSrcFile.toString(), tempFile.toString(), info);
 
         Deque<String> stderrTail = new ArrayDeque<>();
         AtomicInteger lastPct = new AtomicInteger(-1);
@@ -182,18 +197,15 @@ public class TranscodeService {
     }
 
     private void deleteTempDir(Path tempItemDir) {
-        try {
-            // Delete all files in the temp dir, then the dir itself
-            if (Files.exists(tempItemDir)) {
-                try (var stream = Files.list(tempItemDir)) {
-                    for (Path f : stream.toList()) {
-                        Files.deleteIfExists(f);
-                    }
+        if (!Files.exists(tempItemDir)) return;
+        try (var stream = Files.walk(tempItemDir)) {
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (IOException e) {
+                    log.warn("Could not delete temp path {}: {}", p, e.getMessage());
                 }
-                Files.deleteIfExists(tempItemDir);
-            }
+            });
         } catch (IOException e) {
-            log.warn("Could not clean up temp dir {}: {}", tempItemDir, e.getMessage());
+            log.warn("Could not walk temp dir {}: {}", tempItemDir, e.getMessage());
         }
     }
 
