@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "axios": "^1.17.0",
-    "esbuild": "^0.28.0",
+    "esbuild": "^0.28.1",
     "pinia": "^3.0.4",
     "vue": "^3.5.35",
     "vue-router": "^5.1.0"
