@@ -289,7 +289,6 @@ class DownloadServiceTest {
         assertThat(count).isEqualTo(1);
         verify(transcodeService).cancel(21L);
         verify(queueRepo).delete(active);
-        assertThat(active.isCancellationRequested()).isFalse();
     }
 
     @Test
@@ -354,7 +353,6 @@ class DownloadServiceTest {
 
         verify(transcodeService).cancel(2L);
         verify(queueRepo).delete(item);
-        assertThat(item.isCancellationRequested()).isFalse();
     }
 
     @Test

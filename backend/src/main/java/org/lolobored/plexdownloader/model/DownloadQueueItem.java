@@ -50,8 +50,6 @@ public class DownloadQueueItem {
     private Instant requestedAt = Instant.now();
     @Column(name = "completed_at")
     private Instant completedAt;
-    @Column(name = "cancellation_requested", nullable = false)
-    private boolean cancellationRequested = false;
     @Column(name = "playlist_id")
     private Long playlistId;
 

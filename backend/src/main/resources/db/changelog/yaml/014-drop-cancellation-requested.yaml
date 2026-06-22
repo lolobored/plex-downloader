@@ -1,0 +1,8 @@
+databaseChangeLog:
+  - changeSet:
+      id: 014-drop-cancellation-requested
+      author: plexdownloader
+      changes:
+        - dropColumn:
+            tableName: download_queue
+            columnName: cancellation_requested

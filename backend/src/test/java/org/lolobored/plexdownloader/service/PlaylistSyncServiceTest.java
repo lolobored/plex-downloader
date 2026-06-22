@@ -261,7 +261,6 @@ class PlaylistSyncServiceTest {
 
         verify(transcodeService).cancel(2L);
         verify(downloadService).doCancelItem(transcoding);
-        assertThat(transcoding.isCancellationRequested()).isFalse();
     }
 
     @Test
