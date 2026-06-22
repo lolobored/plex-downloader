@@ -41,6 +41,12 @@ class PlaylistSyncServiceTest {
         return p;
     }
 
+    private PlexPlaylist plexPlaylistWithLeafCount(String key, int leafCount) {
+        PlexPlaylist p = plexPlaylist(key);
+        p.setLeafCount(leafCount);
+        return p;
+    }
+
     private Playlist localPlaylist(Long id, String plexId) {
         Playlist p = new Playlist(); p.setId(id); p.setPlexId(plexId);
         return p;
@@ -271,5 +277,106 @@ class PlaylistSyncServiceTest {
 
         assertThat(result).isEqualTo(0);
         verify(downloadService, never()).doCancelItem(any());
+    }
+
+    // --- Fix #64: leafCount guard tests ---
+
+    /**
+     * Guard test (the data-loss net): when Plex reports leafCount=5 but the fetch returns
+     * fewer items (partial/failed fetch), no removals or cancels must happen.
+     */
+    @Test
+    void syncPlaylist_partialFetch_skipsRemovalsAndCancels() {
+        // Playlist Plex says has 5 items
+        PlexPlaylist pp = plexPlaylistWithLeafCount("pl1", 5);
+        when(plexClient.getPlaylists()).thenReturn(List.of(pp));
+
+        Playlist local = localPlaylist(10L, "pl1");
+        when(playlistRepo.findByPlexId("pl1")).thenReturn(Optional.of(local));
+        when(playlistRepo.save(any())).thenReturn(local);
+
+        // We have 3 items locally
+        PlaylistItem item1 = new PlaylistItem(); item1.setPlexId("m1"); item1.setMediaType("MOVIE"); item1.setPlaylistId(10L);
+        PlaylistItem item2 = new PlaylistItem(); item2.setPlexId("m2"); item2.setMediaType("MOVIE"); item2.setPlaylistId(10L);
+        PlaylistItem item3 = new PlaylistItem(); item3.setPlexId("m3"); item3.setMediaType("MOVIE"); item3.setPlaylistId(10L);
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of(item1, item2, item3));
+
+        // But Plex only returned 2 items (partial fetch — fewer than leafCount=5)
+        when(plexClient.getPlaylistItems("pl1")).thenReturn(List.of(plexItem("m1", "movie"), plexItem("m2", "movie")));
+
+        service.syncAll();
+
+        // Guard must block ALL removals and cancels
+        verify(itemRepo, never()).deleteByPlaylistIdAndPlexId(anyLong(), anyString());
+        verify(downloadService, never()).doCancelItem(any());
+        // Additions must also be skipped (don't trust partial fetch)
+        verify(itemRepo, never()).save(any());
+    }
+
+    /**
+     * Guard test: empty fetch while leafCount > 0 (worst-case data-loss scenario —
+     * transient null/empty response) must NOT delete any items or files.
+     */
+    @Test
+    void syncPlaylist_emptyFetchWithNonZeroLeafCount_skipsRemovalsAndCancels() {
+        PlexPlaylist pp = plexPlaylistWithLeafCount("pl1", 3);
+        when(plexClient.getPlaylists()).thenReturn(List.of(pp));
+
+        Playlist local = localPlaylist(10L, "pl1");
+        when(playlistRepo.findByPlexId("pl1")).thenReturn(Optional.of(local));
+        when(playlistRepo.save(any())).thenReturn(local);
+
+        PlaylistItem item1 = new PlaylistItem(); item1.setPlexId("m1"); item1.setMediaType("MOVIE"); item1.setPlaylistId(10L);
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of(item1));
+
+        // Simulate transient empty response (null/empty) — leafCount=3 but 0 fetched
+        when(plexClient.getPlaylistItems("pl1")).thenReturn(List.of());
+
+        service.syncAll();
+
+        verify(itemRepo, never()).deleteByPlaylistIdAndPlexId(anyLong(), anyString());
+        verify(downloadService, never()).doCancelItem(any());
+        verify(itemRepo, never()).save(any());
+    }
+
+    /**
+     * Genuine removal test: when the full fetch matches leafCount and an item is truly
+     * absent, it MUST be removed and its download cancelled.
+     */
+    @Test
+    void syncPlaylist_genuineRemoval_removesItemAndCancels() {
+        // leafCount=1 (Plex still has one item), another item was truly removed
+        PlexPlaylist pp = plexPlaylistWithLeafCount("pl1", 1);
+        when(plexClient.getPlaylists()).thenReturn(List.of(pp));
+
+        Playlist local = localPlaylist(10L, "pl1");
+        when(playlistRepo.findByPlexId("pl1")).thenReturn(Optional.of(local));
+        when(playlistRepo.save(any())).thenReturn(local);
+
+        // Locally we had 2 items
+        PlaylistItem keep = new PlaylistItem(); keep.setPlexId("m1"); keep.setMediaType("MOVIE"); keep.setPlaylistId(10L);
+        PlaylistItem gone = new PlaylistItem(); gone.setPlexId("m2"); gone.setMediaType("MOVIE"); gone.setPlaylistId(10L);
+        when(itemRepo.findByPlaylistIdOrderByOrdinalAsc(10L)).thenReturn(List.of(keep, gone));
+
+        // Plex now has 1 item — m2 is truly gone; fetched.size()==1 == leafCount==1 → guard passes
+        when(plexClient.getPlaylistItems("pl1")).thenReturn(List.of(plexItem("m1", "movie")));
+
+        User user = new User(); user.setId(1L);
+        PlaylistSubscription sub = new PlaylistSubscription(); sub.setUser(user);
+        when(subRepo.findByPlaylistIdWithUser(10L)).thenReturn(List.of(sub));
+
+        Movie m2 = new Movie(); m2.setId(200L);
+        when(movieRepo.findByPlexId("m2")).thenReturn(Optional.of(m2));
+        DownloadQueueItem qi = new DownloadQueueItem(); qi.setId(99L);
+        when(queueRepo.findByUser_IdAndMediaTypeAndMediaId(1L, DownloadQueueItem.MediaType.MOVIE, 200L))
+            .thenReturn(Optional.of(qi));
+
+        service.syncAll();
+
+        // m2 must be removed
+        verify(itemRepo).deleteByPlaylistIdAndPlexId(10L, "m2");
+        verify(downloadService).doCancelItem(qi);
+        // m1 must NOT be removed
+        verify(itemRepo, never()).deleteByPlaylistIdAndPlexId(10L, "m1");
     }
 }

@@ -89,6 +89,18 @@ public class PlaylistSyncService {
 
         // Fetch new state from Plex
         List<PlexItem> fetched = plexClient.getPlaylistItems(pp.getRatingKey());
+
+        // Safety guard: if Plex reported more items than we received, the fetch is partial/failed.
+        // Never remove items (or cancel downloads) based on an incomplete fetch — that would cause
+        // data loss by deleting files for items still in the playlist.
+        int leafCount = pp.getLeafCount();
+        if (leafCount > fetched.size()) {
+            log.warn("Playlist '{}': partial fetch detected — Plex leafCount={} but only {} item(s) received. " +
+                     "Skipping removals/additions to avoid data loss. Will retry on next sync.",
+                pp.getTitle(), leafCount, fetched.size());
+            return;
+        }
+
         Map<String, PlexItem> fetchedByKey = fetched.stream()
             .collect(Collectors.toMap(PlexItem::getRatingKey, i -> i, (a, b) -> a));
         Set<String> newPlexIds = fetchedByKey.keySet();

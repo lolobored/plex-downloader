@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -124,16 +125,44 @@ public class PlexMediaServerClient {
     }
 
     /**
-     * Returns items inside a Plex playlist. Each item is a movie or episode PlexItem.
+     * Returns ALL items inside a Plex playlist, paginating via X-Plex-Container-Start/Size
+     * (mirrors getLibraryContents). A partial or null response propagates as-is so the
+     * caller's leafCount guard can detect the incomplete fetch.
      */
     public List<PlexItem> getPlaylistItems(String ratingKey) {
-        PlexLibraryContentsResponse resp = buildClient().get()
-            .uri("/playlists/{key}/items", ratingKey)
-            .retrieve()
-            .body(PlexLibraryContentsResponse.class);
-        if (resp == null || resp.getMediaContainer() == null) return List.of();
-        List<PlexItem> items = resp.getMediaContainer().getMetadata();
-        return items != null ? items : List.of();
+        List<PlexItem> accumulated = new ArrayList<>();
+        int offset = 0;
+        int totalSize = -1; // unknown until first page
+
+        while (true) {
+            final int currentOffset = offset;
+            PlexLibraryContentsResponse resp = buildClient().get()
+                .uri(u -> u.path("/playlists/{key}/items")
+                    .build(ratingKey))
+                .header("X-Plex-Container-Start", String.valueOf(currentOffset))
+                .header("X-Plex-Container-Size", String.valueOf(PAGE_SIZE))
+                .retrieve()
+                .body(PlexLibraryContentsResponse.class);
+
+            if (resp == null || resp.getMediaContainer() == null) {
+                // Propagate partial result; caller's leafCount guard handles incomplete fetch
+                break;
+            }
+
+            var mc = resp.getMediaContainer();
+            if (totalSize < 0) {
+                totalSize = mc.getTotalSize();
+            }
+            List<PlexItem> page = mc.getMetadata();
+            if (page == null || page.isEmpty()) break;
+
+            accumulated.addAll(page);
+
+            if (page.size() < PAGE_SIZE || accumulated.size() >= totalSize) break;
+            offset += PAGE_SIZE;
+        }
+
+        return accumulated;
     }
 
     public void downloadThumb(String thumbPath, Path destination) {
