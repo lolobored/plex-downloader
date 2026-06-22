@@ -24,3 +24,8 @@ export async function retryQueueItem(id) {
   const { data } = await http.post(`/api/download/${id}/retry`)
   return data
 }
+
+export async function retryAllErrored() {
+  const { data } = await http.post('/api/download/retry-all-errored')
+  return data  // { retried: N }
+}

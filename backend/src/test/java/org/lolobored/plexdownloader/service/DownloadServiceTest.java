@@ -492,4 +492,63 @@ class DownloadServiceTest {
         assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
         verify(events).publishEvent(any(TranscodeRequestedEvent.class));
     }
+
+    @Test
+    void retryAllErrored_resetsAllErrorItemsAndPublishesEvents() {
+        User user = new User(); user.setId(1L);
+
+        DownloadQueueItem err1 = new DownloadQueueItem();
+        err1.setId(10L); err1.setStatus(DownloadQueueItem.Status.ERROR);
+        err1.setErrorMessage("ffmpeg died"); err1.setTranscodeError("stderr"); err1.setProgressPercent(30);
+        err1.setUser(user);
+
+        DownloadQueueItem err2 = new DownloadQueueItem();
+        err2.setId(11L); err2.setStatus(DownloadQueueItem.Status.ERROR);
+        err2.setUser(user);
+
+        when(queueRepo.findByUser_IdAndStatus(1L, DownloadQueueItem.Status.ERROR))
+            .thenReturn(List.of(err1, err2));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int count = service.retryAllErrored(user);
+
+        assertThat(count).isEqualTo(2);
+        assertThat(err1.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        assertThat(err1.getErrorMessage()).isNull();
+        assertThat(err1.getTranscodeError()).isNull();
+        assertThat(err1.getProgressPercent()).isNull();
+        assertThat(err2.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        verify(events, times(2)).publishEvent(any(TranscodeRequestedEvent.class));
+    }
+
+    @Test
+    void retryAllErrored_returnsZeroWhenNoErrorItems() {
+        User user = new User(); user.setId(1L);
+        when(queueRepo.findByUser_IdAndStatus(1L, DownloadQueueItem.Status.ERROR))
+            .thenReturn(List.of());
+
+        int count = service.retryAllErrored(user);
+
+        assertThat(count).isEqualTo(0);
+        verify(events, never()).publishEvent(any());
+    }
+
+    @Test
+    void retryAllErrored_doesNotTouchNonErrorItems() {
+        User user = new User(); user.setId(1L);
+
+        DownloadQueueItem errorItem = new DownloadQueueItem();
+        errorItem.setId(20L); errorItem.setStatus(DownloadQueueItem.Status.ERROR);
+        errorItem.setUser(user);
+
+        // findByUser_IdAndStatus only returns ERROR items — non-error items are untouched by design
+        when(queueRepo.findByUser_IdAndStatus(1L, DownloadQueueItem.Status.ERROR))
+            .thenReturn(List.of(errorItem));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int count = service.retryAllErrored(user);
+
+        assertThat(count).isEqualTo(1);
+        verify(queueRepo, times(1)).save(errorItem);
+    }
 }

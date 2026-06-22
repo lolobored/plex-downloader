@@ -50,4 +50,10 @@ public class DownloadController {
     public DownloadQueueItem retry(@PathVariable Long id, @AuthenticationPrincipal User user) {
         return downloadService.retry(id, user);
     }
+
+    @PostMapping("/retry-all-errored")
+    public java.util.Map<String, Integer> retryAllErrored(@AuthenticationPrincipal User user) {
+        int count = downloadService.retryAllErrored(user);
+        return java.util.Map.of("retried", count);
+    }
 }

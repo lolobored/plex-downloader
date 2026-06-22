@@ -12,7 +12,8 @@ vi.mock('../../api/download.js', () => ({
   getQueue:          vi.fn().mockResolvedValue([]),
   enqueue:           vi.fn().mockResolvedValue({}),
   removeQueueItem:   vi.fn().mockResolvedValue(undefined),
-  retryQueueItem:    vi.fn().mockResolvedValue({})
+  retryQueueItem:    vi.fn().mockResolvedValue({}),
+  retryAllErrored:   vi.fn().mockResolvedValue({ retried: 2 })
 }))
 vi.mock('../../api/playlists.js', () => ({
   unsubscribe:           vi.fn().mockResolvedValue(undefined),
@@ -460,5 +461,62 @@ describe('QueueView', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="concurrency-btn-dec"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="concurrency-btn-inc"]').exists()).toBe(false)
+  })
+
+  // ── Retry all errored ────────────────────────────────────────────────────────
+
+  it('retry-all button hidden when no errored items', () => {
+    const { wrapper } = factory([movieItem({ status: 'QUEUED' })])
+    expect(wrapper.find('[data-testid="retry-all-btn"]').exists()).toBe(false)
+  })
+
+  it('retry-all button shown when at least one ERROR item exists', () => {
+    const { wrapper } = factory([movieItem({ status: 'ERROR', transcodeError: 'oops' })])
+    expect(wrapper.find('[data-testid="retry-all-btn"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retry-all-btn"]').text()).toContain('(1)')
+  })
+
+  it('retry-all button shows count of errored items', () => {
+    const { wrapper } = factory([
+      movieItem({ id: 1, status: 'ERROR' }),
+      movieItem({ id: 2, mediaId: 11, status: 'ERROR' }),
+      movieItem({ id: 3, mediaId: 12, status: 'DONE' }),
+    ])
+    expect(wrapper.find('[data-testid="retry-all-btn"]').text()).toContain('(2)')
+  })
+
+  it('retry-all button calls retryAllErrored api and refreshes queue', async () => {
+    const { wrapper, store } = factory([movieItem({ status: 'ERROR' })])
+    await wrapper.find('[data-testid="retry-all-btn"]').trigger('click')
+    await flushPromises()
+    expect(downloadApi.retryAllErrored).toHaveBeenCalled()
+    expect(store.fetchQueue).toHaveBeenCalled()
+  })
+
+  // ── Error-msg truncation ─────────────────────────────────────────────────────
+
+  it('error-msg shows truncated first line for long multi-line errors', () => {
+    const longError = 'first line\nsecond line\nthird line'
+    const { wrapper } = factory([movieItem({ status: 'ERROR', transcodeError: longError })])
+    const errSpan = wrapper.find('.error-msg')
+    expect(errSpan.exists()).toBe(true)
+    expect(errSpan.text()).toBe('first line…')
+    expect(errSpan.attributes('title')).toBe(longError)
+  })
+
+  it('error-msg shows truncated text (140 chars) with ellipsis for long single-line errors', () => {
+    const longError = 'a'.repeat(200)
+    const { wrapper } = factory([movieItem({ status: 'ERROR', transcodeError: longError })])
+    const errSpan = wrapper.find('.error-msg')
+    expect(errSpan.text()).toBe('a'.repeat(140) + '…')
+    expect(errSpan.attributes('title')).toBe(longError)
+  })
+
+  it('error-msg shows full short text without ellipsis', () => {
+    const shortError = 'codec error'
+    const { wrapper } = factory([movieItem({ status: 'ERROR', transcodeError: shortError })])
+    const errSpan = wrapper.find('.error-msg')
+    expect(errSpan.text()).toBe('codec error')
+    expect(errSpan.attributes('title')).toBe(shortError)
   })
 })

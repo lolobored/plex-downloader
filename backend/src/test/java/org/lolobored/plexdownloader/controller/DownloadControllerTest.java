@@ -129,4 +129,22 @@ class DownloadControllerTest {
         mockMvc.perform(post("/api/download/7/retry"))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void retryAllErrored_returns200WithCount() throws Exception {
+        when(downloadService.retryAllErrored(any())).thenReturn(3);
+
+        mockMvc.perform(post("/api/download/retry-all-errored"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.retried").value(3));
+    }
+
+    @Test
+    void retryAllErrored_returnsZeroWhenNothingErrored() throws Exception {
+        when(downloadService.retryAllErrored(any())).thenReturn(0);
+
+        mockMvc.perform(post("/api/download/retry-all-errored"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.retried").value(0));
+    }
 }

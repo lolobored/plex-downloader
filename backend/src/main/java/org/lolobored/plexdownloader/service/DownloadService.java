@@ -277,13 +277,29 @@ public class DownloadService {
         if (item.getStatus() != DownloadQueueItem.Status.ERROR) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item is not in ERROR state");
         }
+        resetToQueued(item);
+        queueRepo.save(item);
+        events.publishEvent(new TranscodeRequestedEvent(id));
+        return item;
+    }
+
+    @Transactional
+    public int retryAllErrored(User user) {
+        List<DownloadQueueItem> erroredItems =
+            queueRepo.findByUser_IdAndStatus(user.getId(), DownloadQueueItem.Status.ERROR);
+        for (DownloadQueueItem item : erroredItems) {
+            resetToQueued(item);
+            queueRepo.save(item);
+            events.publishEvent(new TranscodeRequestedEvent(item.getId()));
+        }
+        return erroredItems.size();
+    }
+
+    private void resetToQueued(DownloadQueueItem item) {
         item.setStatus(DownloadQueueItem.Status.QUEUED);
         item.setErrorMessage(null);
         item.setTranscodeError(null);
         item.setProgressPercent(null);
-        queueRepo.save(item);
-        events.publishEvent(new TranscodeRequestedEvent(id));
-        return item;
     }
 
 }

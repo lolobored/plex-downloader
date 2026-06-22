@@ -2,18 +2,27 @@
   <div>
     <div class="queue-header">
       <h2>Download Queue <span v-if="totalVisible > 0" class="count-badge" data-testid="count-badge">{{ totalVisible }}</span></h2>
-      <div class="concurrency-control" data-testid="concurrency-label">
-        <span class="concurrency-label-text">Concurrent transcodes</span>
-        <template v-if="authStore.isAdmin">
-          <button class="concurrency-btn" data-testid="concurrency-btn-dec"
-                  :disabled="maxConcurrent <= 1"
-                  @click="changeConcurrency(-1)">−</button>
-        </template>
-        <span class="concurrency-value" data-testid="concurrency-value">{{ maxConcurrent }}</span>
-        <template v-if="authStore.isAdmin">
-          <button class="concurrency-btn" data-testid="concurrency-btn-inc"
-                  @click="changeConcurrency(1)">+</button>
-        </template>
+      <div class="queue-header-actions">
+        <button v-if="erroredCount > 0"
+                class="btn-retry-all"
+                data-testid="retry-all-btn"
+                :disabled="retryingAll"
+                @click="retryAll">
+          {{ retryingAll ? '…' : `⟳ Retry all errored (${erroredCount})` }}
+        </button>
+        <div class="concurrency-control" data-testid="concurrency-label">
+          <span class="concurrency-label-text">Concurrent transcodes</span>
+          <template v-if="authStore.isAdmin">
+            <button class="concurrency-btn" data-testid="concurrency-btn-dec"
+                    :disabled="maxConcurrent <= 1"
+                    @click="changeConcurrency(-1)">−</button>
+          </template>
+          <span class="concurrency-value" data-testid="concurrency-value">{{ maxConcurrent }}</span>
+          <template v-if="authStore.isAdmin">
+            <button class="concurrency-btn" data-testid="concurrency-btn-inc"
+                    @click="changeConcurrency(1)">+</button>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -158,7 +167,7 @@ import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { removeQueueItem, retryQueueItem } from '@/api/download.js'
+import { removeQueueItem, retryQueueItem, retryAllErrored } from '@/api/download.js'
 import { unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
 import { getConcurrency, setConcurrency } from '@/api/transcode.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
@@ -181,10 +190,15 @@ async function changeConcurrency(delta) {
   }
 }
 
-const removing  = ref(new Set())
-const retrying  = ref(new Set())
-const openGroups = ref(new Set())
+const removing    = ref(new Set())
+const retrying    = ref(new Set())
+const retryingAll = ref(false)
+const openGroups  = ref(new Set())
 const confirmState = ref(null) // { playlistId, message } | null
+
+const erroredCount = computed(() =>
+  dlStore.queueItems.filter(i => i.status === 'ERROR').length
+)
 
 // ── Inline QueueItemRow component ────────────────────────────────────────────
 const QueueItemRow = defineComponent({
@@ -205,6 +219,9 @@ const QueueItemRow = defineComponent({
       else if (item.status === 'DONE') { statusLabel = 'done'; statusClass = 'badge-done' }
 
       const errorText = item.transcodeError || item.errorMessage
+      const errorSummary = errorText
+        ? (errorText.split('\n')[0].slice(0, 140) + (errorText.length > 140 || errorText.includes('\n') ? '…' : ''))
+        : null
 
       return h('div', {
         class: ['queue-item', 'clickable', isTranscoding ? 'active' : '', (item.status === 'DONE' || isError) ? 'done' : ''].filter(Boolean).join(' '),
@@ -213,8 +230,8 @@ const QueueItemRow = defineComponent({
       }, [
         h('div', { class: 'item-info' }, [
           h('span', { class: 'type' }, item.title || `${item.mediaType} #${item.mediaId}`),
-          isError && errorText
-            ? h('span', { class: 'error-msg' }, errorText)
+          isError && errorSummary
+            ? h('span', { class: 'error-msg', title: errorText }, errorSummary)
             : null,
         ].filter(Boolean)),
         isTranscoding
@@ -397,6 +414,18 @@ async function retryItem(id) {
   }
 }
 
+async function retryAll() {
+  retryingAll.value = true
+  try {
+    await retryAllErrored()
+    await dlStore.fetchQueue()
+  } catch (e) {
+    console.error('Retry all errored failed', e)
+  } finally {
+    retryingAll.value = false
+  }
+}
+
 function navigateToItem(item) {
   if (item.mediaType === 'MOVIE') {
     router.push('/movies/' + item.mediaId)
@@ -433,6 +462,11 @@ onUnmounted(() => clearInterval(pollTimer))
 <style scoped>
 h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
 .queue-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.queue-header-actions { display: flex; align-items: center; gap: 12px; }
+.btn-retry-all { background: none; border: 1px solid var(--red); color: var(--red); cursor: pointer;
+                 font-size: .8rem; padding: 4px 12px; border-radius: 4px; white-space: nowrap; }
+.btn-retry-all:hover:not(:disabled) { background: rgba(231,76,60,.1); }
+.btn-retry-all:disabled { opacity: 0.4; cursor: not-allowed; }
 .concurrency-control { display: flex; align-items: center; gap: 8px; font-size: .85rem;
                        color: var(--text-muted); background: var(--surface2);
                        border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; }
