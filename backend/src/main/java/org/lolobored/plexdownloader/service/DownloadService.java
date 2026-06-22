@@ -134,7 +134,7 @@ public class DownloadService {
     private record EpisodeMeta(Long showId, Long seasonId, String showTitle, Integer seasonNumber) {}
 
     public List<DownloadQueueItemResponse> getQueue(Long userId) {
-        List<DownloadQueueItem> items = queueRepo.findAllByUserIdOrderByQueuePositionAsc(userId);
+        List<DownloadQueueItem> items = queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(userId);
 
         // Batch-fetch episode → season → show metadata
         Set<Long> episodeIds = items.stream()

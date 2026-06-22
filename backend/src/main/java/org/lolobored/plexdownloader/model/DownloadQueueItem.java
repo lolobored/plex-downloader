@@ -32,6 +32,7 @@ public class DownloadQueueItem {
     @Column(name = "transcode_started_at")
     private Instant transcodeStartedAt;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "quality_profile_id")
     private QualityProfile qualityProfile;

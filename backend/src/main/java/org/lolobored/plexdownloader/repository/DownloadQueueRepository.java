@@ -15,6 +15,12 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
 
     List<DownloadQueueItem> findAllByUserIdOrderByQueuePositionAsc(Long userId);
 
+    /** Eager-fetches qualityProfile so the queue DTO mapping (which reads profile.name)
+     *  works outside a transaction (open-in-view is false). */
+    @Query("SELECT i FROM DownloadQueueItem i LEFT JOIN FETCH i.qualityProfile "
+         + "WHERE i.user.id = :userId ORDER BY i.queuePosition ASC")
+    List<DownloadQueueItem> findAllByUserIdWithProfileOrderByQueuePositionAsc(@Param("userId") Long userId);
+
     @Query("SELECT MAX(i.queuePosition) FROM DownloadQueueItem i WHERE i.status = 'QUEUED'")
     Optional<Integer> findMaxQueuePosition();
 

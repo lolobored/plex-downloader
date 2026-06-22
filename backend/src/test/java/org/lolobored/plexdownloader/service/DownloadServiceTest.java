@@ -363,7 +363,7 @@ class DownloadServiceTest {
         item.setMediaId(5L);
         item.setStatus(DownloadQueueItem.Status.QUEUED);
 
-        when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
         when(playlistRepo.findAllById(any())).thenReturn(List.of());
 
         List<DownloadQueueItemResponse> result = service.getQueue(1L);
@@ -388,7 +388,7 @@ class DownloadServiceTest {
         Season season = new Season(); season.setId(20L); season.setSeasonNumber(1); season.setShow(show);
         Episode ep = new Episode(); ep.setId(99L); ep.setSeason(season);
 
-        when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
         when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(99L))).thenReturn(List.of(ep));
         when(playlistRepo.findAllById(any())).thenReturn(List.of());
 
@@ -463,7 +463,7 @@ class DownloadServiceTest {
 
         Playlist playlist = new Playlist(); playlist.setId(5L); playlist.setTitle("Action Movies");
 
-        when(queueRepo.findAllByUserIdOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
         when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(99L))).thenReturn(List.of(ep));
         when(playlistRepo.findAllById(Set.of(5L))).thenReturn(List.of(playlist));
 
