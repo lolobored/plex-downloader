@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 013-transcode-queue-columns
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN progress_percent INT"
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN transcode_error TEXT"
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN transcode_started_at TIMESTAMP"
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN quality_profile_id BIGINT"
+        - addForeignKeyConstraint:
+            baseTableName: download_queue
+            baseColumnNames: quality_profile_id
+            constraintName: fk_download_queue_quality_profile
+            referencedTableName: quality_profile
+            referencedColumnNames: id
+            onDelete: SET NULL
+        # --- migrate status (anything not finished-transcoded becomes QUEUED) ---
+        - sql:
+            sql: "UPDATE download_queue SET status='DONE'  WHERE status='DONE' AND tdarr_status='TRANSCODED'"
+        - sql:
+            sql: "UPDATE download_queue SET status='ERROR' WHERE tdarr_status='TDARR_ERROR'"
+        - sql:
+            sql: "UPDATE download_queue SET status='QUEUED' WHERE status IN ('PENDING','IN_PROGRESS') OR (status='DONE' AND (tdarr_status IS NULL OR tdarr_status NOT IN ('TRANSCODED','TDARR_ERROR')))"
+        # --- backfill quality_profile_id to the default profile ---
+        - sql:
+            sql: "UPDATE download_queue SET quality_profile_id = (SELECT id FROM quality_profile WHERE is_default = TRUE LIMIT 1) WHERE quality_profile_id IS NULL"
+        # --- drop obsolete tdarr columns ---
+        - dropColumn: { tableName: download_queue, columnName: tdarr_status }
+        - dropColumn: { tableName: download_queue, columnName: tdarr_error }
+        - dropColumn: { tableName: download_queue, columnName: output_file_path }
