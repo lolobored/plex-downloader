@@ -21,3 +21,7 @@ frontend/node_modules/
 # OS
 .DS_Store
 .superpowers/
+
+# Agent worktrees + Vite cache (scratch, must not be tracked)
+.claude/worktrees/
+frontend/.vite/
