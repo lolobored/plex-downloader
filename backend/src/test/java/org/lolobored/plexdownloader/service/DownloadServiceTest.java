@@ -61,6 +61,7 @@ class DownloadServiceTest {
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("output.movies.dir")).thenReturn(Optional.of("/conv/libraries/movies"));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/conv/libraries/tvshows"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(2L); return i; });
 
@@ -75,6 +76,8 @@ class DownloadServiceTest {
     @Test
     void throwsWhenMovieNotFound() {
         when(movieRepo.findById(99L)).thenReturn(Optional.empty());
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of("/movies"));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/tvshows"));
         User user = new User();
         user.setId(1L);
 
@@ -97,6 +100,7 @@ class DownloadServiceTest {
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("output.movies.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
             DownloadQueueItem item = inv.getArgument(0);
@@ -137,6 +141,7 @@ class DownloadServiceTest {
         when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
         when(showRepo.findById(100L)).thenReturn(Optional.of(show));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of("/conv/libraries/movies"));
         when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/conv/libraries/tvshows"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> {
@@ -166,6 +171,7 @@ class DownloadServiceTest {
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("output.movies.dir")).thenReturn(Optional.of("/conversion/libraries/movies"));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/conversion/libraries/tvshows"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(1L); return i; });
 
@@ -411,6 +417,7 @@ class DownloadServiceTest {
 
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("output.movies.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         ArgumentCaptor<DownloadQueueItem> captor = ArgumentCaptor.forClass(DownloadQueueItem.class);
@@ -434,6 +441,7 @@ class DownloadServiceTest {
 
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("output.movies.dir")).thenReturn(Optional.of(tempDir.toString()));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(tempDir.toString()));
         when(movieRepo.findById(2L)).thenReturn(Optional.of(movie));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         ArgumentCaptor<DownloadQueueItem> captor = ArgumentCaptor.forClass(DownloadQueueItem.class);
@@ -560,6 +568,7 @@ class DownloadServiceTest {
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
         when(settings.get("output.movies.dir")).thenReturn(Optional.of("/custom/movies"));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/custom/tvshows"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(9L); return i; });
 
@@ -572,23 +581,33 @@ class DownloadServiceTest {
     }
 
     @Test
-    void buildItem_defaultMoviesDirProducesSamePathAsLegacy() {
+    void enqueueMovie_throwsConflictWhenOutputMoviesDirBlank() {
         Movie movie = new Movie();
         movie.setId(1L); movie.setTitle("Dunkirk");
         movie.setFilePath("/plex/movies/Dunkirk (2017)/dunkirk.mkv");
         when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
-        when(settings.get("output.movies.dir")).thenReturn(Optional.empty()); // use default
-        when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
-        when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(10L); return i; });
+        when(settings.get("output.movies.dir")).thenReturn(Optional.empty());
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.empty());
 
-        service.enqueueMovie(1L, new User());
+        assertThatThrownBy(() -> service.enqueueMovie(1L, new User()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("409");
+    }
 
-        // Default = /plex-conversion/libraries/movies
-        verify(queueRepo).save(argThat(item ->
-            item.getDestFilePath().replace('\\', '/').startsWith("/plex-conversion/libraries/movies/")
-            && item.getDestFilePath().contains("dunkirk.mkv")
-        ));
+    @Test
+    void enqueueMovie_throwsConflictWhenOutputMoviesDirEmpty() {
+        Movie movie = new Movie();
+        movie.setId(1L); movie.setTitle("Dunkirk");
+        movie.setFilePath("/plex/movies/Dunkirk (2017)/dunkirk.mkv");
+        when(movieRepo.findById(1L)).thenReturn(Optional.of(movie));
+        when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of(""));
+        when(settings.get("output.tvshows.dir")).thenReturn(Optional.of(""));
+
+        assertThatThrownBy(() -> service.enqueueMovie(1L, new User()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("409");
     }
 
     @Test
@@ -603,6 +622,7 @@ class DownloadServiceTest {
         when(seasonRepo.findById(10L)).thenReturn(Optional.of(season));
         when(showRepo.findById(100L)).thenReturn(Optional.of(show));
         when(qualityProfileService.resolveOrDefault(null)).thenReturn(defaultProfile());
+        when(settings.get("output.movies.dir")).thenReturn(Optional.of("/custom/movies"));
         when(settings.get("output.tvshows.dir")).thenReturn(Optional.of("/custom/tv"));
         when(queueRepo.findMaxQueuePosition()).thenReturn(Optional.of(0));
         when(queueRepo.save(any())).thenAnswer(inv -> { DownloadQueueItem i = inv.getArgument(0); i.setId(11L); return i; });

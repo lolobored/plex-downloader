@@ -23,12 +23,11 @@ public class FileBrowserController {
     public ResponseEntity<Map<String, Object>> list(@RequestParam(required = false) String path) {
         List<FileBrowserService.DirEntry> entries = fileBrowserService.listDirectories(path);
 
-        String effectivePath = (path == null || path.isBlank()) ? fileBrowserService.getAllowedRoot() : path;
+        String effectivePath = (path == null || path.isBlank()) ? "/" : path;
         java.nio.file.Path current = java.nio.file.Paths.get(effectivePath).normalize();
-        java.nio.file.Path allowedRoot = java.nio.file.Paths.get(fileBrowserService.getAllowedRoot()).normalize();
 
         String parent = null;
-        if (!current.equals(allowedRoot) && current.getParent() != null) {
+        if (current.getParent() != null) {
             parent = current.getParent().toString();
         }
 

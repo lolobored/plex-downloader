@@ -29,3 +29,8 @@ export async function retryAllErrored() {
   const { data } = await http.post('/api/download/retry-all-errored')
   return data  // { retried: N }
 }
+
+export async function getOutputStatus() {
+  const { data } = await http.get('/api/output-status')
+  return data  // { configured: boolean }
+}

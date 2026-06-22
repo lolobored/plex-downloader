@@ -162,7 +162,7 @@ class AdminControllerTest {
 
     @Test
     void putSettings_rejectsInvalidOutputDir() throws Exception {
-        when(fileBrowserService.isWritableWithinRoot("/etc")).thenReturn(false);
+        when(fileBrowserService.isWritable("/etc")).thenReturn(false);
 
         mockMvc.perform(put("/api/admin/settings")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -172,11 +172,21 @@ class AdminControllerTest {
 
     @Test
     void putSettings_acceptsValidOutputDir() throws Exception {
-        when(fileBrowserService.isWritableWithinRoot("/plex-conversion/libraries/movies")).thenReturn(true);
+        when(fileBrowserService.isWritable("/plex-conversion/libraries/movies")).thenReturn(true);
 
         mockMvc.perform(put("/api/admin/settings")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of("output.movies.dir", "/plex-conversion/libraries/movies"))))
             .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void getSettings_outputDirsDefaultToBlank() throws Exception {
+        when(settingsService.get(anyString())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/admin/settings"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$['output.movies.dir']").value(""))
+            .andExpect(jsonPath("$['output.tvshows.dir']").value(""));
     }
 }

@@ -16,6 +16,7 @@ describe('DownloadButton', () => {
     store.enqueue        = vi.fn()
     store.fetchProfiles  = vi.fn()
     store.profiles       = storeState.profiles ?? []
+    store.outputConfigured = storeState.outputConfigured ?? true
     return mount(DownloadButton, {
       props: { type: 'MOVIE', mediaId: 1, ...( storeState.small ? { small: true } : {} ) },
       global: { plugins: [pinia] }
@@ -133,5 +134,18 @@ describe('DownloadButton', () => {
     await w.find('button.dl-btn').trigger('click')
     // selectedProfileId should be initialized to PROFILE_DEFAULT.id (1)
     expect(store.enqueue).toHaveBeenCalledWith('MOVIE', 11, 1)
+  })
+
+  it('disabled with tooltip when outputConfigured is false', () => {
+    const w = factory({ status: null, outputConfigured: false })
+    const btn = w.find('button.dl-btn')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.attributes('title')).toContain('Settings')
+  })
+
+  it('not disabled by outputConfigured when outputConfigured is true', () => {
+    const w = factory({ status: null, outputConfigured: true })
+    const btn = w.find('button.dl-btn')
+    expect(btn.attributes('disabled')).toBeUndefined()
   })
 })

@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getQueue, enqueue as apiEnqueue, getQualityProfiles } from '@/api/download.js'
+import { getQueue, enqueue as apiEnqueue, getQualityProfiles, getOutputStatus } from '@/api/download.js'
 
 export const useDownloadStore = defineStore('download', () => {
-  const queueItems = ref([])
-  const profiles   = ref([])
+  const queueItems       = ref([])
+  const profiles         = ref([])
+  const outputConfigured = ref(true)  // default true to avoid disabled flash before first fetch
 
   async function fetchQueue() {
     queueItems.value = await getQueue()
@@ -13,6 +14,11 @@ export const useDownloadStore = defineStore('download', () => {
   async function fetchProfiles() {
     if (profiles.value.length > 0) return
     profiles.value = await getQualityProfiles()
+  }
+
+  async function fetchOutputStatus() {
+    const status = await getOutputStatus()
+    outputConfigured.value = status.configured
   }
 
   function statusFor(mediaType, mediaId) {
@@ -27,5 +33,5 @@ export const useDownloadStore = defineStore('download', () => {
     await fetchQueue()
   }
 
-  return { queueItems, profiles, fetchQueue, fetchProfiles, statusFor, enqueue }
+  return { queueItems, profiles, outputConfigured, fetchQueue, fetchProfiles, fetchOutputStatus, statusFor, enqueue }
 })

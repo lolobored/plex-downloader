@@ -16,68 +16,49 @@ class FileBrowserServiceTest {
     Path tempDir;
 
     FileBrowserService service() {
-        return new FileBrowserService(tempDir.toString());
+        return new FileBrowserService();
     }
 
     @Test
-    void listDirectories_returnsSubdirectoriesInsideRoot() throws Exception {
+    void listDirectories_returnsSubdirectories() throws Exception {
         Files.createDirectory(tempDir.resolve("alpha"));
         Files.createDirectory(tempDir.resolve("beta"));
-        // a file should not be returned
         Files.writeString(tempDir.resolve("file.txt"), "data");
 
-        List<FileBrowserService.DirEntry> entries = service().listDirectories(null);
+        List<FileBrowserService.DirEntry> entries = service().listDirectories(tempDir.toString());
         assertThat(entries).hasSize(2);
         assertThat(entries).extracting(FileBrowserService.DirEntry::name)
             .containsExactlyInAnyOrder("alpha", "beta");
     }
 
     @Test
-    void listDirectories_defaultsToAllowedRootWhenPathBlank() throws Exception {
-        Files.createDirectory(tempDir.resolve("sub"));
+    void listDirectories_blankPathDefaultsToFilesystemRoot() throws Exception {
+        // Blank path → list "/" (filesystem root)
         List<FileBrowserService.DirEntry> entries = service().listDirectories("");
-        assertThat(entries).extracting(FileBrowserService.DirEntry::name).contains("sub");
+        // On any OS the root always has some entries
+        assertThat(entries).isNotNull();
     }
 
     @Test
-    void listDirectories_rejectsPathOutsideRoot() {
+    void listDirectories_nullPathDefaultsToFilesystemRoot() throws Exception {
+        List<FileBrowserService.DirEntry> entries = service().listDirectories(null);
+        assertThat(entries).isNotNull();
+    }
+
+    @Test
+    void listDirectories_pathOutsideFormerRootIsNowAllowed() throws Exception {
+        // No sandbox — any readable path is allowed
         FileBrowserService svc = service();
-        assertThatThrownBy(() -> svc.listDirectories("/tmp"))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("outside");
+        // /tmp is always readable on the test OS
+        assertThatNoException().isThrownBy(() -> svc.listDirectories(tempDir.toString()));
     }
 
     @Test
-    void listDirectories_rejectsDotDotTraversal() {
-        FileBrowserService svc = service();
-        // Try to escape via path traversal
-        String traversal = tempDir + "/../../../etc";
-        assertThatThrownBy(() -> svc.listDirectories(traversal))
-            .isInstanceOf(ResponseStatusException.class);
-    }
-
-    @Test
-    void createDirectory_createsNestedDirInsideRoot() throws Exception {
+    void createDirectory_createsNestedDir() throws Exception {
         FileBrowserService svc = service();
         String newDir = tempDir + "/parent/child";
         String result = svc.createDirectory(newDir);
         assertThat(Path.of(result)).isDirectory();
-    }
-
-    @Test
-    void createDirectory_rejectsPathOutsideRoot() {
-        FileBrowserService svc = service();
-        assertThatThrownBy(() -> svc.createDirectory("/tmp/evil"))
-            .isInstanceOf(ResponseStatusException.class)
-            .hasMessageContaining("outside");
-    }
-
-    @Test
-    void createDirectory_rejectsDotDotEscape() {
-        FileBrowserService svc = service();
-        String traversal = tempDir + "/../evil";
-        assertThatThrownBy(() -> svc.createDirectory(traversal))
-            .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
@@ -90,20 +71,20 @@ class FileBrowserServiceTest {
     }
 
     @Test
-    void isWritableWithinRoot_trueForExistingWritableDir() {
+    void isWritable_trueForExistingWritableDir() {
         FileBrowserService svc = service();
-        assertThat(svc.isWritableWithinRoot(tempDir.toString())).isTrue();
+        assertThat(svc.isWritable(tempDir.toString())).isTrue();
     }
 
     @Test
-    void isWritableWithinRoot_falseForPathOutsideRoot() {
+    void isWritable_trueForNonExistingPathInsideWritableParent() {
         FileBrowserService svc = service();
-        assertThat(svc.isWritableWithinRoot("/tmp/outside")).isFalse();
+        assertThat(svc.isWritable(tempDir + "/new-folder")).isTrue();
     }
 
     @Test
-    void isWritableWithinRoot_trueForNonExistingPathInsideRoot() {
+    void isWritable_falseForNullPath() {
         FileBrowserService svc = service();
-        assertThat(svc.isWritableWithinRoot(tempDir + "/new-folder")).isTrue();
+        assertThat(svc.isWritable(null)).isFalse();
     }
 }

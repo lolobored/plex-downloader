@@ -32,6 +32,7 @@ describe('SubscribeButton — show context (no seasonId)', () => {
     const dlStore = useDownloadStore(pinia)
     dlStore.fetchProfiles = vi.fn()
     dlStore.profiles      = profiles
+    dlStore.outputConfigured = true
     return { wrapper: mount(SubscribeButton, {
       props: { showId: 10 },
       global: { plugins: [pinia] },
@@ -121,6 +122,44 @@ describe('SubscribeButton — show context (no seasonId)', () => {
     await wrapper.vm.$nextTick()
     expect(store.unsubscribe).not.toHaveBeenCalled()
   })
+
+  it('sub-btn disabled with tooltip when outputConfigured false', () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useWatchedStore(pinia)
+    store.getSubscription = vi.fn().mockReturnValue(null)
+    store.getSeasonSubscription = vi.fn().mockReturnValue(null)
+    const dlStore = useDownloadStore(pinia)
+    dlStore.fetchProfiles = vi.fn()
+    dlStore.profiles = []
+    dlStore.outputConfigured = false
+    const wrapper = mount(SubscribeButton, {
+      props: { showId: 10 },
+      global: { plugins: [pinia] },
+      attachTo: document.body
+    })
+    const btn = wrapper.find('button.sub-btn')
+    expect(btn.attributes('disabled')).toBeDefined()
+    expect(btn.attributes('title')).toContain('Settings')
+  })
+
+  it('sub-btn enabled when outputConfigured true', () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useWatchedStore(pinia)
+    store.getSubscription = vi.fn().mockReturnValue(null)
+    store.getSeasonSubscription = vi.fn().mockReturnValue(null)
+    const dlStore = useDownloadStore(pinia)
+    dlStore.fetchProfiles = vi.fn()
+    dlStore.profiles = []
+    dlStore.outputConfigured = true
+    const wrapper = mount(SubscribeButton, {
+      props: { showId: 10 },
+      global: { plugins: [pinia] },
+      attachTo: document.body
+    })
+    const btn = wrapper.find('button.sub-btn')
+    // Not disabled by outputConfigured (loading is false, outputConfigured is true)
+    expect(btn.attributes('disabled')).toBeUndefined()
+  })
 })
 
 describe('SubscribeButton — season context (with seasonId)', () => {
@@ -139,6 +178,7 @@ describe('SubscribeButton — season context (with seasonId)', () => {
     const dlStore = useDownloadStore(pinia)
     dlStore.fetchProfiles = vi.fn()
     dlStore.profiles      = profiles
+    dlStore.outputConfigured = true
     return { wrapper: mount(SubscribeButton, {
       props: { showId: 10, seasonId: 100 },
       global: { plugins: [pinia] },

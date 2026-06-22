@@ -5,9 +5,10 @@ import { useDownloadStore } from '../download.js'
 vi.mock('../../api/download.js', () => ({
   getQueue:           vi.fn(),
   enqueue:            vi.fn(),
-  getQualityProfiles: vi.fn()
+  getQualityProfiles: vi.fn(),
+  getOutputStatus:    vi.fn()
 }))
-import { getQueue, enqueue, getQualityProfiles } from '../../api/download.js'
+import { getQueue, enqueue, getQualityProfiles, getOutputStatus } from '../../api/download.js'
 
 describe('download store', () => {
   beforeEach(() => {
@@ -59,5 +60,12 @@ describe('download store', () => {
     await store.enqueue('MOVIE', 10)
     expect(enqueue).toHaveBeenCalledWith('MOVIE', 10, null)
     expect(getQueue).toHaveBeenCalled()
+  })
+
+  it('fetchOutputStatus sets outputConfigured', async () => {
+    getOutputStatus.mockResolvedValue({ configured: false })
+    const store = useDownloadStore()
+    await store.fetchOutputStatus()
+    expect(store.outputConfigured).toBe(false)
   })
 })

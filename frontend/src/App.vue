@@ -12,7 +12,14 @@
 <script setup>
 import NavBar from '@/components/NavBar.vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { useDownloadStore } from '@/stores/download.js'
+import { watch } from 'vue'
 const authStore = useAuthStore()
+const dlStore = useDownloadStore()
+
+watch(() => authStore.isLoggedIn, (loggedIn) => {
+  if (loggedIn) dlStore.fetchOutputStatus()
+}, { immediate: true })
 </script>
 
 <style>

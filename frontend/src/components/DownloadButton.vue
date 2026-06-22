@@ -15,9 +15,9 @@
     <button
       class="dl-btn"
       :class="[`status-${status ?? 'idle'}`, { small }]"
-      :disabled="status === 'QUEUED' || status === 'TRANSCODING' || status === 'DONE'"
+      :disabled="status === 'QUEUED' || status === 'TRANSCODING' || status === 'DONE' || !dlStore.outputConfigured"
       @click.stop="handleClick"
-      :title="label"
+      :title="buttonTitle"
     >
       {{ icon }} <span v-if="!small">{{ label }}</span>
     </button>
@@ -83,6 +83,12 @@ const label = computed(() => {
     default:            return 'Download'
   }
 })
+
+const buttonTitle = computed(() =>
+  !dlStore.outputConfigured
+    ? 'Set the movies and TV output folders in Settings before downloading.'
+    : label.value
+)
 
 async function handleClick() {
   if (!status.value || status.value === 'ERROR') {

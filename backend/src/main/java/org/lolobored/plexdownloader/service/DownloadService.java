@@ -47,7 +47,16 @@ public class DownloadService {
         return enqueueMovie(movieId, user, playlistId, null);
     }
 
+    private boolean outputConfigured() {
+        String moviesDir = settings.get("output.movies.dir").orElse("");
+        String tvshowsDir = settings.get("output.tvshows.dir").orElse("");
+        return !moviesDir.isBlank() && !tvshowsDir.isBlank();
+    }
+
     public List<Long> enqueueMovie(Long movieId, User user, Long playlistId, Long qualityProfileId) {
+        if (!outputConfigured()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured");
+        }
         Movie movie = movieRepo.findById(movieId)
             .orElseThrow(() -> new IllegalArgumentException("Movie not found: " + movieId));
         QualityProfile profile = qualityProfileService.resolveOrDefault(qualityProfileId);
@@ -69,6 +78,9 @@ public class DownloadService {
     }
 
     public List<Long> enqueueEpisode(Long episodeId, User user, Long playlistId, Long qualityProfileId) {
+        if (!outputConfigured()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured");
+        }
         Episode ep = episodeRepo.findById(episodeId)
             .orElseThrow(() -> new IllegalArgumentException("Episode not found: " + episodeId));
         Season season = seasonRepo.findById(ep.getSeason().getId())
@@ -94,6 +106,9 @@ public class DownloadService {
     }
 
     public List<Long> enqueueSeason(Long seasonId, User user, Long qualityProfileId) {
+        if (!outputConfigured()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured");
+        }
         Season season = seasonRepo.findById(seasonId)
             .orElseThrow(() -> new IllegalArgumentException("Season not found: " + seasonId));
         TvShow show = showRepo.findById(season.getShow().getId())
@@ -122,6 +137,9 @@ public class DownloadService {
     }
 
     public List<Long> enqueueShow(Long showId, User user, Long qualityProfileId) {
+        if (!outputConfigured()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured");
+        }
         List<Season> seasons = seasonRepo.findByShowIdOrderBySeasonNumber(showId);
         if (seasons.isEmpty()) throw new IllegalArgumentException("Show not found or empty: " + showId);
         List<Long> ids = new ArrayList<>();
@@ -199,17 +217,17 @@ public class DownloadService {
         // subDir starts with "movies/" or "tvshows/" — pick configured root, strip the type prefix
         String destPath;
         if (subDir.startsWith("movies/")) {
-            String root = settings.get("output.movies.dir").orElse("/plex-conversion/libraries/movies");
+            String root = settings.get("output.movies.dir")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured"));
             String relative = subDir.substring("movies/".length());
             destPath = Path.of(root, relative, outName).toString();
         } else if (subDir.startsWith("tvshows/")) {
-            String root = settings.get("output.tvshows.dir").orElse("/plex-conversion/libraries/tvshows");
+            String root = settings.get("output.tvshows.dir")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured"));
             String relative = subDir.substring("tvshows/".length());
             destPath = Path.of(root, relative, outName).toString();
         } else {
-            // fallback: use legacy plex.conversion.dir behaviour
-            String conversionDir = settings.get("plex.conversion.dir").orElse("/plex-conversion");
-            destPath = Path.of(conversionDir, "libraries", subDir, outName).toString();
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Output folders not configured");
         }
 
         int nextPos = queueRepo.findMaxQueuePosition().orElse(0) + 1;

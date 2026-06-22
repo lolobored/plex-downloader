@@ -1,6 +1,6 @@
 <template>
   <div class="subscribe-wrap" :class="{ small }">
-    <button class="sub-btn" :class="statusClass" @click.stop="toggle" :disabled="loading">
+    <button class="sub-btn" :class="statusClass" @click.stop="toggle" :disabled="loading || !dlStore.outputConfigured" :title="!dlStore.outputConfigured ? 'Set the movies and TV output folders in Settings before downloading.' : undefined">
       <template v-if="loading">⏳</template>
       <template v-else-if="current">📥 Next {{ current }}</template>
       <template v-else>⬇ Download</template>

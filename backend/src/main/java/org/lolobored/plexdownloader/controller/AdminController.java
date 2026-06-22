@@ -40,8 +40,8 @@ public class AdminController {
         result.put("plex.sync.cron",           settingsService.get("plex.sync.cron").orElse("0 0 */6 * * *"));
         result.put("plex.sync.libraries",      settingsService.get("plex.sync.libraries").orElse(""));
         result.put("transcode.max.concurrent", settingsService.get("transcode.max.concurrent").orElse("2"));
-        result.put("output.movies.dir",        settingsService.get("output.movies.dir").orElse("/plex-conversion/libraries/movies"));
-        result.put("output.tvshows.dir",       settingsService.get("output.tvshows.dir").orElse("/plex-conversion/libraries/tvshows"));
+        result.put("output.movies.dir",        settingsService.get("output.movies.dir").orElse(""));
+        result.put("output.tvshows.dir",       settingsService.get("output.tvshows.dir").orElse(""));
         return result;
     }
 
@@ -58,9 +58,9 @@ public class AdminController {
         for (String key : OUTPUT_DIR_KEYS) {
             if (settings.containsKey(key)) {
                 String dir = settings.get(key);
-                if (!fileBrowserService.isWritableWithinRoot(dir)) {
+                if (dir != null && !dir.isBlank() && !fileBrowserService.isWritable(dir)) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Invalid output directory (must be within allowed root and writable): " + dir);
+                        "Invalid output directory (not writable): " + dir);
                 }
             }
         }
