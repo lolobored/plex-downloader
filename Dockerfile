@@ -7,7 +7,7 @@ COPY frontend/ .
 RUN npm run build
 
 # ── Stage 2: build Spring Boot JAR (with embedded frontend) ──────────────────
-FROM eclipse-temurin:21-jdk-alpine AS backend-build
+FROM eclipse-temurin:25-jdk-alpine AS backend-build
 WORKDIR /app
 COPY backend/gradlew backend/settings.gradle backend/build.gradle ./
 COPY backend/gradle ./gradle
@@ -18,7 +18,7 @@ COPY --from=frontend-build /app/dist ./src/main/resources/static
 RUN ./gradlew bootJar --no-daemon -x test -q
 
 # ── Stage 3: runtime image (Debian) with PostgreSQL + ffmpeg + Intel QSV ──────
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 
 # PostgreSQL, ffmpeg, VAAPI tools, gosu for privilege drop
 # Intel QSV runtime packages (intel-media-va-driver-non-free, libmfx-gen1.2, libvpl2)
