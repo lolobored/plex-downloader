@@ -15,7 +15,9 @@ vi.mock('../../api/admin.js', () => ({
   setDefaultQualityProfile: vi.fn(),
   fsList:                   vi.fn(),
   fsMkdir:                  vi.fn(),
-  relocateOutput:           vi.fn()
+  relocateOutput:           vi.fn(),
+  runSubtitleScan:          vi.fn(),
+  getSubtitleScanStatus:    vi.fn()
 }))
 vi.mock('../../api/download.js', () => ({
   getQualityProfiles: vi.fn()
@@ -24,7 +26,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 import { getSettings, getSyncStatus, triggerSync, putSettings, getPlexLibraries,
          createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile,
-         fsList, fsMkdir, relocateOutput } from '../../api/admin.js'
+         fsList, fsMkdir, relocateOutput, runSubtitleScan, getSubtitleScanStatus } from '../../api/admin.js'
 import { getQualityProfiles } from '../../api/download.js'
 
 beforeEach(() => {
@@ -65,6 +67,8 @@ describe('SettingsView', () => {
     updateQualityProfile.mockResolvedValue({})
     deleteQualityProfile.mockResolvedValue(undefined)
     setDefaultQualityProfile.mockResolvedValue({})
+    getSubtitleScanStatus.mockResolvedValue({ running: false, lastRunAt: null, scanned: 0, failed: 0, remainingUnknown: 0 })
+    runSubtitleScan.mockResolvedValue(undefined)
     return mount(SettingsView, { global: { plugins: [pinia] } })
   }
 
@@ -435,5 +439,97 @@ describe('Output relocation modal', () => {
     expect(resultEl.text()).toContain('8')  // 3+5 moved
     expect(resultEl.text()).toContain('3')  // 1+2 updatedOnly
     expect(resultEl.text()).toContain('1')  // 0+1 failed
+  })
+})
+
+describe('SettingsView – Subtitles section', () => {
+  function factory() {
+    const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { auth: { role: 'ADMIN' } } })
+    getSettings.mockResolvedValue({
+      'plex.server.url':      'http://localhost:32400',
+      'plex.sync.cron':       '0 0 */6 * * *',
+      'plex.sync.libraries':  '1',
+      'output.movies.dir':    '/plex-conversion/libraries/movies',
+      'output.tvshows.dir':   '/plex-conversion/libraries/tvshows',
+      'subtitles.scan.cron':  '0 0 4 * * *'
+    })
+    getSyncStatus.mockResolvedValue({ state: 'IDLE', lastSyncAt: null, itemsSynced: 0, error: null })
+    getPlexLibraries.mockResolvedValue([])
+    putSettings.mockResolvedValue(undefined)
+    fsList.mockResolvedValue({ path: '/', parent: null, entries: [] })
+    fsMkdir.mockResolvedValue({})
+    getQualityProfiles.mockResolvedValue([])
+    relocateOutput.mockResolvedValue({ moved: 0, updatedOnly: 0, failed: 0 })
+    getSubtitleScanStatus.mockResolvedValue({ running: false, lastRunAt: '2026-06-20T10:00:00Z', scanned: 42, failed: 1, remainingUnknown: 5 })
+    runSubtitleScan.mockResolvedValue(undefined)
+    return mount(SettingsView, { global: { plugins: [pinia] } })
+  }
+
+  it('renders Subtitles section heading', async () => {
+    const w = factory()
+    await flushPromises()
+    expect(w.text()).toContain('Subtitles')
+  })
+
+  it('"Scan now" button calls runSubtitleScan(false)', async () => {
+    const w = factory()
+    await flushPromises()
+    await w.find('[data-testid="subtitle-scan-now-btn"]').trigger('click')
+    await flushPromises()
+    expect(runSubtitleScan).toHaveBeenCalledWith(false)
+  })
+
+  it('"Rescan all" button calls runSubtitleScan(true)', async () => {
+    const w = factory()
+    await flushPromises()
+    await w.find('[data-testid="subtitle-rescan-all-btn"]').trigger('click')
+    await flushPromises()
+    expect(runSubtitleScan).toHaveBeenCalledWith(true)
+  })
+
+  it('status line shows scanned / failed / remainingUnknown from getSubtitleScanStatus', async () => {
+    const w = factory()
+    await flushPromises()
+    const text = w.text()
+    expect(text).toContain('42')   // scanned
+    expect(text).toContain('1')    // failed
+    expect(text).toContain('5')    // remainingUnknown
+  })
+
+  it('saving settings includes subtitles.scan.cron in the payload', async () => {
+    const w = factory()
+    await flushPromises()
+    await w.find('[data-testid="subtitle-save-btn"]').trigger('click')
+    await flushPromises()
+    const payload = putSettings.mock.calls[0][0]
+    expect(payload).toHaveProperty('subtitles.scan.cron', '0 0 4 * * *')
+  })
+
+  it('saving settings includes subtitles.scan.cron as empty string when Disabled selected', async () => {
+    getSettings.mockResolvedValue({
+      'plex.server.url':      'http://localhost:32400',
+      'plex.sync.cron':       '0 0 */6 * * *',
+      'plex.sync.libraries':  '',
+      'output.movies.dir':    '/plex-conversion/libraries/movies',
+      'output.tvshows.dir':   '/plex-conversion/libraries/tvshows',
+      'subtitles.scan.cron':  ''
+    })
+    const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { auth: { role: 'ADMIN' } } })
+    getSyncStatus.mockResolvedValue({ state: 'IDLE', lastSyncAt: null, itemsSynced: 0, error: null })
+    getPlexLibraries.mockResolvedValue([])
+    putSettings.mockResolvedValue(undefined)
+    fsList.mockResolvedValue({ path: '/', parent: null, entries: [] })
+    getQualityProfiles.mockResolvedValue([])
+    getSubtitleScanStatus.mockResolvedValue({ running: false, lastRunAt: null, scanned: 0, failed: 0, remainingUnknown: 0 })
+    runSubtitleScan.mockResolvedValue(undefined)
+    const w = mount(SettingsView, { global: { plugins: [pinia] } })
+    await flushPromises()
+    // Select Disabled option
+    const select = w.find('select[name="subtitleScanCron"]')
+    await select.setValue('')
+    await w.find('[data-testid="subtitle-save-btn"]').trigger('click')
+    await flushPromises()
+    const payload = putSettings.mock.calls[0][0]
+    expect(payload).toHaveProperty('subtitles.scan.cron', '')
   })
 })

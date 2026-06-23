@@ -123,6 +123,38 @@
     </section>
 
     <section class="card-section">
+      <h3>Subtitles</h3>
+      <div class="field">
+        <label>Subtitle scan schedule</label>
+        <select name="subtitleScanCron" v-model="form.subtitleScanCron" class="select-field">
+          <option v-for="o in SUBTITLE_SCAN_OPTIONS" :key="o.cron" :value="o.cron">{{ o.label }}</option>
+        </select>
+      </div>
+      <div v-if="subtitleStatus" class="subtitle-status">
+        <span v-if="subtitleStatus.running" class="state running">RUNNING</span>
+        <span v-else class="state idle">IDLE</span>
+        <span v-if="subtitleStatus.lastRunAt" class="last-sync">
+          Last run: {{ new Date(subtitleStatus.lastRunAt).toLocaleString() }}
+        </span>
+        <span class="subtitle-counts">
+          Scanned: {{ subtitleStatus.scanned }} · Failed: {{ subtitleStatus.failed }} · Remaining: {{ subtitleStatus.remainingUnknown }}
+        </span>
+      </div>
+      <p v-if="subtitleScanError" class="error-inline">{{ subtitleScanError }}</p>
+      <div class="sync-actions">
+        <button class="btn-save" data-testid="subtitle-save-btn" @click="saveSubtitles" :disabled="saving">
+          {{ saving ? 'Saving…' : 'Save' }}
+        </button>
+        <button class="btn-sync" data-testid="subtitle-scan-now-btn" @click="scanSubtitles(false)" :disabled="subtitleScanRunning">
+          {{ subtitleScanRunning ? 'Scanning…' : '↻ Scan now' }}
+        </button>
+        <button class="btn-sync" data-testid="subtitle-rescan-all-btn" @click="scanSubtitles(true)" :disabled="subtitleScanRunning">
+          Rescan all
+        </button>
+      </div>
+    </section>
+
+    <section class="card-section">
       <h3>Transcoding</h3>
 
       <hr class="section-divider" />
@@ -203,7 +235,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries,
          createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile,
-         relocateOutput } from '@/api/admin.js'
+         relocateOutput, runSubtitleScan, getSubtitleScanStatus } from '@/api/admin.js'
 import { getQualityProfiles } from '@/api/download.js'
 import FolderPicker from '@/components/FolderPicker.vue'
 
@@ -213,6 +245,17 @@ const SYNC_OPTIONS = [
   { label: 'Every 12 hours', cron: '0 0 */12 * * *' },
   { label: 'Every day',      cron: '0 0 0 * * *'    },
 ]
+
+const SUBTITLE_SCAN_OPTIONS = [
+  { label: 'Nightly 04:00',  cron: '0 0 4 * * *'   },
+  { label: 'Every 6 hours',  cron: '0 0 */6 * * *'  },
+  { label: 'Disabled',       cron: ''               },
+]
+
+function matchSubtitleCron(value) {
+  const match = SUBTITLE_SCAN_OPTIONS.find(o => o.cron === value)
+  return match ? match.cron : SUBTITLE_SCAN_OPTIONS[0].cron
+}
 
 function matchCron(value, options) {
   const match = options.find(o => o.cron === value)
@@ -226,7 +269,18 @@ const syncing    = ref(false)
 const syncStatus = ref(null)
 let saveOkTimer = null
 let destroyed = false
-onUnmounted(() => { clearTimeout(saveOkTimer); destroyed = true })
+
+// Subtitles scan state
+const subtitleStatus      = ref(null)
+const subtitleScanError   = ref(null)
+const subtitleScanRunning = ref(false)
+let subtitlePollTimer = null
+
+onUnmounted(() => {
+  clearTimeout(saveOkTimer)
+  clearInterval(subtitlePollTimer)
+  destroyed = true
+})
 
 const progressStyle = computed(() => {
   const s = syncStatus.value
@@ -311,10 +365,11 @@ async function removeProfile(id) {
 }
 
 const form = reactive({
-  plexUrl:    '',
-  syncCron:   '',
-  moviesDir:  '',
-  tvshowsDir: ''
+  plexUrl:           '',
+  syncCron:          '',
+  moviesDir:         '',
+  tvshowsDir:        '',
+  subtitleScanCron:  ''
 })
 
 const outputDirError = ref(null)
@@ -332,7 +387,7 @@ const pickerInitialPath = ref(null)
 
 onMounted(async () => {
   try {
-    const [s, ss] = await Promise.all([getSettings(), getSyncStatus()])
+    const [s, ss, subtitleSt] = await Promise.all([getSettings(), getSyncStatus(), getSubtitleScanStatus()])
     form.plexUrl      = s['plex.server.url']  ?? ''
     form.syncCron     = matchCron(s['plex.sync.cron'],    SYNC_OPTIONS)
     const storedLibs = s['plex.sync.libraries'] ?? ''
@@ -341,9 +396,13 @@ onMounted(async () => {
     form.tvshowsDir = s['output.tvshows.dir'] ?? '/plex-conversion/libraries/tvshows'
     originalMoviesDir.value  = form.moviesDir
     originalTvshowsDir.value = form.tvshowsDir
+    form.subtitleScanCron = matchSubtitleCron(s['subtitles.scan.cron'] ?? '')
     syncStatus.value = ss
+    subtitleStatus.value = subtitleSt
     // Resume progress bar if sync was already running when page loaded
     if (ss.state === 'RUNNING') resumePolling()
+    // Resume subtitle polling if already running
+    if (subtitleSt.running) startSubtitlePolling()
     // Auto-load library checkboxes if URL + selections already saved
     if (form.plexUrl && selectedLibraryKeys.value.length > 0) loadLibraries()
   } catch (e) {
@@ -407,6 +466,64 @@ async function sync() {
     await resumePolling()
   } catch (e) {
     if (!destroyed) syncing.value = false
+  }
+}
+
+async function saveSubtitles() {
+  saving.value = true
+  saveOk.value = false
+  const payload = {
+    'subtitles.scan.cron': form.subtitleScanCron
+  }
+  try {
+    await putSettings(payload)
+    saveOk.value = true
+    clearTimeout(saveOkTimer)
+    saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
+  } finally {
+    saving.value = false
+  }
+}
+
+function startSubtitlePolling() {
+  clearInterval(subtitlePollTimer)
+  subtitlePollTimer = setInterval(async () => {
+    if (destroyed) { clearInterval(subtitlePollTimer); return }
+    try {
+      const st = await getSubtitleScanStatus()
+      if (destroyed) return
+      subtitleStatus.value = st
+      if (!st.running) {
+        clearInterval(subtitlePollTimer)
+        subtitlePollTimer = null
+        subtitleScanRunning.value = false
+      }
+    } catch (e) {
+      clearInterval(subtitlePollTimer)
+      subtitlePollTimer = null
+      subtitleScanRunning.value = false
+    }
+  }, 2000)
+}
+
+async function scanSubtitles(force) {
+  subtitleScanError.value = null
+  subtitleScanRunning.value = true
+  try {
+    await runSubtitleScan(force)
+    // Refresh status and start polling
+    subtitleStatus.value = await getSubtitleScanStatus()
+    if (subtitleStatus.value.running) startSubtitlePolling()
+    else subtitleScanRunning.value = false
+  } catch (e) {
+    if (e?.response?.status === 409) {
+      // Already running — just start polling
+      subtitleStatus.value = await getSubtitleScanStatus()
+      startSubtitlePolling()
+    } else {
+      subtitleScanError.value = e?.response?.data?.message ?? 'Scan failed.'
+      subtitleScanRunning.value = false
+    }
   }
 }
 
@@ -621,4 +738,6 @@ input.readonly { opacity: 0.6; cursor: default; }
 .relocate-msg code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-size: .85rem; }
 .relocate-actions  { display: flex; gap: 10px; flex-wrap: wrap; }
 .relocate-result  { font-size: .85rem; color: var(--green); margin-top: 8px; }
+.subtitle-status  { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.subtitle-counts  { font-size: .85rem; color: var(--text-muted); }
 </style>
