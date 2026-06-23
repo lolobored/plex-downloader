@@ -32,4 +32,10 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
     List<Episode> findFilteredBySubtitles(@Param("none") boolean none,
                                           @Param("has") String has,
                                           @Param("missing") String missing);
+
+    @Query("SELECT DISTINCT e.season.show.id FROM Episode e WHERE e.season.show.id IN :showIds AND e.subtitleLangs = ','")
+    Set<Long> findShowIdsWithMissingSubtitles(@Param("showIds") Collection<Long> showIds);
+
+    @Query("SELECT DISTINCT e.season.id FROM Episode e WHERE e.season.id IN :seasonIds AND e.subtitleLangs = ','")
+    Set<Long> findSeasonIdsWithMissingSubtitles(@Param("seasonIds") Collection<Long> seasonIds);
 }

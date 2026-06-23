@@ -78,10 +78,13 @@ public class LibraryController {
         Pageable pageable = PageRequest.of(page, size, Sort.by("title"));
         var shows = showRepo.search(search != null ? search : "", year, pageable);
         User user = currentUser();
-        if (user == null || shows.isEmpty()) return shows.map(TvShowResponse::from);
+        if (shows.isEmpty()) return shows.map(TvShowResponse::from);
         List<Long> ids = shows.getContent().stream().map(s -> s.getId()).toList();
-        Set<Long> watched = episodeWatchedRepo.findFullyWatchedShowIds(user.getId(), ids);
-        return shows.map(s -> TvShowResponse.from(s, watched.contains(s.getId())));
+        Set<Long> watched = user != null
+                ? episodeWatchedRepo.findFullyWatchedShowIds(user.getId(), ids)
+                : Set.of();
+        Set<Long> missingSubIds = episodeRepo.findShowIdsWithMissingSubtitles(ids);
+        return shows.map(s -> TvShowResponse.from(s, watched.contains(s.getId()), missingSubIds.contains(s.getId())));
     }
 
     @GetMapping("/api/tv/{showId}")
@@ -91,7 +94,8 @@ public class LibraryController {
             .map(s -> {
                 boolean watched = user != null
                     && !episodeWatchedRepo.findFullyWatchedShowIds(user.getId(), List.of(s.getId())).isEmpty();
-                return ResponseEntity.ok(TvShowResponse.from(s, watched));
+                boolean missingSubtitles = !episodeRepo.findShowIdsWithMissingSubtitles(List.of(s.getId())).isEmpty();
+                return ResponseEntity.ok(TvShowResponse.from(s, watched, missingSubtitles));
             })
             .orElse(ResponseEntity.notFound().build());
     }
@@ -102,10 +106,13 @@ public class LibraryController {
     public List<SeasonResponse> getSeasons(@PathVariable Long showId) {
         var seasons = seasonRepo.findByShowIdOrderBySeasonNumber(showId);
         User user = currentUser();
-        if (user == null || seasons.isEmpty()) return seasons.stream().map(SeasonResponse::from).toList();
+        if (seasons.isEmpty()) return seasons.stream().map(SeasonResponse::from).toList();
         List<Long> ids = seasons.stream().map(s -> s.getId()).toList();
-        Set<Long> watched = episodeWatchedRepo.findFullyWatchedSeasonIds(user.getId(), ids);
-        return seasons.stream().map(s -> SeasonResponse.from(s, watched.contains(s.getId()))).toList();
+        Set<Long> watched = user != null
+                ? episodeWatchedRepo.findFullyWatchedSeasonIds(user.getId(), ids)
+                : Set.of();
+        Set<Long> missingSubIds = episodeRepo.findSeasonIdsWithMissingSubtitles(ids);
+        return seasons.stream().map(s -> SeasonResponse.from(s, watched.contains(s.getId()), missingSubIds.contains(s.getId()))).toList();
     }
 
     @GetMapping("/api/tv/{showId}/seasons/{seasonId}")
@@ -116,7 +123,8 @@ public class LibraryController {
             .map(s -> {
                 boolean watched = user != null
                     && !episodeWatchedRepo.findFullyWatchedSeasonIds(user.getId(), List.of(s.getId())).isEmpty();
-                return ResponseEntity.ok(SeasonResponse.from(s, watched));
+                boolean missingSubtitles = !episodeRepo.findSeasonIdsWithMissingSubtitles(List.of(s.getId())).isEmpty();
+                return ResponseEntity.ok(SeasonResponse.from(s, watched, missingSubtitles));
             })
             .orElse(ResponseEntity.notFound().build());
     }
