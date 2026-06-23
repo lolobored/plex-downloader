@@ -10,6 +10,7 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
     Optional<Episode> findByPlexId(String plexId);
     List<Episode> findBySeasonIdOrderByEpisodeNumber(Long seasonId);
     List<Episode> findBySubtitlesScannedAtIsNull();
+    List<Episode> findBySubtitlesScannedAtIsNullAndFilePathIsNotNull();
 
     @Query("SELECT e FROM Episode e JOIN FETCH e.season s JOIN FETCH s.show WHERE e.id IN :ids")
     List<Episode> findWithSeasonAndShowByIdIn(@Param("ids") Collection<Long> ids);

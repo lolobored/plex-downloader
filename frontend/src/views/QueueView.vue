@@ -54,7 +54,7 @@
                 :class="{ active: subFilterNone }"
                 @click="subFilterNone = !subFilterNone">No subtitles</button>
         <select v-if="subFilterNone"
-                data-testid="sub-filter-target"
+                data-testid="sub-filter-target-none"
                 class="sub-filter-target"
                 v-model="subFilterTarget">
           <option value="source">source</option>
@@ -72,7 +72,7 @@
             <option value="has">has lang</option>
             <option value="missing">missing lang</option>
           </select>
-          <select data-testid="sub-filter-target"
+          <select data-testid="sub-filter-target-lang"
                   class="sub-filter-target"
                   v-model="subFilterTarget">
             <option value="source">source</option>

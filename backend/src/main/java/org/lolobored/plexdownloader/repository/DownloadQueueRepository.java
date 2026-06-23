@@ -40,6 +40,7 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
     List<DownloadQueueItem> findByStatus(DownloadQueueItem.Status status);
 
     List<DownloadQueueItem> findByStatusAndOutputSubtitlesScannedAtIsNull(DownloadQueueItem.Status status);
+    List<DownloadQueueItem> findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(DownloadQueueItem.Status status);
 
     List<DownloadQueueItem> findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status status);
 

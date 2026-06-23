@@ -98,7 +98,13 @@ async function load() {
   }
 }
 
-watch([subNone, subLang, subLangMode], () => { loadEpisodes() })
+watch([subNone, subLang, subLangMode], async () => {
+  try {
+    await loadEpisodes()
+  } catch (e) {
+    console.error('loadEpisodes failed', e)
+  }
+})
 
 load()
 </script>

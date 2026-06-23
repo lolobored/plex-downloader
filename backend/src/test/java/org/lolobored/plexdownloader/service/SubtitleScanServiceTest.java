@@ -28,8 +28,11 @@ class SubtitleScanServiceTest {
     @Test void scan_unknowns_setsSourceLangsAndScannedAt() {
         Movie m = new Movie(); m.setId(1L); m.setFilePath("/nas/m.mkv");
         when(movieRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of(m));
+        when(movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of(m));
         when(episodeRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of());
+        when(episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of());
         when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNull(DownloadQueueItem.Status.DONE)).thenReturn(List.of());
+        when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(DownloadQueueItem.Status.DONE)).thenReturn(List.of());
         when(subtitleProbe.probe("/nas/m.mkv")).thenReturn(new SubtitleProbe.ProbeResult(true, List.of("eng")));
 
         service.scan(false);
@@ -41,8 +44,11 @@ class SubtitleScanServiceTest {
     @Test void scan_failedProbe_leavesUnscanned_countsFailed() {
         Movie m = new Movie(); m.setId(1L); m.setFilePath("/nas/bad.mkv");
         when(movieRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of(m));
+        when(movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of(m));
         when(episodeRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of());
+        when(episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of());
         when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNull(any())).thenReturn(List.of());
+        when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(any())).thenReturn(List.of());
         when(subtitleProbe.probe("/nas/bad.mkv")).thenReturn(new SubtitleProbe.ProbeResult(false, List.of()));
 
         service.scan(false);

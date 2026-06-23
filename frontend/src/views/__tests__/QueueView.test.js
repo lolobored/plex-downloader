@@ -686,7 +686,7 @@ describe('QueueView', () => {
     // enable "no subtitles" filter targeting source
     await wrapper.find('[data-testid="sub-filter-none"]').trigger('click')
     // target should default to 'source' or select it
-    const target = wrapper.find('[data-testid="sub-filter-target"]')
+    const target = wrapper.find('[data-testid="sub-filter-target-none"]')
     if (target.exists()) await target.setValue('source')
     await flushPromises()
     expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
@@ -701,7 +701,7 @@ describe('QueueView', () => {
     ]
     const { wrapper } = factory(items)
     await wrapper.find('[data-testid="sub-filter-none"]').trigger('click')
-    await wrapper.find('[data-testid="sub-filter-target"]').setValue('output')
+    await wrapper.find('[data-testid="sub-filter-target-none"]').setValue('output')
     await flushPromises()
     expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
     expect(wrapper.text()).toContain('No Output Subs')

@@ -31,9 +31,9 @@ public class SubtitleScanService {
     public boolean isRunning() { return running.get(); }
 
     public SubtitleScanStatus status() {
-        int remaining = movieRepo.findBySubtitlesScannedAtIsNull().size()
-                      + episodeRepo.findBySubtitlesScannedAtIsNull().size()
-                      + queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNull(DownloadQueueItem.Status.DONE).size();
+        int remaining = movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull().size()
+                      + episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull().size()
+                      + queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(DownloadQueueItem.Status.DONE).size();
         return new SubtitleScanStatus(running.get(), lastRunAt, scanned, failed, remaining);
     }
 
