@@ -1,6 +1,6 @@
 {
   "name": "plex-downloader-frontend",
-  "version": "2026.2.22",
+  "version": "2026.2.23",
   "private": true,
   "scripts": {
     "dev": "vite",
