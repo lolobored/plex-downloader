@@ -25,13 +25,18 @@ public record DownloadQueueItemResponse(
     Double compressionRatio,
     Long sourceSizeBytes,
     Long outputSizeBytes,
-    Instant transcodeStartedAt
+    Instant transcodeStartedAt,
+    String sourceSubtitleLangs,
+    Boolean sourceSubtitlesScanned,
+    String outputSubtitleLangs,
+    Boolean outputSubtitlesScanned
 ) {
     public static DownloadQueueItemResponse from(
             DownloadQueueItem item,
             Long showId, Long seasonId,
             Long playlistId, String playlistTitle,
-            String showTitle, Integer seasonNumber) {
+            String showTitle, Integer seasonNumber,
+            String sourceSubtitleLangs, Boolean sourceSubtitlesScanned) {
         return new DownloadQueueItemResponse(
             item.getId(), item.getMediaType(), item.getMediaId(),
             item.getStatus(), item.getProgressPercent(), item.getTranscodeError(),
@@ -44,7 +49,11 @@ public record DownloadQueueItemResponse(
             item.getCompressionRatio(),
             item.getSourceSizeBytes(),
             item.getOutputSizeBytes(),
-            item.getTranscodeStartedAt()
+            item.getTranscodeStartedAt(),
+            sourceSubtitleLangs,
+            sourceSubtitlesScanned,
+            item.getOutputSubtitleLangs(),
+            item.getOutputSubtitlesScannedAt() != null
         );
     }
 }

@@ -102,4 +102,46 @@ class LibraryControllerTest {
         mockMvc.perform(get("/api/movies/99"))
             .andExpect(status().isNotFound());
     }
+
+    @Test
+    void getMovieById_exposesSubtitleLangsAndScanned() throws Exception {
+        Movie movie = new Movie();
+        movie.setId(5L);
+        movie.setPlexId("plex-5");
+        movie.setTitle("Dunkirk");
+        movie.setActors(new ArrayList<>());
+        movie.setGenres(new ArrayList<>());
+        movie.setDirectors(new ArrayList<>());
+        movie.setSubtitleLangs(",eng,fra,");
+        movie.setSubtitlesScannedAt(java.time.Instant.parse("2026-04-01T00:00:00Z"));
+
+        when(movieRepo.findById(5L)).thenReturn(Optional.of(movie));
+        when(movieWatchedRepo.findByUserIdAndMovieId(anyLong(), eq(5L))).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/movies/5"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.subtitleLangs").value(",eng,fra,"))
+            .andExpect(jsonPath("$.subtitlesScanned").value(true));
+    }
+
+    @Test
+    void getMovies_subtitleLangsNullAndScannedFalseWhenUnscanned() throws Exception {
+        Movie movie = new Movie();
+        movie.setId(6L);
+        movie.setPlexId("plex-6");
+        movie.setTitle("Tenet");
+        movie.setActors(new ArrayList<>());
+        movie.setGenres(new ArrayList<>());
+        movie.setDirectors(new ArrayList<>());
+        movie.setSubtitleLangs(null);
+        movie.setSubtitlesScannedAt(null);
+
+        Page<Movie> page = new org.springframework.data.domain.PageImpl<>(List.of(movie));
+        when(movieRepo.search(eq(""), isNull(), any(Pageable.class))).thenReturn(page);
+
+        mockMvc.perform(get("/api/movies"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].subtitleLangs").doesNotExist())
+            .andExpect(jsonPath("$.content[0].subtitlesScanned").value(false));
+    }
 }

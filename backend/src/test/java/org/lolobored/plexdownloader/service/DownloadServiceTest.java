@@ -19,6 +19,7 @@ import org.lolobored.plexdownloader.dto.DownloadQueueItemResponse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -849,5 +850,95 @@ class DownloadServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).id()).isEqualTo(2L);
+    }
+
+    @Test
+    void getQueue_episodeItem_exposesSourceSubtitleLangsAndScannedFromLinkedEpisode() {
+        Instant scannedAt = Instant.parse("2026-01-15T10:00:00Z");
+
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(10L);
+        item.setMediaType(DownloadQueueItem.MediaType.EPISODE);
+        item.setMediaId(99L);
+        item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setOutputSubtitleLangs(",eng,fra,");
+        item.setOutputSubtitlesScannedAt(Instant.parse("2026-02-01T00:00:00Z"));
+
+        TvShow show = new TvShow(); show.setId(10L); show.setTitle("Chernobyl");
+        Season season = new Season(); season.setId(20L); season.setSeasonNumber(1); season.setShow(show);
+        Episode ep = new Episode(); ep.setId(99L); ep.setSeason(season);
+        ep.setSubtitleLangs(",eng,");
+        ep.setSubtitlesScannedAt(scannedAt);
+
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(99L))).thenReturn(List.of(ep));
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
+
+        List<DownloadQueueItemResponse> result = service.getQueue(1L);
+
+        assertThat(result).hasSize(1);
+        DownloadQueueItemResponse resp = result.get(0);
+        assertThat(resp.sourceSubtitleLangs()).isEqualTo(",eng,");
+        assertThat(resp.sourceSubtitlesScanned()).isTrue();
+        assertThat(resp.outputSubtitleLangs()).isEqualTo(",eng,fra,");
+        assertThat(resp.outputSubtitlesScanned()).isTrue();
+    }
+
+    @Test
+    void getQueue_episodeItem_sourceSubtitlesScannedFalseWhenScannedAtNull() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(11L);
+        item.setMediaType(DownloadQueueItem.MediaType.EPISODE);
+        item.setMediaId(88L);
+        item.setStatus(DownloadQueueItem.Status.QUEUED);
+
+        TvShow show = new TvShow(); show.setId(5L); show.setTitle("Oz");
+        Season season = new Season(); season.setId(15L); season.setSeasonNumber(2); season.setShow(show);
+        Episode ep = new Episode(); ep.setId(88L); ep.setSeason(season);
+        ep.setSubtitleLangs(null);
+        ep.setSubtitlesScannedAt(null);
+
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(episodeRepo.findWithSeasonAndShowByIdIn(Set.of(88L))).thenReturn(List.of(ep));
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
+
+        List<DownloadQueueItemResponse> result = service.getQueue(1L);
+
+        assertThat(result).hasSize(1);
+        DownloadQueueItemResponse resp = result.get(0);
+        assertThat(resp.sourceSubtitleLangs()).isNull();
+        assertThat(resp.sourceSubtitlesScanned()).isFalse();
+        assertThat(resp.outputSubtitleLangs()).isNull();
+        assertThat(resp.outputSubtitlesScanned()).isFalse();
+    }
+
+    @Test
+    void getQueue_movieItem_exposesSourceSubtitleLangsFromLinkedMovie() {
+        Instant scannedAt = Instant.parse("2026-03-10T08:00:00Z");
+
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(20L);
+        item.setMediaType(DownloadQueueItem.MediaType.MOVIE);
+        item.setMediaId(7L);
+        item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setOutputSubtitleLangs(null);
+        item.setOutputSubtitlesScannedAt(null);
+
+        Movie movie = new Movie(); movie.setId(7L);
+        movie.setSubtitleLangs(",fra,");
+        movie.setSubtitlesScannedAt(scannedAt);
+
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L)).thenReturn(List.of(item));
+        when(movieRepo.findAllById(Set.of(7L))).thenReturn(List.of(movie));
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
+
+        List<DownloadQueueItemResponse> result = service.getQueue(1L);
+
+        assertThat(result).hasSize(1);
+        DownloadQueueItemResponse resp = result.get(0);
+        assertThat(resp.sourceSubtitleLangs()).isEqualTo(",fra,");
+        assertThat(resp.sourceSubtitlesScanned()).isTrue();
+        assertThat(resp.outputSubtitleLangs()).isNull();
+        assertThat(resp.outputSubtitlesScanned()).isFalse();
     }
 }

@@ -185,8 +185,9 @@ public class DownloadService {
             .map(DownloadQueueItem::getMediaId)
             .collect(Collectors.toSet());
         Map<Long, EpisodeMeta> episodeMeta = new HashMap<>();
-        // Also collect episode subtitleLangs for source-side filtering
+        // Also collect episode subtitleLangs + scannedAt for source-side filtering and DTO
         Map<Long, String> episodeSubtitleLangs = new HashMap<>();
+        Map<Long, Boolean> episodeSubtitlesScanned = new HashMap<>();
         if (!episodeIds.isEmpty()) {
             episodeRepo.findWithSeasonAndShowByIdIn(episodeIds).forEach(ep -> {
                 episodeMeta.put(ep.getId(), new EpisodeMeta(
@@ -196,18 +197,22 @@ public class DownloadService {
                     ep.getSeason().getSeasonNumber()
                 ));
                 episodeSubtitleLangs.put(ep.getId(), ep.getSubtitleLangs());
+                episodeSubtitlesScanned.put(ep.getId(), ep.getSubtitlesScannedAt() != null);
             });
         }
 
-        // Batch-fetch movie subtitleLangs for source-side filtering
+        // Batch-fetch movie subtitleLangs + scannedAt for source-side filtering and DTO
         Set<Long> movieIds = items.stream()
             .filter(i -> i.getMediaType() == DownloadQueueItem.MediaType.MOVIE)
             .map(DownloadQueueItem::getMediaId)
             .collect(Collectors.toSet());
         Map<Long, String> movieSubtitleLangs = new HashMap<>();
+        Map<Long, Boolean> movieSubtitlesScanned = new HashMap<>();
         if (!movieIds.isEmpty()) {
-            movieRepo.findAllById(movieIds)
-                .forEach(m -> movieSubtitleLangs.put(m.getId(), m.getSubtitleLangs()));
+            movieRepo.findAllById(movieIds).forEach(m -> {
+                movieSubtitleLangs.put(m.getId(), m.getSubtitleLangs());
+                movieSubtitlesScanned.put(m.getId(), m.getSubtitlesScannedAt() != null);
+            });
         }
 
         // Batch-fetch playlist titles
@@ -254,15 +259,21 @@ public class DownloadService {
                 String playlistTitle = playlistId != null ? playlistTitles.get(playlistId) : null;
                 if (item.getMediaType() == DownloadQueueItem.MediaType.EPISODE) {
                     EpisodeMeta em = episodeMeta.get(item.getMediaId());
+                    String srcLangs   = episodeSubtitleLangs.get(item.getMediaId());
+                    Boolean srcScanned = episodeSubtitlesScanned.getOrDefault(item.getMediaId(), false);
                     return DownloadQueueItemResponse.from(item,
                         em != null ? em.showId()       : null,
                         em != null ? em.seasonId()     : null,
                         playlistId, playlistTitle,
                         em != null ? em.showTitle()    : null,
-                        em != null ? em.seasonNumber() : null
+                        em != null ? em.seasonNumber() : null,
+                        srcLangs, srcScanned
                     );
                 }
-                return DownloadQueueItemResponse.from(item, null, null, playlistId, playlistTitle, null, null);
+                String srcLangs   = movieSubtitleLangs.get(item.getMediaId());
+                Boolean srcScanned = movieSubtitlesScanned.getOrDefault(item.getMediaId(), false);
+                return DownloadQueueItemResponse.from(item, null, null, playlistId, playlistTitle, null, null,
+                    srcLangs, srcScanned);
             }).toList();
     }
 
