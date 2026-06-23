@@ -17,17 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-// Helper to build queue items
-class QueueItemHelper {
-    static DownloadQueueItem queued(Long id, int pos) {
-        DownloadQueueItem i = new DownloadQueueItem();
-        i.setId(id);
-        i.setQueuePosition(pos);
-        i.setStatus(DownloadQueueItem.Status.QUEUED);
-        return i;
-    }
-}
-
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TranscodeQueueRunnerTest {
@@ -77,9 +66,7 @@ class TranscodeQueueRunnerTest {
         DownloadQueueItem queued = new DownloadQueueItem();
         queued.setId(2L); queued.setStatus(DownloadQueueItem.Status.QUEUED);
 
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)).thenReturn(List.of());
         when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of(stuck));
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of());
         when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
             .thenReturn(List.of(stuck, queued));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -93,95 +80,18 @@ class TranscodeQueueRunnerTest {
     }
 
     @Test
-    void recover_resetsCopyingToQueuedAndResubmits() {
-        DownloadQueueItem copying = new DownloadQueueItem();
-        copying.setId(10L); copying.setStatus(DownloadQueueItem.Status.COPYING);
-        copying.setProgressPercent(100);
+    void recover_noStuckItems_resubmitsOnlyQueued() {
+        DownloadQueueItem queued = new DownloadQueueItem();
+        queued.setId(10L); queued.setStatus(DownloadQueueItem.Status.QUEUED);
 
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)).thenReturn(List.of());
         when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of());
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of(copying));
         when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
-            .thenReturn(List.of(copying));
+            .thenReturn(List.of(queued));
         when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         TranscodeQueueRunner r = runner();
         r.recover();
 
-        assertThat(copying.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
-        assertThat(copying.getProgressPercent()).isNull();
         verify(transcodeService, timeout(2000)).transcode(10L);
-    }
-
-    @Test
-    void recover_resetsFetchingToQueuedAndResubmits() {
-        DownloadQueueItem fetching = new DownloadQueueItem();
-        fetching.setId(20L); fetching.setStatus(DownloadQueueItem.Status.FETCHING);
-        fetching.setProgressPercent(0);
-
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)).thenReturn(List.of(fetching));
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)).thenReturn(List.of());
-        when(queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)).thenReturn(List.of());
-        when(queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
-            .thenReturn(List.of(fetching));
-        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        TranscodeQueueRunner r = runner();
-        r.recover();
-
-        assertThat(fetching.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
-        assertThat(fetching.getProgressPercent()).isNull();
-        verify(transcodeService, timeout(2000)).transcode(20L);
-    }
-
-    // ── onNearDone tests ──────────────────────────────────────────────────────
-
-    @Test
-    void onNearDone_prefetchesLowestQueuedCandidateNotNearDoneItem() {
-        // Near-done item is 10; lowest queued that is not 10 is item 20 (pos=1)
-        DownloadQueueItem candidate = QueueItemHelper.queued(20L, 1);
-        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
-            .thenReturn(Optional.of(candidate));
-
-        TranscodeQueueRunner r = runner();
-        r.onNearDone(new TranscodeNearDoneEvent(10L));
-
-        verify(transcodeService).prefetchSource(20L);
-    }
-
-    @Test
-    void onNearDone_nearDoneItemIsNextQueued_skips() {
-        // The lowest queued item IS the near-done item → should not prefetch
-        DownloadQueueItem sameItem = QueueItemHelper.queued(10L, 1);
-        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
-            .thenReturn(Optional.of(sameItem));
-
-        TranscodeQueueRunner r = runner();
-        r.onNearDone(new TranscodeNearDoneEvent(10L));
-
-        verify(transcodeService, never()).prefetchSource(any());
-    }
-
-    @Test
-    void onNearDone_noQueuedItem_doesNothing() {
-        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
-            .thenReturn(Optional.empty());
-
-        TranscodeQueueRunner r = runner();
-        r.onNearDone(new TranscodeNearDoneEvent(10L));
-
-        verify(transcodeService, never()).prefetchSource(any());
-    }
-
-    @Test
-    void onNearDone_exceptionInRepo_doesNotPropagateAndDoesNotCallPrefetch() {
-        when(queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED))
-            .thenThrow(new RuntimeException("DB down"));
-
-        TranscodeQueueRunner r = runner();
-        // Must not throw
-        r.onNearDone(new TranscodeNearDoneEvent(10L));
-
-        verify(transcodeService, never()).prefetchSource(any());
     }
 }

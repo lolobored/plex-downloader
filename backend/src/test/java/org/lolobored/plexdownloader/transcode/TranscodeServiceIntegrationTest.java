@@ -81,20 +81,17 @@ class TranscodeServiceIntegrationTest {
             Consumer<String> out = inv.getArgument(1);
             out.accept("out_time_us=60000000");
             out.accept("progress=end");
-            // Simulate ffmpeg writing the output to the temp path (first element of cmd is "ffmpeg",
-            // last element is the output file path)
+            // ffmpeg writes the output directly to the dest path (last arg of cmd)
             java.util.List<String> cmd = inv.getArgument(0);
-            java.nio.file.Path tempOut = java.nio.file.Path.of(cmd.get(cmd.size() - 1));
-            java.nio.file.Files.createDirectories(tempOut.getParent());
-            java.nio.file.Files.write(tempOut, new byte[]{1, 2, 3});
+            java.nio.file.Path outFile = java.nio.file.Path.of(cmd.get(cmd.size() - 1));
+            java.nio.file.Files.createDirectories(outFile.getParent());
+            java.nio.file.Files.write(outFile, new byte[]{1, 2, 3});
             return new RunningTranscode() {
                 public int waitForExit() { return 0; }
                 public void cancel() {}
             };
         });
 
-        // Run on a SEPARATE thread so no test-thread session can lazily initialise the
-        // detached qualityProfile proxy — this is what reproduces production.
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread worker = new Thread(() -> {
             try {

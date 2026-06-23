@@ -57,23 +57,6 @@ public class TranscodeQueueRunner {
         submit(e.itemId());
     }
 
-    @EventListener
-    public void onNearDone(TranscodeNearDoneEvent e) {
-        try {
-            Long nearDoneItemId = e.itemId();
-            // Find the lowest-position QUEUED candidate that is not the near-done item
-            // and is not currently active (not in the running/prefetching set)
-            queueRepo.findFirstByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED)
-                .filter(candidate -> !candidate.getId().equals(nearDoneItemId))
-                .ifPresent(candidate -> {
-                    log.info("Near-done trigger: prefetching source for next item={}", candidate.getId());
-                    transcodeService.prefetchSource(candidate.getId());
-                });
-        } catch (Exception ex) {
-            log.warn("onNearDone handler error (non-fatal): {}", ex.getMessage());
-        }
-    }
-
     public void submit(Long itemId) {
         pool.submit(() -> {
             try {
@@ -94,25 +77,11 @@ public class TranscodeQueueRunner {
 
     @EventListener(ApplicationReadyEvent.class)
     public void recover() {
-        // FETCHING items: temp dir is wiped on restart, source copy must redo from scratch
-        for (DownloadQueueItem fetching : queueRepo.findByStatus(DownloadQueueItem.Status.FETCHING)) {
-            fetching.setStatus(DownloadQueueItem.Status.QUEUED);
-            fetching.setProgressPercent(null);
-            queueRepo.save(fetching);
-            log.info("Recovered interrupted fetch (re-queuing): item={}", fetching.getId());
-        }
         for (DownloadQueueItem stuck : queueRepo.findByStatus(DownloadQueueItem.Status.TRANSCODING)) {
             stuck.setStatus(DownloadQueueItem.Status.QUEUED);
             stuck.setProgressPercent(null);
             queueRepo.save(stuck);
             log.info("Recovered interrupted transcode: item={}", stuck.getId());
-        }
-        // COPYING items also re-queue: temp dir is wiped on restart, move must re-transcode
-        for (DownloadQueueItem copying : queueRepo.findByStatus(DownloadQueueItem.Status.COPYING)) {
-            copying.setStatus(DownloadQueueItem.Status.QUEUED);
-            copying.setProgressPercent(null);
-            queueRepo.save(copying);
-            log.info("Recovered interrupted copy (re-queuing transcode): item={}", copying.getId());
         }
         for (DownloadQueueItem q : queueRepo.findByStatusOrderByQueuePositionAsc(DownloadQueueItem.Status.QUEUED)) {
             submit(q.getId());

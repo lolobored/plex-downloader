@@ -231,16 +231,12 @@ const QueueItemRow = defineComponent({
       const isRemoving = props.removing.has(item.id)
       const isRetrying = props.retrying.has(item.id)
       const isTranscoding = item.status === 'TRANSCODING'
-      const isFetching = item.status === 'FETCHING'
-      const isCopying = item.status === 'COPYING'
       const isError = item.status === 'ERROR'
-      const isInProgress = isTranscoding || isFetching || isCopying
+      const isInProgress = isTranscoding
 
       let statusLabel = 'queued'
       let statusClass = 'badge-queued'
       if (item.status === 'TRANSCODING') { statusLabel = `transcoding ${item.progressPercent ?? 0}%`; statusClass = 'badge-transcoding' }
-      else if (isFetching) { statusLabel = 'fetching…'; statusClass = 'badge-fetching' }
-      else if (isCopying) { statusLabel = 'copying…'; statusClass = 'badge-copying' }
       else if (isError) { statusLabel = 'error'; statusClass = 'badge-error' }
       else if (item.status === 'DONE') { statusLabel = 'done'; statusClass = 'badge-done' }
 
@@ -324,7 +320,7 @@ const QueueItemRow = defineComponent({
           class: 'btn-remove',
           'data-testid': `remove-btn-${item.id}`,
           disabled: isRemoving || isInProgress,
-          title: isInProgress ? 'Wait for the current operation to finish' : 'Remove',
+          title: isInProgress ? 'Wait for transcoding to finish' : 'Remove',
           onClick: (e) => { e.stopPropagation(); emit('remove', item.id) }
         }, isRemoving ? '…' : '✕'),
       ].filter(Boolean))
@@ -354,7 +350,7 @@ function matchesStatus(item) {
   if (statusFilter.value.size === 0) return true
   const a = statusFilter.value
   if (a.has('QUEUED')      && item.status === 'QUEUED')      return true
-  if (a.has('TRANSCODING') && (item.status === 'TRANSCODING' || item.status === 'FETCHING' || item.status === 'COPYING')) return true
+  if (a.has('TRANSCODING') && item.status === 'TRANSCODING') return true
   if (a.has('DONE')        && item.status === 'DONE')        return true
   if (a.has('ERROR')       && item.status === 'ERROR')       return true
   return false
@@ -447,7 +443,7 @@ const soloMovies = computed(() =>
 // ── Bucket helper ─────────────────────────────────────────────────────────────
 function buckets(items) {
   return {
-    inProgress: items.filter(i => i.status === 'FETCHING' || i.status === 'TRANSCODING' || i.status === 'COPYING'),
+    inProgress: items.filter(i => i.status === 'TRANSCODING'),
     pending:    items.filter(i => i.status === 'QUEUED'),
     done:       items.filter(i => i.status === 'DONE' || i.status === 'ERROR'),
   }
@@ -602,8 +598,6 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
                 padding: 2px 8px; letter-spacing: .03em; text-transform: uppercase; }
 .badge-queued      { background: rgba(120,120,140,.18); color: var(--text-muted); border: 1px solid rgba(120,120,140,.3); }
 .badge-transcoding { background: rgba(52,152,219,.18); color: #5dade2; border: 1px solid rgba(52,152,219,.3); }
-.badge-fetching    { background: rgba(243,156,18,.18);  color: #f39c12;  border: 1px solid rgba(243,156,18,.3); }
-.badge-copying     { background: rgba(155,89,182,.18); color: #a569bd; border: 1px solid rgba(155,89,182,.3); }
 .badge-done        { background: rgba(39,174,96,.18);  color: #2ecc71;  border: 1px solid rgba(39,174,96,.3); }
 .badge-error       { background: rgba(231,76,60,.18);  color: #e74c3c;  border: 1px solid rgba(231,76,60,.3); }
 .compression { flex-shrink: 0; font-size: .72rem; font-weight: 600; color: #2ecc71;

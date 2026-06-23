@@ -65,5 +65,5 @@ public class DownloadQueueItem {
     private Long outputSizeBytes;
 
     public enum MediaType { MOVIE, EPISODE }
-    public enum Status { QUEUED, FETCHING, TRANSCODING, COPYING, DONE, ERROR }
+    public enum Status { QUEUED, TRANSCODING, DONE, ERROR }
 }

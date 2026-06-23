@@ -256,7 +256,6 @@ public class DownloadService {
         if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
             transcodeService.cancel(itemId);
         }
-        transcodeService.cancelPrefetch(itemId);
         doCancelItem(item);
     }
 
@@ -268,7 +267,6 @@ public class DownloadService {
             if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
                 transcodeService.cancel(item.getId());
             }
-            transcodeService.cancelPrefetch(item.getId());
             doCancelItem(item);
             cancelled++;
         }
@@ -283,7 +281,6 @@ public class DownloadService {
             if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
                 transcodeService.cancel(item.getId());
             }
-            transcodeService.cancelPrefetch(item.getId());
             doCancelItem(item);
             cancelled++;
         }

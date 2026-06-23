@@ -3,28 +3,17 @@ package org.lolobored.plexdownloader.transcode;
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.Comparator;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
-import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -38,235 +27,41 @@ public class TranscodeService {
     private final FfmpegCommandBuilder commandBuilder;
     private final ProgressParser progressParser;
     private final ProcessRunner processRunner;
-    private final TranscodeConfig transcodeConfig;
-    private final ApplicationEventPublisher eventPublisher;
 
     private final ConcurrentHashMap<Long, RunningTranscode> running = new ConcurrentHashMap<>();
-
-    /** Tracks in-flight prefetch futures keyed by itemId. At most one entry at a time. */
-    private final ConcurrentHashMap<Long, Future<?>> prefetches = new ConcurrentHashMap<>();
-
-    /**
-     * Per-task cancel flags keyed by itemId.
-     * Set by cancelPrefetch so the task can detect cancellation after Files.copy returns
-     * (Files.copy is not interruptible, so interrupt alone is insufficient).
-     */
-    private final ConcurrentHashMap<Long, AtomicBoolean> prefetchCancelFlags = new ConcurrentHashMap<>();
-
-    /**
-     * Injectable copy strategy seam — defaults to Files.copy with REPLACE_EXISTING.
-     * Tests can substitute a blocking implementation to race cancel against a copy in progress.
-     */
-    @FunctionalInterface
-    interface CopyStrategy {
-        void copy(Path source, Path target) throws IOException;
-    }
-
-    private CopyStrategy copyStrategy = (src, dst) ->
-        Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
-
-    /** Package-private: lets tests inject a blocking copy seam. */
-    void setCopyStrategy(CopyStrategy strategy) {
-        this.copyStrategy = strategy;
-    }
-
-    private final ExecutorService prefetchPool = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "prefetch-worker");
-        t.setDaemon(true);
-        return t;
-    });
 
     public TranscodeService(DownloadQueueRepository queueRepo,
                             MediaProbe mediaProbe,
                             FfmpegCommandBuilder commandBuilder,
                             ProgressParser progressParser,
-                            ProcessRunner processRunner,
-                            TranscodeConfig transcodeConfig,
-                            ApplicationEventPublisher eventPublisher) {
+                            ProcessRunner processRunner) {
         this.queueRepo = queueRepo;
         this.mediaProbe = mediaProbe;
         this.commandBuilder = commandBuilder;
         this.progressParser = progressParser;
         this.processRunner = processRunner;
-        this.transcodeConfig = transcodeConfig;
-        this.eventPublisher = eventPublisher;
     }
-
-    // ── Temp-path helpers ─────────────────────────────────────────────────────
-
-    Path tempItemDir(Long itemId) {
-        return Path.of(transcodeConfig.tempDir(), "plex-downloader", itemId.toString());
-    }
-
-    Path tempSrcFile(Long itemId, String sourceFilePath) {
-        String sourceFilename = Path.of(sourceFilePath).getFileName().toString();
-        return tempItemDir(itemId).resolve("src").resolve(sourceFilename);
-    }
-
-    // ── Prefetch API ──────────────────────────────────────────────────────────
-
-    /**
-     * Begins copying {@code item.sourceFilePath} → the item's temp src path asynchronously.
-     * One-ahead only: if a prefetch is already in flight, this is a no-op.
-     * Does NOT change the item's DB status (item stays QUEUED).
-     *
-     * Synchronized so the isEmpty check + put are atomic: two concurrent callers
-     * cannot both pass the guard and double-stage.
-     */
-    public synchronized void prefetchSource(Long itemId) {
-        if (!prefetches.isEmpty()) {
-            log.debug("Prefetch already in flight, skipping prefetch for item={}", itemId);
-            return;
-        }
-        DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
-        if (item == null || item.getStatus() != DownloadQueueItem.Status.QUEUED) {
-            log.debug("Prefetch skipped for item={}: missing or not QUEUED", itemId);
-            return;
-        }
-
-        String sourceFilePath = item.getSourceFilePath();
-        Path tempSrc = tempSrcFile(itemId, sourceFilePath);
-        Path partPath = tempSrc.resolveSibling(tempSrc.getFileName() + ".part");
-        Path tempSrcDir = tempSrc.getParent();
-
-        // Per-task cancel flag stored in shared map so cancelPrefetch can set it
-        // even though Files.copy is not interruptible by Thread.interrupt().
-        AtomicBoolean cancelled = new AtomicBoolean(false);
-        prefetchCancelFlags.put(itemId, cancelled);
-
-        Future<?> future = prefetchPool.submit(() -> {
-            boolean renamed = false;
-            try {
-                log.info("Prefetching source for item={} src={}", itemId, sourceFilePath);
-                Files.createDirectories(tempSrcDir);
-                // Copy to .part first so the final path only ever contains a complete file
-                copyStrategy.copy(Path.of(sourceFilePath), partPath);
-                // Only rename to final path if we were not cancelled
-                if (!cancelled.get() && !Thread.currentThread().isInterrupted()) {
-                    try {
-                        Files.move(partPath, tempSrc, StandardCopyOption.ATOMIC_MOVE);
-                    } catch (AtomicMoveNotSupportedException e) {
-                        Files.move(partPath, tempSrc, StandardCopyOption.REPLACE_EXISTING);
-                    }
-                    renamed = true;
-                    log.info("Prefetch complete: item={} bytes={}", itemId, Files.size(tempSrc));
-                }
-            } catch (Exception e) {
-                log.warn("Prefetch failed for item={}: {}", itemId, e.getMessage());
-            } finally {
-                // Task-owned cleanup: if we did NOT successfully rename (cancelled, failed,
-                // or interrupted), delete the whole temp dir and remove the map entry.
-                if (!renamed) {
-                    deleteTempDir(tempItemDir(itemId));
-                    prefetches.remove(itemId);
-                    log.debug("Prefetch task cleaned up temp dir for item={}", itemId);
-                }
-                prefetchCancelFlags.remove(itemId);
-            }
-        });
-        prefetches.put(itemId, future);
-    }
-
-    /**
-     * Cancels an in-flight prefetch and requests cleanup.
-     * Sets the per-task cancel flag BEFORE cancel(true) so the task skips the rename
-     * after Files.copy returns (Files.copy is not interruptible).
-     * The task's own finally block is the authoritative cleanup.
-     * A best-effort deleteTempDir is attempted here too for fast cleanup.
-     * No-op if no prefetch is registered for the item.
-     */
-    public void cancelPrefetch(Long itemId) {
-        Future<?> future = prefetches.remove(itemId);
-        if (future == null) return;
-        // Set the cancel flag first so the task skips the rename even if the copy
-        // has already finished by the time the interrupt is delivered.
-        AtomicBoolean flag = prefetchCancelFlags.get(itemId);
-        if (flag != null) flag.set(true);
-        future.cancel(true);
-        // Best-effort delete: races with the task's finally, but deleteTempDir is idempotent.
-        deleteTempDir(tempItemDir(itemId));
-        log.info("Prefetch cancelled for item={}", itemId);
-    }
-
-    /** Package-private for testing. */
-    int getPrefetchCount() { return prefetches.size(); }
-
-    // ── Main transcode ────────────────────────────────────────────────────────
 
     public void transcode(Long itemId) {
         DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
         if (item == null) { log.warn("Transcode skipped, item {} gone", itemId); return; }
 
-        // Compute temp paths: <tempDir>/plex-downloader/<itemId>/
-        //   src/<sourceFilename>  — local copy of NAS source
-        //   <outName>            — ffmpeg output (same as #61)
-        String outName = Path.of(item.getDestFilePath()).getFileName().toString();
-        Path tempItemDir = tempItemDir(itemId);
-        Path tempSrcDir  = tempItemDir.resolve("src");
-        Path tempSrcFile = tempSrcFile(itemId, item.getSourceFilePath());
-        Path tempFile    = tempItemDir.resolve(outName);
-
-        // ── FETCHING: copy source from NAS to local temp (or consume prefetch) ─
-        item.setStatus(DownloadQueueItem.Status.FETCHING);
+        item.setStatus(DownloadQueueItem.Status.TRANSCODING);
         item.setTranscodeStartedAt(Instant.now());
         item.setProgressPercent(0);
         item.setTranscodeError(null);
         queueRepo.save(item);
 
         try {
-            Future<?> prefetchFuture = prefetches.remove(itemId);
-            if (prefetchFuture != null) {
-                // Await the prefetch — if it was cancelled or failed, fall through to a normal copy
-                boolean prefetchOk = false;
-                try {
-                    prefetchFuture.get();
-                    prefetchOk = true;
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                } catch (CancellationException ce) {
-                    log.warn("Prefetch for item={} was cancelled, will re-copy source", itemId);
-                } catch (ExecutionException ee) {
-                    log.warn("Prefetch for item={} failed ({}), will re-copy source", itemId, ee.getCause().getMessage());
-                }
-                // Only use the staged file if the rename completed (final path exists and is non-empty)
-                if (prefetchOk && Files.exists(tempSrcFile) && Files.size(tempSrcFile) > 0) {
-                    log.info("Prefetch hit: skipping source copy for item={} bytes={}", itemId, Files.size(tempSrcFile));
-                    // Source already staged — skip the copy
-                } else {
-                    // Prefetch was cancelled/failed, or staged file missing/empty — fall back to normal copy
-                    Files.createDirectories(tempSrcDir);
-                    log.info("Prefetch miss: re-copying source for item={}", itemId);
-                    Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);
-                    log.info("Source fetched (fallback): item={} bytes={}", itemId, Files.size(tempSrcFile));
-                }
-            } else {
-                Files.createDirectories(tempSrcDir);
-                log.info("Fetching source to local temp: item={} src={}", itemId, item.getSourceFilePath());
-                Files.copy(Path.of(item.getSourceFilePath()), tempSrcFile, StandardCopyOption.REPLACE_EXISTING);
-                log.info("Source fetched: item={} bytes={}", itemId, Files.size(tempSrcFile));
-            }
-        } catch (IOException e) {
-            deleteTempDir(tempItemDir);
-            failItem(item, "Source copy failed: " + e.getMessage());
-            return;
-        }
-
-        // ── TRANSCODING: probe local copy, build cmd, run ffmpeg ─────────────
-        // Any unexpected exception here (UncheckedIOException from processRunner.start,
-        // RuntimeException from mediaProbe/commandBuilder, etc.) must clean up temp and
-        // mark the item ERROR rather than leaving it stuck in TRANSCODING/FETCHING.
-        try {
-            item.setStatus(DownloadQueueItem.Status.TRANSCODING);
-            queueRepo.save(item);
-
-            MediaInfo info = mediaProbe.probe(tempSrcFile.toString());
+            MediaInfo info = mediaProbe.probe(item.getSourceFilePath());
 
             List<String> cmd = commandBuilder.build(item.getQualityProfile(),
-                tempSrcFile.toString(), tempFile.toString(), info);
+                item.getSourceFilePath(), item.getDestFilePath(), info);
+
+            Files.createDirectories(Path.of(item.getDestFilePath()).getParent());
 
             Deque<String> stderrTail = new ArrayDeque<>();
             AtomicInteger lastPct = new AtomicInteger(-1);
-            AtomicBoolean nearDoneFired = new AtomicBoolean(false);
 
             RunningTranscode rt = processRunner.start(cmd,
                 line -> {
@@ -275,9 +70,6 @@ public class TranscodeService {
                         int p = pct.getAsInt();
                         if (lastPct.getAndSet(p) != p) {
                             persistProgress(itemId, p);
-                        }
-                        if (p >= 90 && nearDoneFired.compareAndSet(false, true)) {
-                            eventPublisher.publishEvent(new TranscodeNearDoneEvent(itemId));
                         }
                     }
                 },
@@ -301,46 +93,28 @@ public class TranscodeService {
 
             DownloadQueueItem fresh = queueRepo.findById(itemId).orElse(null);
             if (fresh == null) {
-                // cancelled + deleted — clean up temp
-                deleteTempDir(tempItemDir);
+                deletePartial(item.getDestFilePath());
                 return;
             }
 
             if (exit == 0) {
-                // Move temp file → final destination
-                Path destPath = Path.of(fresh.getDestFilePath());
-                fresh.setStatus(DownloadQueueItem.Status.COPYING);
+                FileSizeStats stats = fileSizeStats(fresh.getSourceFilePath(), fresh.getDestFilePath());
+                fresh.setStatus(DownloadQueueItem.Status.DONE);
+                fresh.setProgressPercent(100);
+                fresh.setCompletedAt(Instant.now());
+                fresh.setSourceSizeBytes(stats.srcSize());
+                fresh.setOutputSizeBytes(stats.destSize());
+                fresh.setCompressionRatio(stats.ratio());
                 queueRepo.save(fresh);
-
-                try {
-                    Files.createDirectories(destPath.getParent());
-                    // Capture sizes from LOCAL temp files before the move (Fix 3)
-                    FileSizeStats stats = fileSizeStats(tempSrcFile.toString(), tempFile.toString());
-                    moveFile(tempFile, destPath);
-                    fresh.setStatus(DownloadQueueItem.Status.DONE);
-                    fresh.setProgressPercent(100);
-                    fresh.setCompletedAt(Instant.now());
-                    fresh.setSourceSizeBytes(stats.srcSize());
-                    fresh.setOutputSizeBytes(stats.destSize());
-                    fresh.setCompressionRatio(stats.ratio());
-                    queueRepo.save(fresh);
-                    log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
-                } catch (IOException e) {
-                    deletePartial(destPath.toString());
-                    failItem(fresh, "Move to destination failed: " + e.getMessage());
-                } finally {
-                    deleteTempDir(tempItemDir);
-                }
+                log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
             } else {
                 String tail;
                 synchronized (stderrTail) { tail = String.join("\n", stderrTail); }
-                deleteTempDir(tempItemDir);
+                deletePartial(fresh.getDestFilePath());
                 failItem(fresh, "ffmpeg exit " + exit + (tail.isBlank() ? "" : ": " + tail));
             }
         } catch (Exception e) {
-            // Unexpected exception (e.g. UncheckedIOException from processRunner.start,
-            // RuntimeException from mediaProbe/commandBuilder) — clean up and fail the item.
-            deleteTempDir(tempItemDir);
+            deletePartial(item.getDestFilePath());
             DownloadQueueItem freshOnError = queueRepo.findById(itemId).orElse(item);
             failItem(freshOnError, "Transcode setup failed: " + e.getMessage());
         }
@@ -370,7 +144,6 @@ public class TranscodeService {
 
     record FileSizeStats(Long srcSize, Long destSize, Double ratio) {}
 
-    /** Stats source and dest once; computes space saved as a percentage of source size, rounded to 1 decimal. */
     private FileSizeStats fileSizeStats(String source, String dest) {
         try {
             long srcSize = Files.size(Path.of(source));
@@ -391,32 +164,6 @@ public class TranscodeService {
             Files.deleteIfExists(Path.of(dest));
         } catch (IOException e) {
             log.warn("Could not delete partial output {}: {}", dest, e.getMessage());
-        }
-    }
-
-    private void deleteTempDir(Path tempItemDir) {
-        if (!Files.exists(tempItemDir)) return;
-        try (var stream = Files.walk(tempItemDir)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (IOException e) {
-                    log.warn("Could not delete temp path {}: {}", p, e.getMessage());
-                }
-            });
-        } catch (IOException e) {
-            log.warn("Could not walk temp dir {}: {}", tempItemDir, e.getMessage());
-        }
-    }
-
-    /**
-     * Moves src to dest. Tries ATOMIC_MOVE first (same filesystem); falls back to
-     * REPLACE_EXISTING (copy + delete) for cross-filesystem moves (e.g. local → NAS).
-     */
-    private void moveFile(Path src, Path dest) throws IOException {
-        try {
-            Files.move(src, dest, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            log.debug("Atomic move not supported (cross-filesystem?), falling back to copy+delete: {}", e.getMessage());
-            Files.move(src, dest, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }
