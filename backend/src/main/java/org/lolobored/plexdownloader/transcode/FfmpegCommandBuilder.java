@@ -28,6 +28,12 @@ public class FfmpegCommandBuilder {
         args.add("-hwaccel_output_format"); args.add("qsv");
         args.add("-i"); args.add(sourcePath);
 
+        // Explicit mapping: primary video (excludes attached cover-art image streams that
+        // break the QSV encode), ALL audio, and ALL subtitle streams. '?' = optional.
+        args.add("-map"); args.add("0:v:0");
+        args.add("-map"); args.add("0:a?");
+        args.add("-map"); args.add("0:s?");
+
         int cap = profile.getResolutionCap().maxHeight();
         if (cap > 0 && source.height() > cap) {
             // vpp_qsv handles 8-bit/10-bit format on-GPU; scale_qsv chokes on 10-bit.
@@ -39,6 +45,11 @@ public class FfmpegCommandBuilder {
 
         args.add("-c:a");
         args.add(profile.getAudioMode() == QualityProfile.AudioMode.AAC ? "aac" : "copy");
+
+        // Preserve subtitles. MKV carries any subtitle codec as-is; MP4 only supports
+        // mov_text, so convert text subs (image-based subs can't go in MP4 — use MKV).
+        args.add("-c:s");
+        args.add(profile.getContainer() == QualityProfile.Container.MP4 ? "mov_text" : "copy");
 
         args.add("-progress"); args.add("pipe:1");
         args.add("-nostats");
