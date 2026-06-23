@@ -50,7 +50,6 @@ import { getShow, getSeasons } from '@/api/library.js'
 import { useWatchedStore } from '@/stores/watched.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SubscribeButton from '@/components/SubscribeButton.vue'
-import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 const route        = useRoute()
 const router       = useRouter()

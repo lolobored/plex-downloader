@@ -708,6 +708,42 @@ describe('QueueView', () => {
     expect(wrapper.text()).not.toContain('Has Output Subs')
   })
 
+  // ── Subtitle lang has/missing filter ─────────────────────────────────────────
+
+  it('subLang "has" mode keeps only items with the lang in sourceSubtitleLangs', async () => {
+    const items = [
+      movieItem({ id: 1, title: 'With EN', sourceSubtitleLangs: ',en,fra,', sourceSubtitlesScanned: true }),
+      movieItem({ id: 2, mediaId: 11, title: 'Without EN', sourceSubtitleLangs: ',fra,', sourceSubtitlesScanned: true }),
+      movieItem({ id: 3, mediaId: 12, title: 'Unscanned', sourceSubtitleLangs: null, sourceSubtitlesScanned: false }),
+    ]
+    const { wrapper } = factory(items)
+    // subFilterNone must be false (default) for lang filter to apply
+    await wrapper.find('[data-testid="sub-lang-mode"]').setValue('has')
+    await wrapper.find('[data-testid="sub-lang-input"]').setValue('en')
+    await flushPromises()
+    expect(wrapper.text()).toContain('With EN')
+    expect(wrapper.text()).not.toContain('Without EN')
+    expect(wrapper.text()).not.toContain('Unscanned')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+  })
+
+  it('subLang "missing" mode keeps only scanned items without the lang in sourceSubtitleLangs', async () => {
+    const items = [
+      movieItem({ id: 1, title: 'With EN', sourceSubtitleLangs: ',en,fra,', sourceSubtitlesScanned: true }),
+      movieItem({ id: 2, mediaId: 11, title: 'Without EN scanned', sourceSubtitleLangs: ',fra,', sourceSubtitlesScanned: true }),
+      movieItem({ id: 3, mediaId: 12, title: 'Unscanned', sourceSubtitleLangs: null, sourceSubtitlesScanned: false }),
+    ]
+    const { wrapper } = factory(items)
+    await wrapper.find('[data-testid="sub-lang-mode"]').setValue('missing')
+    await wrapper.find('[data-testid="sub-lang-input"]').setValue('en')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('With EN')
+    expect(wrapper.text()).toContain('Without EN scanned')
+    // Unscanned item is excluded (scanned=false means unknown, skip)
+    expect(wrapper.text()).not.toContain('Unscanned')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+  })
+
   // ── Transcode again ───────────────────────────────────────────────────────────
 
   it('transcode-again button appears on DONE row', () => {

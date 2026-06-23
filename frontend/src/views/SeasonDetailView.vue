@@ -84,18 +84,17 @@ async function loadEpisodes() {
 async function load() {
   const { showId, seasonId } = route.params
   try {
-    const [sh, se, eps] = await Promise.all([
+    const [sh, se] = await Promise.all([
       getShow(showId),
-      getSeason(showId, seasonId),
-      getEpisodes(showId, seasonId)
+      getSeason(showId, seasonId)
     ])
-    show.value     = sh
-    season.value   = se
-    episodes.value = eps
+    show.value   = sh
+    season.value = se
     watchedStore.fetchWatched(Number(showId))
     watchedStore.fetchSubscriptions()
+    await loadEpisodes()
   } finally {
-    loading.value  = false
+    loading.value = false
   }
 }
 

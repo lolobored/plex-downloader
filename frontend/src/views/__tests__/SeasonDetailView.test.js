@@ -106,7 +106,8 @@ describe('SeasonDetailView', () => {
     await flushPromises()
     expect(getShow).toHaveBeenCalledWith('10')
     expect(getSeason).toHaveBeenCalledWith('10', '100')
-    expect(getEpisodes).toHaveBeenCalledWith('10', '100')
+    // load() now delegates to loadEpisodes() which always passes filter params
+    expect(getEpisodes).toHaveBeenCalledWith('10', '100', expect.objectContaining({}))
   })
 
   it('passes seasonId to SubscribeButton', async () => {

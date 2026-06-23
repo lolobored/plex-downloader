@@ -59,7 +59,6 @@ import { useRouter } from 'vue-router'
 import { getShows } from '@/api/library.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
-import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 defineOptions({ name: 'TvView' })
 
