@@ -11,6 +11,7 @@ import java.util.Optional;
 public interface MovieRepository extends JpaRepository<Movie, Long> {
     Optional<Movie> findByPlexId(String plexId);
     List<Movie> findByPlexIdNotIn(Collection<String> plexIds);
+    List<Movie> findBySubtitlesScannedAtIsNull();
 
     @Query("SELECT m FROM Movie m WHERE " +
            "(:search = '' OR LOWER(m.title) LIKE LOWER(CONCAT('%',:search,'%'))) AND " +
