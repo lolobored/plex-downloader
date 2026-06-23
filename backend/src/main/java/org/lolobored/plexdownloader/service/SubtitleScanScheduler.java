@@ -23,8 +23,8 @@ public class SubtitleScanScheduler implements SchedulingConfigurer {
         registrar.addTriggerTask(
             () -> scanService.scan(false),
             ctx -> {
-                String cron = settings.get("subtitles.scan.cron").filter(s -> !s.isBlank()).orElse(DEFAULT_CRON);
-                if (cron.isBlank()) return null; // disabled
+                String cron = settings.get("subtitles.scan.cron").orElse(DEFAULT_CRON);
+                if (cron.isBlank()) return null; // present-blank -> disabled
                 return new CronTrigger(cron).nextExecution(ctx);
             }
         );
