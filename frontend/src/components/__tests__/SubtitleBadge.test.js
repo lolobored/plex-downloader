@@ -48,4 +48,14 @@ describe('SubtitleBadge', () => {
     const w = mount(SubtitleBadge, { props: { langs: 'eng,fra', scanned: true } })
     expect(w.text()).toContain('SUB·2')
   })
+
+  it('reactivity: badge updates when props change between states', async () => {
+    const w = mount(SubtitleBadge, { props: { langs: null, scanned: false } })
+    expect(w.text()).toContain('sub?')
+
+    await w.setProps({ scanned: true, langs: ',eng,fra,' })
+    expect(w.text()).toContain('SUB·2')
+    expect(w.find('[title]').attributes('title')).toContain('eng')
+    expect(w.find('[title]').attributes('title')).toContain('fra')
+  })
 })

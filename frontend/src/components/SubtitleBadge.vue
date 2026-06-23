@@ -3,6 +3,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   langs: {
     type: String,
@@ -28,7 +30,7 @@ function parseLangs(langs) {
     .filter(s => s.length > 0)
 }
 
-const computed = (() => {
+const badge = computed(() => {
   if (!props.scanned) {
     return { text: 'sub?', cls: 'badge-subtitle-unknown', title: null }
   }
@@ -41,11 +43,11 @@ const computed = (() => {
     cls: 'badge-subtitle-has',
     title: codes.join(', ')
   }
-})()
+})
 
-const badgeText = computed.text
-const badgeClass = computed.cls
-const badgeTitle = computed.title
+const badgeText = computed(() => badge.value.text)
+const badgeClass = computed(() => badge.value.cls)
+const badgeTitle = computed(() => badge.value.title)
 </script>
 
 <style scoped>
