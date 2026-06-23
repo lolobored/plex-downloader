@@ -27,6 +27,7 @@ public class TranscodeService {
     private final FfmpegCommandBuilder commandBuilder;
     private final ProgressParser progressParser;
     private final ProcessRunner processRunner;
+    private final SubtitleProbe subtitleProbe;
 
     private final ConcurrentHashMap<Long, RunningTranscode> running = new ConcurrentHashMap<>();
 
@@ -34,12 +35,14 @@ public class TranscodeService {
                             MediaProbe mediaProbe,
                             FfmpegCommandBuilder commandBuilder,
                             ProgressParser progressParser,
-                            ProcessRunner processRunner) {
+                            ProcessRunner processRunner,
+                            SubtitleProbe subtitleProbe) {
         this.queueRepo = queueRepo;
         this.mediaProbe = mediaProbe;
         this.commandBuilder = commandBuilder;
         this.progressParser = progressParser;
         this.processRunner = processRunner;
+        this.subtitleProbe = subtitleProbe;
     }
 
     public void transcode(Long itemId) {
@@ -105,6 +108,11 @@ public class TranscodeService {
                 fresh.setSourceSizeBytes(stats.srcSize());
                 fresh.setOutputSizeBytes(stats.destSize());
                 fresh.setCompressionRatio(stats.ratio());
+                SubtitleProbe.ProbeResult subs = subtitleProbe.probe(fresh.getDestFilePath());
+                if (subs.ok()) {
+                    fresh.setOutputSubtitleLangs(org.lolobored.plexdownloader.util.SubtitleLangs.toCsv(subs.langs()));
+                    fresh.setOutputSubtitlesScannedAt(Instant.now());
+                }
                 queueRepo.save(fresh);
                 log.info("Transcode done: item={} compression={}%", itemId, fresh.getCompressionRatio());
             } else {

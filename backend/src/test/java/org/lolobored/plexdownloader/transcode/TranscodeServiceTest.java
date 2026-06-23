@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import org.lolobored.plexdownloader.transcode.SubtitleProbe;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -31,11 +32,14 @@ class TranscodeServiceTest {
     @Mock DownloadQueueRepository queueRepo;
     @Mock MediaProbe mediaProbe;
     @Mock ProcessRunner processRunner;
+    @Mock SubtitleProbe subtitleProbe;
 
     private TranscodeService service() {
         TranscodeConfig cfg = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128");
+        when(subtitleProbe.probe(anyString()))
+            .thenReturn(new SubtitleProbe.ProbeResult(true, List.of()));
         return new TranscodeService(queueRepo, mediaProbe,
-            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner);
+            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner, subtitleProbe);
     }
 
     private DownloadQueueItem item(Long id, String src, String dest) {
@@ -416,5 +420,41 @@ class TranscodeServiceTest {
 
         // Partial dest must be cleaned up
         assertThat(dest).doesNotExist();
+    }
+
+    @Test
+    void done_capturesOutputSubtitleLangs(@TempDir Path tmp) throws Exception {
+        Path src = tmp.resolve("source.avi");
+        Files.write(src, new byte[1000]);
+        Path destDir = tmp.resolve("dest");
+        Files.createDirectories(destDir);
+        Path dest = destDir.resolve("source.mkv");
+
+        DownloadQueueItem it = item(50L, src.toString(), dest.toString());
+        when(queueRepo.findByIdWithProfile(50L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(50L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(src.toString())).thenReturn(new MediaInfo(60, 1920, 1080));
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            List<String> cmd = inv.getArgument(0);
+            Path outFile = Path.of(cmd.get(cmd.size() - 1));
+            Files.createDirectories(outFile.getParent());
+            Files.write(outFile, new byte[400]);
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        // Build the service first (which registers the default anyString() stub),
+        // then override with the specific path stub so LIFO picks the specific one.
+        TranscodeService svc = service();
+        when(subtitleProbe.probe(dest.toString()))
+            .thenReturn(new SubtitleProbe.ProbeResult(true, List.of("eng", "fra")));
+
+        svc.transcode(50L);
+
+        assertThat(it.getOutputSubtitleLangs()).isEqualTo(",eng,fra,");
+        assertThat(it.getOutputSubtitlesScannedAt()).isNotNull();
     }
 }
