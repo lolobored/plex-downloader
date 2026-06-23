@@ -11,8 +11,15 @@ export async function getQualityProfiles() {
   return data  // QualityProfile[]
 }
 
-export async function getQueue() {
-  const { data } = await http.get('/api/download/queue')
+export async function getQueue({ sourceSubtitles, outputSubtitles, hasLang, missingLang, outputHasLang, outputMissingLang } = {}) {
+  const params = {}
+  if (sourceSubtitles  != null) params.sourceSubtitles  = sourceSubtitles
+  if (outputSubtitles  != null) params.outputSubtitles  = outputSubtitles
+  if (hasLang          != null) params.hasLang          = hasLang
+  if (missingLang      != null) params.missingLang      = missingLang
+  if (outputHasLang    != null) params.outputHasLang    = outputHasLang
+  if (outputMissingLang != null) params.outputMissingLang = outputMissingLang
+  const { data } = await http.get('/api/download/queue', { params })
   return data  // DownloadQueueItem[]
 }
 

@@ -58,3 +58,12 @@ export async function relocateOutput(mediaType, oldRoot, newRoot) {
   const { data } = await http.post('/api/admin/output/relocate', { mediaType, oldRoot, newRoot })
   return data  // { moved, updatedOnly, failed }
 }
+
+export async function runSubtitleScan(force = false) {
+  await http.post('/api/admin/subtitles/scan', null, { params: { force } })
+}
+
+export async function getSubtitleScanStatus() {
+  const { data } = await http.get('/api/admin/subtitles/scan/status')
+  return data  // { state, startedAt, scanned, total, error }
+}

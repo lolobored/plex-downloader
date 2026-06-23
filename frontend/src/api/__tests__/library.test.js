@@ -43,6 +43,6 @@ describe('library API', () => {
   it('getEpisodes calls /api/tv/:showId/seasons/:seasonId/episodes', async () => {
     http.get.mockResolvedValue({ data: [] })
     await getEpisodes(5, 3)
-    expect(http.get).toHaveBeenCalledWith('/api/tv/5/seasons/3/episodes')
+    expect(http.get).toHaveBeenCalledWith('/api/tv/5/seasons/3/episodes', { params: {} })
   })
 })
