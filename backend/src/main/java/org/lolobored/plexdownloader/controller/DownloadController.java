@@ -56,4 +56,9 @@ public class DownloadController {
         int count = downloadService.retryAllErrored(user);
         return java.util.Map.of("retried", count);
     }
+
+    @PostMapping("/{id}/transcode-again")
+    public DownloadQueueItem transcodeAgain(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        return downloadService.transcodeAgain(id, user);
+    }
 }

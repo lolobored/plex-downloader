@@ -356,11 +356,31 @@ public class DownloadService {
         return erroredItems.size();
     }
 
+    @Transactional
+    public DownloadQueueItem transcodeAgain(Long id, User user) {
+        DownloadQueueItem item = queueRepo.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Queue item not found"));
+        if (item.getUser() == null || !item.getUser().getId().equals(user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item");
+        }
+        if (item.getStatus() != DownloadQueueItem.Status.DONE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item is not DONE");
+        }
+        resetToQueued(item);
+        queueRepo.save(item);
+        events.publishEvent(new TranscodeRequestedEvent(id));
+        return item;
+    }
+
     private void resetToQueued(DownloadQueueItem item) {
         item.setStatus(DownloadQueueItem.Status.QUEUED);
         item.setErrorMessage(null);
         item.setTranscodeError(null);
         item.setProgressPercent(null);
+        item.setCompletedAt(null);
+        item.setCompressionRatio(null);
+        item.setSourceSizeBytes(null);
+        item.setOutputSizeBytes(null);
     }
 
 }

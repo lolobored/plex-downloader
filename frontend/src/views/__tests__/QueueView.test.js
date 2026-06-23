@@ -13,7 +13,8 @@ vi.mock('../../api/download.js', () => ({
   enqueue:           vi.fn().mockResolvedValue({}),
   removeQueueItem:   vi.fn().mockResolvedValue(undefined),
   retryQueueItem:    vi.fn().mockResolvedValue({}),
-  retryAllErrored:   vi.fn().mockResolvedValue({ retried: 2 })
+  retryAllErrored:   vi.fn().mockResolvedValue({ retried: 2 }),
+  transcodeAgain:    vi.fn().mockResolvedValue({})
 }))
 vi.mock('../../api/playlists.js', () => ({
   unsubscribe:           vi.fn().mockResolvedValue(undefined),
@@ -632,5 +633,74 @@ describe('QueueView', () => {
     })])
     await wrapper.find('[data-testid="info-btn"]').trigger('click')
     expect(wrapper.find('[data-testid="info-duration"]').text()).toBe('45s')
+  })
+
+  // ── Transcode again ───────────────────────────────────────────────────────────
+
+  it('transcode-again button appears on DONE row', () => {
+    const { wrapper } = factory([movieItem({ status: 'DONE' })])
+    expect(wrapper.find('[data-testid="transcode-again-btn"]').exists()).toBe(true)
+  })
+
+  it('transcode-again button absent on QUEUED row', () => {
+    const { wrapper } = factory([movieItem({ status: 'QUEUED' })])
+    expect(wrapper.find('[data-testid="transcode-again-btn"]').exists()).toBe(false)
+  })
+
+  it('transcode-again button absent on TRANSCODING row', () => {
+    const { wrapper } = factory([movieItem({ status: 'TRANSCODING', progressPercent: 50 })])
+    expect(wrapper.find('[data-testid="transcode-again-btn"]').exists()).toBe(false)
+  })
+
+  it('transcode-again button absent on ERROR row', () => {
+    const { wrapper } = factory([movieItem({ status: 'ERROR', transcodeError: 'oops' })])
+    expect(wrapper.find('[data-testid="transcode-again-btn"]').exists()).toBe(false)
+  })
+
+  it('clicking transcode-again button opens confirm modal', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.queueItems = [movieItem({ status: 'DONE' })]
+    store.fetchQueue = vi.fn()
+    const wrapper = mount(QueueView, { global: { plugins: [pinia] }, attachTo: document.body })
+    await wrapper.find('[data-testid="transcode-again-btn"]').trigger('click')
+    await vi.waitFor(() => !!document.body.querySelector('.modal-message'))
+    const msg = document.body.querySelector('.modal-message')
+    expect(msg.textContent).toContain('Re-transcode')
+    expect(msg.textContent).toContain('overwritten')
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('confirming transcode-again calls api and refetches queue', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.queueItems = [movieItem({ status: 'DONE' })]
+    store.fetchQueue = vi.fn()
+    const wrapper = mount(QueueView, { global: { plugins: [pinia] }, attachTo: document.body })
+    await wrapper.find('[data-testid="transcode-again-btn"]').trigger('click')
+    await vi.waitFor(() => !!document.body.querySelector('[data-testid="confirm-btn"]'))
+    document.body.querySelector('[data-testid="confirm-btn"]').click()
+    await flushPromises()
+    expect(downloadApi.transcodeAgain).toHaveBeenCalledWith(1)
+    expect(store.fetchQueue).toHaveBeenCalled()
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('cancelling transcode-again modal does not call api', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useDownloadStore(pinia)
+    store.queueItems = [movieItem({ status: 'DONE' })]
+    store.fetchQueue = vi.fn()
+    const wrapper = mount(QueueView, { global: { plugins: [pinia] }, attachTo: document.body })
+    await wrapper.find('[data-testid="transcode-again-btn"]').trigger('click')
+    await vi.waitFor(() => !!document.body.querySelector('.modal-message'))
+    // Click the backdrop (cancel) — btn-cancel class
+    document.body.querySelector('.btn-cancel').click()
+    await flushPromises()
+    expect(downloadApi.transcodeAgain).not.toHaveBeenCalled()
+    wrapper.unmount()
+    document.body.innerHTML = ''
   })
 })

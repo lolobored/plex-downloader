@@ -75,20 +75,20 @@
             <div v-if="bucket.inProgress.length" class="sub-section">
               <p class="sub-label" data-testid="sub-label-TRANSCODING">TRANSCODING</p>
               <QueueItemRow v-for="item in bucket.inProgress" :key="item.id"
-                :item="item" :removing="removing" :retrying="retrying"
-                @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+                @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
             </div>
             <div v-if="bucket.pending.length" class="sub-section">
               <p class="sub-label" data-testid="sub-label-QUEUED">QUEUED</p>
               <QueueItemRow v-for="item in bucket.pending" :key="item.id"
-                :item="item" :removing="removing" :retrying="retrying"
-                @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+                @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
             </div>
             <div v-if="bucket.done.length" class="sub-section">
               <p class="sub-label" data-testid="sub-label-DONE">DONE</p>
               <QueueItemRow v-for="item in bucket.done" :key="item.id"
-                :item="item" :removing="removing" :retrying="retrying"
-                @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+                @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
             </div>
           </template>
         </div>
@@ -124,20 +124,20 @@
                 <div v-if="bucket.inProgress.length" class="sub-section">
                   <p class="sub-label" data-testid="sub-label-TRANSCODING">TRANSCODING</p>
                   <QueueItemRow v-for="item in bucket.inProgress" :key="item.id"
-                    :item="item" :removing="removing" :retrying="retrying"
-                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                    :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
                 </div>
                 <div v-if="bucket.pending.length" class="sub-section">
                   <p class="sub-label" data-testid="sub-label-QUEUED">QUEUED</p>
                   <QueueItemRow v-for="item in bucket.pending" :key="item.id"
-                    :item="item" :removing="removing" :retrying="retrying"
-                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                    :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
                 </div>
                 <div v-if="bucket.done.length" class="sub-section">
                   <p class="sub-label" data-testid="sub-label-DONE">DONE</p>
                   <QueueItemRow v-for="item in bucket.done" :key="item.id"
-                    :item="item" :removing="removing" :retrying="retrying"
-                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+                    :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+                    @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
                 </div>
               </template>
             </div>
@@ -147,8 +147,8 @@
 
       <!-- Solo movies (always visible, no group wrapper) -->
       <QueueItemRow v-for="item in soloMovies" :key="item.id"
-        :item="item" :removing="removing" :retrying="retrying"
-        @remove="remove" @retry="retryItem" @navigate="navigateToItem" />
+        :item="item" :removing="removing" :retrying="retrying" :transcodeAgainPending="transcodeAgainPending"
+        @remove="remove" @retry="retryItem" @navigate="navigateToItem" @transcode-again="openTranscodeAgainConfirm" />
     </section>
 
     <ConfirmModal
@@ -159,6 +159,16 @@
       @confirm="confirmUnsubscribe"
       @cancel="confirmState = null"
     />
+
+    <ConfirmModal
+      v-if="transcodeAgainConfirm"
+      message="Re-transcode this file? The current output will be overwritten."
+      confirmLabel="Confirm"
+      cancelLabel="Cancel"
+      data-testid="transcode-again-modal"
+      @confirm="confirmTranscodeAgain"
+      @cancel="transcodeAgainConfirm = null"
+    />
   </div>
 </template>
 
@@ -167,7 +177,7 @@ import { ref, computed, onMounted, onUnmounted, defineComponent, h, shallowRef }
 import { useRouter } from 'vue-router'
 import { useDownloadStore } from '@/stores/download.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { removeQueueItem, retryQueueItem, retryAllErrored } from '@/api/download.js'
+import { removeQueueItem, retryQueueItem, retryAllErrored, transcodeAgain as apiTranscodeAgain } from '@/api/download.js'
 import { unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
 import { getConcurrency, setConcurrency } from '@/api/transcode.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
@@ -190,11 +200,13 @@ async function changeConcurrency(delta) {
   }
 }
 
-const removing    = ref(new Set())
-const retrying    = ref(new Set())
-const retryingAll = ref(false)
-const openGroups  = ref(new Set())
-const confirmState = ref(null) // { playlistId, message } | null
+const removing              = ref(new Set())
+const retrying              = ref(new Set())
+const retryingAll           = ref(false)
+const transcodeAgainPending = ref(new Set())
+const openGroups            = ref(new Set())
+const confirmState          = ref(null) // { playlistId, message } | null
+const transcodeAgainConfirm = ref(null) // { itemId } | null
 
 const erroredCount = computed(() =>
   dlStore.queueItems.filter(i => i.status === 'ERROR').length
@@ -221,8 +233,8 @@ function formatDuration(startIso, endIso) {
 
 // ── Inline QueueItemRow component ────────────────────────────────────────────
 const QueueItemRow = defineComponent({
-  props: ['item', 'removing', 'retrying'],
-  emits: ['remove', 'retry', 'navigate'],
+  props: ['item', 'removing', 'retrying', 'transcodeAgainPending'],
+  emits: ['remove', 'retry', 'navigate', 'transcode-again'],
   setup(props, { emit }) {
     const infoOpen = shallowRef(false)
 
@@ -230,6 +242,7 @@ const QueueItemRow = defineComponent({
       const item = props.item
       const isRemoving = props.removing.has(item.id)
       const isRetrying = props.retrying.has(item.id)
+      const isTranscodeAgainPending = props.transcodeAgainPending.has(item.id)
       const isTranscoding = item.status === 'TRANSCODING'
       const isError = item.status === 'ERROR'
       const isInProgress = isTranscoding
@@ -307,6 +320,15 @@ const QueueItemRow = defineComponent({
                   ])
                 : null
             ])
+          : null,
+        (item.status === 'DONE')
+          ? h('button', {
+              class: 'btn-transcode-again',
+              'data-testid': 'transcode-again-btn',
+              title: 'Transcode again',
+              disabled: isTranscodeAgainPending,
+              onClick: (e) => { e.stopPropagation(); emit('transcode-again', item.id) }
+            }, isTranscodeAgainPending ? '…' : '↻')
           : null,
         isError
           ? h('button', {
@@ -493,6 +515,24 @@ async function retryAll() {
   }
 }
 
+function openTranscodeAgainConfirm(id) {
+  transcodeAgainConfirm.value = { itemId: id }
+}
+
+async function confirmTranscodeAgain() {
+  const { itemId } = transcodeAgainConfirm.value
+  transcodeAgainConfirm.value = null
+  transcodeAgainPending.value = new Set([...transcodeAgainPending.value, itemId])
+  try {
+    await apiTranscodeAgain(itemId)
+    await dlStore.fetchQueue()
+  } catch (e) {
+    console.error('Transcode again failed', e)
+  } finally {
+    const next = new Set(transcodeAgainPending.value); next.delete(itemId); transcodeAgainPending.value = next
+  }
+}
+
 function navigateToItem(item) {
   if (item.mediaType === 'MOVIE') {
     router.push('/movies/' + item.mediaId)
@@ -618,6 +658,10 @@ h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0; }
              font-size: .75rem; padding: 2px 10px; border-radius: 4px; white-space: nowrap; }
 .btn-unsub:hover { background: rgba(var(--accent-rgb, 52,152,219),.1); }
 .info-btn-wrap { position: relative; }
+.btn-transcode-again { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
+                      font-size: .75rem; padding: 2px 6px; border-radius: 4px; line-height: 1; }
+.btn-transcode-again:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(52,152,219,.08); }
+.btn-transcode-again:disabled { opacity: 0.3; cursor: not-allowed; }
 .btn-info { background: none; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
             font-size: .75rem; padding: 2px 6px; border-radius: 4px; line-height: 1; }
 .btn-info:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(52,152,219,.08); }

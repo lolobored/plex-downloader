@@ -148,4 +148,44 @@ class DownloadControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.retried").value(0));
     }
+
+    @Test
+    void transcodeAgain_returns200AndUpdatedItem_whenOwnerAndDoneState() throws Exception {
+        DownloadQueueItem reset = new DownloadQueueItem();
+        reset.setId(10L);
+        reset.setStatus(DownloadQueueItem.Status.QUEUED);
+
+        when(downloadService.transcodeAgain(10L, user)).thenReturn(reset);
+
+        mockMvc.perform(post("/api/download/10/transcode-again"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("QUEUED"));
+    }
+
+    @Test
+    void transcodeAgain_returns403_whenNotOwner() throws Exception {
+        when(downloadService.transcodeAgain(eq(11L), any())).thenThrow(
+            new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your queue item"));
+
+        mockMvc.perform(post("/api/download/11/transcode-again"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void transcodeAgain_returns404_whenItemNotFound() throws Exception {
+        when(downloadService.transcodeAgain(eq(99L), any())).thenThrow(
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "Queue item not found"));
+
+        mockMvc.perform(post("/api/download/99/transcode-again"))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void transcodeAgain_returns400_whenNotDone() throws Exception {
+        when(downloadService.transcodeAgain(eq(12L), any())).thenThrow(
+            new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item is not DONE"));
+
+        mockMvc.perform(post("/api/download/12/transcode-again"))
+            .andExpect(status().isBadRequest());
+    }
 }

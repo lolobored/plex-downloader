@@ -612,6 +612,89 @@ class DownloadServiceTest {
     }
 
     @Test
+    void transcodeAgain_resetsDoneToQueuedAndClearsAllFields() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(30L); item.setStatus(DownloadQueueItem.Status.DONE);
+        item.setProgressPercent(100);
+        item.setCompletedAt(java.time.Instant.now());
+        item.setCompressionRatio(42.5);
+        item.setSourceSizeBytes(1_000_000L);
+        item.setOutputSizeBytes(575_000L);
+        item.setTranscodeError(null);
+        item.setErrorMessage(null);
+        User owner = new User(); owner.setId(1L); item.setUser(owner);
+        when(queueRepo.findById(30L)).thenReturn(Optional.of(item));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        User caller = new User(); caller.setId(1L);
+        service.transcodeAgain(30L, caller);
+
+        assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        assertThat(item.getProgressPercent()).isNull();
+        assertThat(item.getCompletedAt()).isNull();
+        assertThat(item.getCompressionRatio()).isNull();
+        assertThat(item.getSourceSizeBytes()).isNull();
+        assertThat(item.getOutputSizeBytes()).isNull();
+        verify(events).publishEvent(any(TranscodeRequestedEvent.class));
+    }
+
+    @Test
+    void transcodeAgain_throws400WhenNotDone() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(31L); item.setStatus(DownloadQueueItem.Status.QUEUED);
+        User owner = new User(); owner.setId(1L); item.setUser(owner);
+        when(queueRepo.findById(31L)).thenReturn(Optional.of(item));
+
+        User caller = new User(); caller.setId(1L);
+        assertThatThrownBy(() -> service.transcodeAgain(31L, caller))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("400");
+    }
+
+    @Test
+    void transcodeAgain_throws403WhenNotOwner() {
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(32L); item.setStatus(DownloadQueueItem.Status.DONE);
+        User owner = new User(); owner.setId(1L); item.setUser(owner);
+        when(queueRepo.findById(32L)).thenReturn(Optional.of(item));
+
+        User otherUser = new User(); otherUser.setId(2L);
+        assertThatThrownBy(() -> service.transcodeAgain(32L, otherUser))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("403");
+    }
+
+    @Test
+    void transcodeAgain_throws404WhenNotFound() {
+        when(queueRepo.findById(99L)).thenReturn(Optional.empty());
+
+        User caller = new User(); caller.setId(1L);
+        assertThatThrownBy(() -> service.transcodeAgain(99L, caller))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("404");
+    }
+
+    @Test
+    void retry_stillClearsExtraFieldsWhenExtendedResetToQueued() {
+        // Verifies extending resetToQueued doesn't break retry for ERROR items
+        // (those extra fields are null for ERROR items anyway)
+        DownloadQueueItem item = new DownloadQueueItem();
+        item.setId(33L); item.setStatus(DownloadQueueItem.Status.ERROR);
+        item.setErrorMessage("some error"); item.setTranscodeError("stderr"); item.setProgressPercent(50);
+        User owner = new User(); owner.setId(1L); item.setUser(owner);
+        when(queueRepo.findById(33L)).thenReturn(Optional.of(item));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        User caller = new User(); caller.setId(1L);
+        service.retry(33L, caller);
+
+        assertThat(item.getStatus()).isEqualTo(DownloadQueueItem.Status.QUEUED);
+        assertThat(item.getErrorMessage()).isNull();
+        assertThat(item.getProgressPercent()).isNull();
+        verify(events).publishEvent(any(TranscodeRequestedEvent.class));
+    }
+
+    @Test
     void buildItem_usesConfiguredMoviesDirFromSettings() {
         Movie movie = new Movie();
         movie.setId(1L); movie.setTitle("Blade Runner");
