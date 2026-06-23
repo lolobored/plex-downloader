@@ -18,8 +18,8 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
     @Query("SELECT e FROM Episode e WHERE " +
            "e.season.id = :seasonId AND " +
            "(:none = false OR e.subtitleLangs = ',') AND " +
-           "(:has IS NULL OR e.subtitleLangs LIKE CONCAT('%', :has, '%')) AND " +
-           "(:missing IS NULL OR (e.subtitleLangs IS NOT NULL AND e.subtitleLangs NOT LIKE CONCAT('%', :missing, '%'))) " +
+           "(:has IS NULL OR e.subtitleLangs LIKE CONCAT('%', CAST(:has AS String), '%')) AND " +
+           "(:missing IS NULL OR (e.subtitleLangs IS NOT NULL AND e.subtitleLangs NOT LIKE CONCAT('%', CAST(:missing AS String), '%'))) " +
            "ORDER BY e.episodeNumber")
     List<Episode> findBySeasonIdFilteredBySubtitles(@Param("seasonId") Long seasonId,
                                                     @Param("none") boolean none,
@@ -28,8 +28,8 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
 
     @Query("SELECT e FROM Episode e WHERE " +
            "(:none = false OR e.subtitleLangs = ',') AND " +
-           "(:has IS NULL OR e.subtitleLangs LIKE CONCAT('%', :has, '%')) AND " +
-           "(:missing IS NULL OR (e.subtitleLangs IS NOT NULL AND e.subtitleLangs NOT LIKE CONCAT('%', :missing, '%')))")
+           "(:has IS NULL OR e.subtitleLangs LIKE CONCAT('%', CAST(:has AS String), '%')) AND " +
+           "(:missing IS NULL OR (e.subtitleLangs IS NOT NULL AND e.subtitleLangs NOT LIKE CONCAT('%', CAST(:missing AS String), '%')))")
     List<Episode> findFilteredBySubtitles(@Param("none") boolean none,
                                           @Param("has") String has,
                                           @Param("missing") String missing);

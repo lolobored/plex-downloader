@@ -25,8 +25,8 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
            "(:search = '' OR LOWER(m.title) LIKE LOWER(CONCAT('%',:search,'%'))) AND " +
            "(:year IS NULL OR m.year = :year) AND " +
            "(:none = false OR m.subtitleLangs = ',') AND " +
-           "(:has IS NULL OR m.subtitleLangs LIKE CONCAT('%', :has, '%')) AND " +
-           "(:missing IS NULL OR (m.subtitleLangs IS NOT NULL AND m.subtitleLangs NOT LIKE CONCAT('%', :missing, '%')))")
+           "(:has IS NULL OR m.subtitleLangs LIKE CONCAT('%', CAST(:has AS String), '%')) AND " +
+           "(:missing IS NULL OR (m.subtitleLangs IS NOT NULL AND m.subtitleLangs NOT LIKE CONCAT('%', CAST(:missing AS String), '%')))")
     Page<Movie> searchFiltered(@Param("search") String search,
                                @Param("year") Integer year,
                                @Param("none") boolean none,
@@ -36,8 +36,8 @@ public interface MovieRepository extends JpaRepository<Movie, Long> {
 
     @Query("SELECT m FROM Movie m WHERE " +
            "(:none = false OR m.subtitleLangs = ',') AND " +
-           "(:has IS NULL OR m.subtitleLangs LIKE CONCAT('%', :has, '%')) AND " +
-           "(:missing IS NULL OR (m.subtitleLangs IS NOT NULL AND m.subtitleLangs NOT LIKE CONCAT('%', :missing, '%')))")
+           "(:has IS NULL OR m.subtitleLangs LIKE CONCAT('%', CAST(:has AS String), '%')) AND " +
+           "(:missing IS NULL OR (m.subtitleLangs IS NOT NULL AND m.subtitleLangs NOT LIKE CONCAT('%', CAST(:missing AS String), '%')))")
     List<Movie> findFilteredBySubtitles(@Param("none") boolean none,
                                         @Param("has") String has,
                                         @Param("missing") String missing);
