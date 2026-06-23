@@ -13,4 +13,23 @@ public interface EpisodeRepository extends JpaRepository<Episode, Long> {
 
     @Query("SELECT e FROM Episode e JOIN FETCH e.season s JOIN FETCH s.show WHERE e.id IN :ids")
     List<Episode> findWithSeasonAndShowByIdIn(@Param("ids") Collection<Long> ids);
+
+    @Query("SELECT e FROM Episode e WHERE " +
+           "e.season.id = :seasonId AND " +
+           "(:none = false OR e.subtitleLangs = ',') AND " +
+           "(:has IS NULL OR e.subtitleLangs LIKE CONCAT('%', :has, '%')) AND " +
+           "(:missing IS NULL OR (e.subtitleLangs IS NOT NULL AND e.subtitleLangs NOT LIKE CONCAT('%', :missing, '%'))) " +
+           "ORDER BY e.episodeNumber")
+    List<Episode> findBySeasonIdFilteredBySubtitles(@Param("seasonId") Long seasonId,
+                                                    @Param("none") boolean none,
+                                                    @Param("has") String has,
+                                                    @Param("missing") String missing);
+
+    @Query("SELECT e FROM Episode e WHERE " +
+           "(:none = false OR e.subtitleLangs = ',') AND " +
+           "(:has IS NULL OR e.subtitleLangs LIKE CONCAT('%', :has, '%')) AND " +
+           "(:missing IS NULL OR (e.subtitleLangs IS NOT NULL AND e.subtitleLangs NOT LIKE CONCAT('%', :missing, '%')))")
+    List<Episode> findFilteredBySubtitles(@Param("none") boolean none,
+                                          @Param("has") String has,
+                                          @Param("missing") String missing);
 }

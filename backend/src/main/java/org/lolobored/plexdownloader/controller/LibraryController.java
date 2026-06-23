@@ -1,8 +1,11 @@
 package org.lolobored.plexdownloader.controller;
 
 import org.lolobored.plexdownloader.dto.*;
+import org.lolobored.plexdownloader.model.Episode;
+import org.lolobored.plexdownloader.model.Movie;
 import org.lolobored.plexdownloader.model.User;
 import org.lolobored.plexdownloader.repository.*;
+import org.lolobored.plexdownloader.util.SubtitleLangs;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.ResponseEntity;
@@ -30,9 +33,21 @@ public class LibraryController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String subtitles,
+            @RequestParam(required = false) String hasLang,
+            @RequestParam(required = false) String missingLang) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("title"));
-        var movies = movieRepo.search(search != null ? search : "", year, pageable);
+        boolean none = "none".equalsIgnoreCase(subtitles);
+        String hasToken     = hasLang     != null ? SubtitleLangs.token(hasLang)     : null;
+        String missingToken = missingLang != null ? SubtitleLangs.token(missingLang) : null;
+        Page<Movie> movies;
+        if (none || hasToken != null || missingToken != null) {
+            movies = movieRepo.searchFiltered(
+                search != null ? search : "", year, none, hasToken, missingToken, pageable);
+        } else {
+            movies = movieRepo.search(search != null ? search : "", year, pageable);
+        }
         User user = currentUser();
         if (user == null || movies.isEmpty()) return movies.map(MovieResponse::from);
         List<Long> ids = movies.getContent().stream().map(m -> m.getId()).toList();
@@ -110,9 +125,21 @@ public class LibraryController {
 
     @GetMapping("/api/tv/{showId}/seasons/{seasonId}/episodes")
     public List<EpisodeResponse> getEpisodes(@PathVariable Long showId,
-                                              @PathVariable Long seasonId) {
-        return episodeRepo.findBySeasonIdOrderByEpisodeNumber(seasonId)
-            .stream().map(EpisodeResponse::from).toList();
+                                              @PathVariable Long seasonId,
+                                              @RequestParam(required = false) String subtitles,
+                                              @RequestParam(required = false) String hasLang,
+                                              @RequestParam(required = false) String missingLang) {
+        boolean none = "none".equalsIgnoreCase(subtitles);
+        String hasToken     = hasLang     != null ? SubtitleLangs.token(hasLang)     : null;
+        String missingToken = missingLang != null ? SubtitleLangs.token(missingLang) : null;
+        List<Episode> episodes;
+        if (none || hasToken != null || missingToken != null) {
+            episodes = episodeRepo.findBySeasonIdFilteredBySubtitles(
+                seasonId, none, hasToken, missingToken);
+        } else {
+            episodes = episodeRepo.findBySeasonIdOrderByEpisodeNumber(seasonId);
+        }
+        return episodes.stream().map(EpisodeResponse::from).toList();
     }
 
     @GetMapping("/api/tv/{showId}/seasons/{seasonId}/episodes/{episodeId}")

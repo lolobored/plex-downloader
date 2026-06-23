@@ -35,8 +35,13 @@ public class DownloadController {
     }
 
     @GetMapping("/queue")
-    public List<DownloadQueueItemResponse> getQueue(@AuthenticationPrincipal User user) {
-        return downloadService.getQueue(user.getId());
+    public List<DownloadQueueItemResponse> getQueue(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String sourceSubtitles,
+            @RequestParam(required = false) String outputSubtitles,
+            @RequestParam(required = false) String hasLang,
+            @RequestParam(required = false) String missingLang) {
+        return downloadService.getQueue(user.getId(), sourceSubtitles, outputSubtitles, hasLang, missingLang);
     }
 
     @DeleteMapping("/{id}")
