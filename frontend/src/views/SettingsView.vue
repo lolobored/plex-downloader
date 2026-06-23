@@ -440,43 +440,68 @@ async function saveOutputDirs() {
     changes.push({ mediaType: 'EPISODE', oldRoot: originalTvshowsDir.value, newRoot: form.tvshowsDir, label: 'tv shows' })
   }
 
+  // resolved map: what value each key will be saved as
+  const resolved = {
+    'output.movies.dir': form.moviesDir,
+    'output.tvshows.dir': form.tvshowsDir,
+  }
+
+  let anyRealChange = changes.length > 0
+  let allCancelled = true
+  const accumulatedResult = { moved: 0, updatedOnly: 0, failed: 0 }
+
   // Process each changed dir sequentially — show modal for each
   for (const change of changes) {
     const action = await promptRelocate(change)
     if (action === 'cancel') {
-      // Revert this field
-      if (change.mediaType === 'MOVIE') form.moviesDir = originalMoviesDir.value
-      else form.tvshowsDir = originalTvshowsDir.value
-      saving.value = false
-      return
-    }
-    if (action === 'move') {
-      try {
-        relocating.value = true
-        const result = await relocateOutput(change.mediaType, change.oldRoot, change.newRoot)
-        relocateResult.value = result
-      } catch (e) {
-        outputDirError.value = e?.response?.data?.message ?? 'Relocation failed.'
-        saving.value = false
-        relocating.value = false
-        return
-      } finally {
-        relocating.value = false
+      // Revert this field in both the form AND the resolved map
+      if (change.mediaType === 'MOVIE') {
+        form.moviesDir = originalMoviesDir.value
+        resolved['output.movies.dir'] = originalMoviesDir.value
+      } else {
+        form.tvshowsDir = originalTvshowsDir.value
+        resolved['output.tvshows.dir'] = originalTvshowsDir.value
       }
+      // don't break — process remaining dirs
+    } else {
+      allCancelled = false
+      if (action === 'move') {
+        try {
+          relocating.value = true
+          const result = await relocateOutput(change.mediaType, change.oldRoot, change.newRoot)
+          accumulatedResult.moved += result.moved
+          accumulatedResult.updatedOnly += result.updatedOnly
+          accumulatedResult.failed += result.failed
+        } catch (e) {
+          outputDirError.value = e?.response?.data?.message ?? 'Relocation failed.'
+          saving.value = false
+          relocating.value = false
+          return
+        } finally {
+          relocating.value = false
+        }
+      }
+      // 'keep' → resolved already has newRoot (form value), no relocate needed
     }
-    // 'keep' → just proceed to save
   }
 
-  // Now save the settings
-  const payload = {
-    'output.movies.dir':  form.moviesDir,
-    'output.tvshows.dir': form.tvshowsDir,
+  // Show accumulated result if any moves happened
+  if (accumulatedResult.moved > 0 || accumulatedResult.updatedOnly > 0 || accumulatedResult.failed > 0) {
+    relocateResult.value = accumulatedResult
   }
+
+  // If every changed dir was cancelled and nothing else changed, skip save
+  if (anyRealChange && allCancelled) {
+    saving.value = false
+    return
+  }
+
+  // Save with resolved values (new dir for moved/kept, old dir for cancelled)
   try {
-    await putSettings(payload)
-    // Update originals to new values after successful save
-    originalMoviesDir.value  = form.moviesDir
-    originalTvshowsDir.value = form.tvshowsDir
+    await putSettings(resolved)
+    // Update originals to the actually-saved values
+    originalMoviesDir.value  = resolved['output.movies.dir']
+    originalTvshowsDir.value = resolved['output.tvshows.dir']
     saveOk.value = true
     clearTimeout(saveOkTimer)
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)

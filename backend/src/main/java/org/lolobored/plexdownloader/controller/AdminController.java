@@ -90,10 +90,21 @@ public class AdminController {
 
     @PostMapping("/output/relocate")
     public RelocationResult relocateOutput(@RequestBody RelocateRequest req) {
+        if (req.oldRoot() == null || req.oldRoot().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "oldRoot must not be blank");
+        }
         if (req.newRoot() == null || req.newRoot().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "newRoot must not be blank");
         }
-        DownloadQueueItem.MediaType mt = DownloadQueueItem.MediaType.valueOf(req.mediaType());
+        if (req.mediaType() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "mediaType must not be null");
+        }
+        DownloadQueueItem.MediaType mt;
+        try {
+            mt = DownloadQueueItem.MediaType.valueOf(req.mediaType());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid mediaType: " + req.mediaType());
+        }
         return relocationService.relocate(mt, req.oldRoot(), req.newRoot());
     }
 }

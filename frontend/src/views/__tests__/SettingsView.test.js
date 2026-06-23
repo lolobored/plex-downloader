@@ -376,4 +376,64 @@ describe('Output relocation modal', () => {
     expect(w.find('[data-testid="relocate-result"]').exists()).toBe(true)
     expect(w.find('[data-testid="relocate-result"]').text()).toContain('2')
   })
+
+  it('Move movies + Cancel tvshows: relocates movies, putSettings uses NEW movies dir and OLD tvshows dir', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+
+    // Change both dirs
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('input[name="tvshowsDir"]').setValue('/new/tvshows')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+
+    // First modal (movies) → Move
+    await w.find('[data-testid="relocate-move-btn"]').trigger('click')
+    await flushPromises()
+
+    // Second modal (tvshows) → Cancel
+    await w.find('[data-testid="relocate-cancel-btn"]').trigger('click')
+    await flushPromises()
+
+    // relocateOutput was called for movies only
+    expect(relocateOutput).toHaveBeenCalledTimes(1)
+    expect(relocateOutput).toHaveBeenCalledWith('MOVIE', '/plex-conversion/libraries/movies', '/new/movies')
+
+    // putSettings must include NEW movies dir and OLD tvshows dir (no desync)
+    expect(putSettings).toHaveBeenCalledWith(expect.objectContaining({
+      'output.movies.dir':  '/new/movies',
+      'output.tvshows.dir': '/plex-conversion/libraries/tvshows',
+    }))
+  })
+
+  it('Move both dirs accumulates counts from both relocations', async () => {
+    relocateOutput
+      .mockResolvedValueOnce({ moved: 3, updatedOnly: 1, failed: 0 })  // movies
+      .mockResolvedValueOnce({ moved: 5, updatedOnly: 2, failed: 1 })  // tvshows
+
+    const w = factoryWithChangedDir()
+    await flushPromises()
+
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('input[name="tvshowsDir"]').setValue('/new/tvshows')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+
+    // Move movies
+    await w.find('[data-testid="relocate-move-btn"]').trigger('click')
+    await flushPromises()
+
+    // Move tvshows
+    await w.find('[data-testid="relocate-move-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(relocateOutput).toHaveBeenCalledTimes(2)
+
+    // Result should show combined totals: 8 moved, 3 updatedOnly, 1 failed
+    const resultEl = w.find('[data-testid="relocate-result"]')
+    expect(resultEl.exists()).toBe(true)
+    expect(resultEl.text()).toContain('8')  // 3+5 moved
+    expect(resultEl.text()).toContain('3')  // 1+2 updatedOnly
+    expect(resultEl.text()).toContain('1')  // 0+1 failed
+  })
 })

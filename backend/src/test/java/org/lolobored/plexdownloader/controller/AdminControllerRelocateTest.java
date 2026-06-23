@@ -105,4 +105,41 @@ class AdminControllerRelocateTest {
                     Map.of("mediaType", "MOVIE", "oldRoot", "/old", "newRoot", ""))))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void postRelocate_returns400OnBlankOldRoot() throws Exception {
+        mockMvc.perform(post("/api/admin/output/relocate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                    Map.of("mediaType", "MOVIE", "oldRoot", "", "newRoot", "/new"))))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postRelocate_returns400OnNullOldRoot() throws Exception {
+        // JSON with null oldRoot
+        String body = "{\"mediaType\":\"MOVIE\",\"oldRoot\":null,\"newRoot\":\"/new\"}";
+        mockMvc.perform(post("/api/admin/output/relocate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postRelocate_returns400OnInvalidMediaType() throws Exception {
+        mockMvc.perform(post("/api/admin/output/relocate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                    Map.of("mediaType", "BOGUS", "oldRoot", "/old", "newRoot", "/new"))))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postRelocate_returns400OnNullMediaType() throws Exception {
+        String body = "{\"mediaType\":null,\"oldRoot\":\"/old\",\"newRoot\":\"/new\"}";
+        mockMvc.perform(post("/api/admin/output/relocate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isBadRequest());
+    }
 }

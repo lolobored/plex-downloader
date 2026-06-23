@@ -7,7 +7,6 @@ import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import org.lolobored.plexdownloader.transcode.FileBrowserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ public class OutputRelocationService {
     private final DownloadQueueRepository queueRepo;
     private final FileBrowserService fileBrowserService;
 
-    @Transactional
     public RelocationResult relocate(DownloadQueueItem.MediaType mediaType, String oldRoot, String newRoot) {
         if (newRoot == null || newRoot.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid new root: not writable");
@@ -55,12 +53,14 @@ public class OutputRelocationService {
             Path relative = normalizedOldRoot.relativize(itemPath);
             String newPath = normalizedNewRoot.resolve(relative).toString();
 
+            boolean physicallyMoved = false;
             if (Files.exists(itemPath)) {
                 try {
                     Path newFilePath = Paths.get(newPath);
                     Files.createDirectories(newFilePath.getParent());
                     moveFile(itemPath, newFilePath);
                     pruneUnderRoot(normalizedOldRoot, itemPath.getParent());
+                    physicallyMoved = true;
                     moved++;
                 } catch (IOException e) {
                     log.warn("Failed to move file from {} to {}: {}", itemPath, newPath, e.getMessage());
@@ -72,7 +72,23 @@ public class OutputRelocationService {
             }
 
             item.setDestFilePath(newPath);
-            queueRepo.save(item);
+            try {
+                queueRepo.save(item);
+            } catch (Exception e) {
+                log.warn("DB save failed after moving {} → {}: {}. Attempting to move file back.", itemPath, newPath, e.getMessage());
+                if (physicallyMoved) {
+                    try {
+                        Files.move(Paths.get(newPath), itemPath, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException moveBackEx) {
+                        log.warn("Could not move file back from {} to {}: {}", newPath, itemPath, moveBackEx.getMessage());
+                    }
+                    moved--;
+                } else {
+                    updatedOnly--;
+                }
+                failed++;
+                continue;
+            }
         }
 
         return new RelocationResult(moved, updatedOnly, failed);
