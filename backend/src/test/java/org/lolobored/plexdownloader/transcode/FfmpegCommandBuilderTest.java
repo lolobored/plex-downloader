@@ -29,7 +29,8 @@ class FfmpegCommandBuilderTest {
             "-init_hw_device", "qsv=hw@va");
         assertThat(args).containsSubsequence("-hwaccel", "qsv", "-hwaccel_output_format", "qsv");
         assertThat(args).containsSubsequence("-i", "/movies/a.avi");
-        assertThat(args).containsSubsequence("-map", "0:v:0", "-map", "0:a?", "-map", "0:s?");
+        assertThat(args).containsSubsequence("-map", "0:V:0", "-map", "0:a?", "-map", "0:s?");
+        assertThat(args).doesNotContain("0:v:0"); // capital V excludes attached cover-art (mjpeg) streams
         assertThat(args).containsSubsequence("-c:v", "hevc_qsv", "-global_quality", "23");
         assertThat(args).containsSubsequence("-c:a", "copy");
         assertThat(args).containsSubsequence("-c:s", "copy"); // MKV preserves subs as-is
@@ -44,7 +45,7 @@ class FfmpegCommandBuilderTest {
                                    QualityProfile.ResolutionCap.KEEP, 23);
         p.setContainer(QualityProfile.Container.MP4);
         List<String> args = builder.build(p, "/m/e.mkv", "/out/e.mp4", new MediaInfo(60, 1280, 720));
-        assertThat(args).containsSubsequence("-map", "0:v:0", "-map", "0:a?", "-map", "0:s?");
+        assertThat(args).containsSubsequence("-map", "0:V:0", "-map", "0:a?", "-map", "0:s?");
         assertThat(args).containsSubsequence("-c:s", "mov_text"); // MP4 only supports mov_text
     }
 

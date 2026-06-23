@@ -28,9 +28,12 @@ public class FfmpegCommandBuilder {
         args.add("-hwaccel_output_format"); args.add("qsv");
         args.add("-i"); args.add(sourcePath);
 
-        // Explicit mapping: primary video (excludes attached cover-art image streams that
-        // break the QSV encode), ALL audio, and ALL subtitle streams. '?' = optional.
-        args.add("-map"); args.add("0:v:0");
+        // Explicit mapping: primary REAL video via the capital-V specifier, which excludes
+        // attached pictures / thumbnails / cover art (e.g. an embedded mjpeg poster). The
+        // lowercase '0:v:0' is positional and would select the cover-art still when it is the
+        // first video stream, feeding a bogus frame to hevc_qsv (Invalid FrameType:0). Plus
+        // ALL audio and ALL subtitle streams. '?' = optional.
+        args.add("-map"); args.add("0:V:0");
         args.add("-map"); args.add("0:a?");
         args.add("-map"); args.add("0:s?");
 
