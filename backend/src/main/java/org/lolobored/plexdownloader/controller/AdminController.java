@@ -46,6 +46,7 @@ public class AdminController {
         result.put("transcode.max.concurrent", settingsService.get("transcode.max.concurrent").orElse("2"));
         result.put("output.movies.dir",        settingsService.get("output.movies.dir").orElse(""));
         result.put("output.tvshows.dir",       settingsService.get("output.tvshows.dir").orElse(""));
+        result.put("subtitles.scan.cron",      settingsService.get("subtitles.scan.cron").orElse("0 0 4 * * *"));
         return result;
     }
 

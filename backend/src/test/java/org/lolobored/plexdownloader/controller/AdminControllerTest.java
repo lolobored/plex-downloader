@@ -109,6 +109,25 @@ class AdminControllerTest {
     }
 
     @Test
+    void getSettings_includesSubtitleScanCronWithDefault() throws Exception {
+        when(settingsService.get(anyString())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/admin/settings"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$['subtitles.scan.cron']").value("0 0 4 * * *"));
+    }
+
+    @Test
+    void getSettings_returnsStoredSubtitleScanCron() throws Exception {
+        when(settingsService.get(anyString())).thenReturn(Optional.empty());
+        when(settingsService.get("subtitles.scan.cron")).thenReturn(Optional.of("0 0 */6 * * *"));
+
+        mockMvc.perform(get("/api/admin/settings"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$['subtitles.scan.cron']").value("0 0 */6 * * *"));
+    }
+
+    @Test
     void getPlexLibrariesReturnsList() throws Exception {
         PlexLibrary lib1 = new PlexLibrary();
         lib1.setKey("1"); lib1.setTitle("Movies"); lib1.setType("movie");
