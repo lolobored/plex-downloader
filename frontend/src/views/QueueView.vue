@@ -53,13 +53,6 @@
                 class="chip"
                 :class="{ active: subFilterNone }"
                 @click="subFilterNone = !subFilterNone">No subtitles</button>
-        <select v-if="subFilterNone"
-                data-testid="sub-filter-target-none"
-                class="sub-filter-target"
-                v-model="subFilterTarget">
-          <option value="source">source</option>
-          <option value="output">output</option>
-        </select>
         <template v-if="!subFilterNone">
           <input data-testid="sub-lang-input"
                  type="text"
@@ -71,12 +64,6 @@
                   v-model="subLangMode">
             <option value="has">has lang</option>
             <option value="missing">missing lang</option>
-          </select>
-          <select data-testid="sub-filter-target-lang"
-                  class="sub-filter-target"
-                  v-model="subFilterTarget">
-            <option value="source">source</option>
-            <option value="output">output</option>
           </select>
         </template>
       </div>
@@ -401,7 +388,6 @@ const typeFilter      = ref('ALL')
 const statusFilter    = ref(new Set())
 const textFilter      = ref('')
 const subFilterNone   = ref(false)    // "No subtitles" toggle
-const subFilterTarget = ref('source') // 'source' | 'output'
 const subLang         = ref('')       // language code filter, e.g. 'en'
 const subLangMode     = ref('has')    // 'has' | 'missing'
 
@@ -450,29 +436,25 @@ function isSubsMissing(langs, scanned) {
 }
 
 function matchesSubtitle(item) {
-  // "No subtitles" check — if active, apply it and stop
+  // "No subtitles": show if EITHER source or output is scanned-empty — the user doesn't
+  // care which side lacks subs. Hidden only when both sides have subs.
   if (subFilterNone.value) {
-    if (subFilterTarget.value === 'source') {
-      return isSubsMissing(item.sourceSubtitleLangs, item.sourceSubtitlesScanned)
-    }
-    if (subFilterTarget.value === 'output') {
-      // output subs only apply to DONE items; non-DONE items won't have output subs
-      return isSubsMissing(item.outputSubtitleLangs, item.outputSubtitlesScanned)
-    }
-    return true
+    return isSubsMissing(item.sourceSubtitleLangs, item.sourceSubtitlesScanned)
+        || isSubsMissing(item.outputSubtitleLangs, item.outputSubtitlesScanned)
   }
 
-  // Language has/missing check — only when subNone is off and a lang code is entered
+  // Language has/missing — match if EITHER side qualifies.
   if (subLang.value.trim()) {
-    const lang = subLang.value.trim().toLowerCase()
-    const targetLangs = subFilterTarget.value === 'output' ? item.outputSubtitleLangs : item.sourceSubtitleLangs
-    const scanned     = subFilterTarget.value === 'output' ? item.outputSubtitlesScanned : item.sourceSubtitlesScanned
-    const langs       = parseLangs(targetLangs)
+    const lang     = subLang.value.trim().toLowerCase()
+    const srcLangs = parseLangs(item.sourceSubtitleLangs)
+    const outLangs = parseLangs(item.outputSubtitleLangs)
     if (subLangMode.value === 'has') {
-      return langs.includes(lang)
+      return srcLangs.includes(lang) || outLangs.includes(lang)
     }
     if (subLangMode.value === 'missing') {
-      return scanned && !langs.includes(lang)
+      const srcMissing = item.sourceSubtitlesScanned && !srcLangs.includes(lang)
+      const outMissing = item.outputSubtitlesScanned && !outLangs.includes(lang)
+      return srcMissing || outMissing
     }
   }
 

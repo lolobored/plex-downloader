@@ -677,35 +677,43 @@ describe('QueueView', () => {
 
   // ── Subtitle client-side filter ───────────────────────────────────────────────
 
-  it('"No subtitles (source)" filter keeps only items missing source subs', async () => {
+  it('"No subtitles" filter keeps items missing subs on EITHER side, hides only when both have subs', async () => {
     const items = [
-      movieItem({ id: 1, title: 'No Source Subs', sourceSubtitleLangs: null,   sourceSubtitlesScanned: true }),
-      movieItem({ id: 2, mediaId: 11, title: 'Has Source Subs', sourceSubtitleLangs: ',eng,', sourceSubtitlesScanned: true }),
+      movieItem({ id: 1, title: 'Missing Source', status: 'DONE',
+                  sourceSubtitleLangs: null,   sourceSubtitlesScanned: true,
+                  outputSubtitleLangs: ',eng,', outputSubtitlesScanned: true }),
+      movieItem({ id: 2, mediaId: 11, title: 'Missing Output', status: 'DONE',
+                  sourceSubtitleLangs: ',eng,', sourceSubtitlesScanned: true,
+                  outputSubtitleLangs: null,    outputSubtitlesScanned: true }),
+      movieItem({ id: 3, mediaId: 12, title: 'Has Both Subs', status: 'DONE',
+                  sourceSubtitleLangs: ',eng,', sourceSubtitlesScanned: true,
+                  outputSubtitleLangs: ',eng,', outputSubtitlesScanned: true }),
     ]
     const { wrapper } = factory(items)
-    // enable "no subtitles" filter targeting source
     await wrapper.find('[data-testid="sub-filter-none"]').trigger('click')
-    // target should default to 'source' or select it
-    const target = wrapper.find('[data-testid="sub-filter-target-none"]')
-    if (target.exists()) await target.setValue('source')
     await flushPromises()
-    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
-    expect(wrapper.text()).toContain('No Source Subs')
-    expect(wrapper.text()).not.toContain('Has Source Subs')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('2')
+    expect(wrapper.text()).toContain('Missing Source')
+    expect(wrapper.text()).toContain('Missing Output')
+    expect(wrapper.text()).not.toContain('Has Both Subs')
   })
 
-  it('"No subtitles (output)" filter keeps only DONE items missing output subs', async () => {
+  it('subLang "has" matches the lang on EITHER source or output', async () => {
     const items = [
-      movieItem({ id: 1, title: 'No Output Subs',  status: 'DONE', outputSubtitleLangs: null,   outputSubtitlesScanned: true }),
-      movieItem({ id: 2, mediaId: 11, title: 'Has Output Subs', status: 'DONE', outputSubtitleLangs: ',eng,', outputSubtitlesScanned: true }),
+      movieItem({ id: 1, title: 'EN in Source', sourceSubtitleLangs: ',en,', sourceSubtitlesScanned: true }),
+      movieItem({ id: 2, mediaId: 11, title: 'EN in Output only', status: 'DONE',
+                  sourceSubtitleLangs: ',fra,', sourceSubtitlesScanned: true,
+                  outputSubtitleLangs: ',en,',  outputSubtitlesScanned: true }),
+      movieItem({ id: 3, mediaId: 12, title: 'No EN anywhere', sourceSubtitleLangs: ',fra,', sourceSubtitlesScanned: true }),
     ]
     const { wrapper } = factory(items)
-    await wrapper.find('[data-testid="sub-filter-none"]').trigger('click')
-    await wrapper.find('[data-testid="sub-filter-target-none"]').setValue('output')
+    await wrapper.find('[data-testid="sub-lang-mode"]').setValue('has')
+    await wrapper.find('[data-testid="sub-lang-input"]').setValue('en')
     await flushPromises()
-    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
-    expect(wrapper.text()).toContain('No Output Subs')
-    expect(wrapper.text()).not.toContain('Has Output Subs')
+    expect(wrapper.text()).toContain('EN in Source')
+    expect(wrapper.text()).toContain('EN in Output only')
+    expect(wrapper.text()).not.toContain('No EN anywhere')
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('2')
   })
 
   // ── Subtitle lang has/missing filter ─────────────────────────────────────────
