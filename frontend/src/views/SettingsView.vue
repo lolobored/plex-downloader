@@ -142,9 +142,10 @@
       </div>
       <p v-if="subtitleScanError" class="error-inline">{{ subtitleScanError }}</p>
       <div class="sync-actions">
-        <button class="btn-save" data-testid="subtitle-save-btn" @click="saveSubtitles" :disabled="saving">
-          {{ saving ? 'Saving…' : 'Save' }}
+        <button class="btn-save" data-testid="subtitle-save-btn" @click="saveSubtitles" :disabled="subtitleSaving">
+          {{ subtitleSaving ? 'Saving…' : 'Save' }}
         </button>
+        <p v-if="subtitleSaveOk" class="ok">Saved.</p>
         <button class="btn-sync" data-testid="subtitle-scan-now-btn" @click="scanSubtitles(false)" :disabled="subtitleScanRunning">
           {{ subtitleScanRunning ? 'Scanning…' : '↻ Scan now' }}
         </button>
@@ -253,8 +254,7 @@ const SUBTITLE_SCAN_OPTIONS = [
 ]
 
 function matchSubtitleCron(value) {
-  const match = SUBTITLE_SCAN_OPTIONS.find(o => o.cron === value)
-  return match ? match.cron : SUBTITLE_SCAN_OPTIONS[0].cron
+  return matchCron(value, SUBTITLE_SCAN_OPTIONS)
 }
 
 function matchCron(value, options) {
@@ -269,6 +269,9 @@ const syncing    = ref(false)
 const syncStatus = ref(null)
 let saveOkTimer = null
 let destroyed = false
+const subtitleSaving = ref(false)
+const subtitleSaveOk = ref(false)
+let subtitleSaveOkTimer = null
 
 // Subtitles scan state
 const subtitleStatus      = ref(null)
@@ -278,6 +281,7 @@ let subtitlePollTimer = null
 
 onUnmounted(() => {
   clearTimeout(saveOkTimer)
+  clearTimeout(subtitleSaveOkTimer)
   clearInterval(subtitlePollTimer)
   destroyed = true
 })
@@ -470,18 +474,18 @@ async function sync() {
 }
 
 async function saveSubtitles() {
-  saving.value = true
-  saveOk.value = false
+  subtitleSaving.value = true
+  subtitleSaveOk.value = false
   const payload = {
     'subtitles.scan.cron': form.subtitleScanCron
   }
   try {
     await putSettings(payload)
-    saveOk.value = true
-    clearTimeout(saveOkTimer)
-    saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
+    subtitleSaveOk.value = true
+    clearTimeout(subtitleSaveOkTimer)
+    subtitleSaveOkTimer = setTimeout(() => { subtitleSaveOk.value = false }, 2000)
   } finally {
-    saving.value = false
+    subtitleSaving.value = false
   }
 }
 
@@ -509,17 +513,28 @@ function startSubtitlePolling() {
 async function scanSubtitles(force) {
   subtitleScanError.value = null
   subtitleScanRunning.value = true
+  let enterPolling = false
   try {
     await runSubtitleScan(force)
-    // Refresh status and start polling
+    await sleep(600)   // give backend a moment to flip to running
     subtitleStatus.value = await getSubtitleScanStatus()
-    if (subtitleStatus.value.running) startSubtitlePolling()
-    else subtitleScanRunning.value = false
+    if (subtitleStatus.value.running) {
+      enterPolling = true
+      startSubtitlePolling()
+    } else {
+      subtitleScanRunning.value = false
+    }
   } catch (e) {
     if (e?.response?.status === 409) {
-      // Already running — just start polling
-      subtitleStatus.value = await getSubtitleScanStatus()
-      startSubtitlePolling()
+      // Already running — fetch status and start polling, but reset if that throws
+      try {
+        subtitleStatus.value = await getSubtitleScanStatus()
+        enterPolling = true
+        startSubtitlePolling()
+      } catch {
+        subtitleScanError.value = 'Scan already running but could not fetch status.'
+        subtitleScanRunning.value = false
+      }
     } else {
       subtitleScanError.value = e?.response?.data?.message ?? 'Scan failed.'
       subtitleScanRunning.value = false

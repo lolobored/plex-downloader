@@ -45,7 +45,7 @@ public class SubtitleScanService {
         }
         scanned = 0; failed = 0;
         try {
-            List<Movie> movies = force ? movieRepo.findAll() : movieRepo.findBySubtitlesScannedAtIsNull();
+            List<Movie> movies = force ? movieRepo.findAll() : movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull();
             for (Movie m : movies) {
                 if (m.getFilePath() == null) continue;
                 SubtitleProbe.ProbeResult r = subtitleProbe.probe(m.getFilePath());
@@ -53,7 +53,7 @@ public class SubtitleScanService {
                 else failed++;
                 throttle();
             }
-            List<Episode> eps = force ? episodeRepo.findAll() : episodeRepo.findBySubtitlesScannedAtIsNull();
+            List<Episode> eps = force ? episodeRepo.findAll() : episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull();
             for (Episode e : eps) {
                 if (e.getFilePath() == null) continue;
                 SubtitleProbe.ProbeResult r = subtitleProbe.probe(e.getFilePath());
@@ -63,7 +63,7 @@ public class SubtitleScanService {
             }
             List<DownloadQueueItem> outs = force
                 ? queueRepo.findByStatus(DownloadQueueItem.Status.DONE)
-                : queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNull(DownloadQueueItem.Status.DONE);
+                : queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(DownloadQueueItem.Status.DONE);
             for (DownloadQueueItem q : outs) {
                 if (q.getDestFilePath() == null) continue;
                 SubtitleProbe.ProbeResult r = subtitleProbe.probe(q.getDestFilePath());

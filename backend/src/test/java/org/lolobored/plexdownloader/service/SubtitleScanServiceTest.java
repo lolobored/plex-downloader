@@ -27,11 +27,8 @@ class SubtitleScanServiceTest {
 
     @Test void scan_unknowns_setsSourceLangsAndScannedAt() {
         Movie m = new Movie(); m.setId(1L); m.setFilePath("/nas/m.mkv");
-        when(movieRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of(m));
         when(movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of(m));
-        when(episodeRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of());
         when(episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of());
-        when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNull(DownloadQueueItem.Status.DONE)).thenReturn(List.of());
         when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(DownloadQueueItem.Status.DONE)).thenReturn(List.of());
         when(subtitleProbe.probe("/nas/m.mkv")).thenReturn(new SubtitleProbe.ProbeResult(true, List.of("eng")));
 
@@ -43,11 +40,8 @@ class SubtitleScanServiceTest {
 
     @Test void scan_failedProbe_leavesUnscanned_countsFailed() {
         Movie m = new Movie(); m.setId(1L); m.setFilePath("/nas/bad.mkv");
-        when(movieRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of(m));
         when(movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of(m));
-        when(episodeRepo.findBySubtitlesScannedAtIsNull()).thenReturn(List.of());
         when(episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of());
-        when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNull(any())).thenReturn(List.of());
         when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(any())).thenReturn(List.of());
         when(subtitleProbe.probe("/nas/bad.mkv")).thenReturn(new SubtitleProbe.ProbeResult(false, List.of()));
 
@@ -55,5 +49,20 @@ class SubtitleScanServiceTest {
 
         verify(movieRepo, never()).save(any());
         assertThat(service.status().failed()).isEqualTo(1);
+    }
+
+    @Test void scan_nullPath_movie_isSkippedAndNotCountedAsRemaining() {
+        Movie nullPathMovie = new Movie(); nullPathMovie.setId(2L); // filePath is null
+        // The ...AndFilePathIsNotNull finder excludes it → scan() never sees it
+        when(movieRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of());
+        when(episodeRepo.findBySubtitlesScannedAtIsNullAndFilePathIsNotNull()).thenReturn(List.of());
+        when(queueRepo.findByStatusAndOutputSubtitlesScannedAtIsNullAndDestFilePathIsNotNull(any())).thenReturn(List.of());
+
+        service.scan(false);
+
+        verify(subtitleProbe, never()).probe(any());
+        assertThat(service.status().remainingUnknown()).isEqualTo(0);
+        assertThat(service.status().scanned()).isEqualTo(0);
+        assertThat(service.status().failed()).isEqualTo(0);
     }
 }
