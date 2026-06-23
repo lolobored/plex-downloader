@@ -47,6 +47,20 @@
       </div>
       <input data-testid="filter-search" v-model="textFilter"
              type="search" class="filter-search" placeholder="Search…" />
+      <div class="filter-group">
+        <button type="button"
+                data-testid="sub-filter-none"
+                class="chip"
+                :class="{ active: subFilterNone }"
+                @click="subFilterNone = !subFilterNone">No subtitles</button>
+        <select v-if="subFilterNone"
+                data-testid="sub-filter-target"
+                class="sub-filter-target"
+                v-model="subFilterTarget">
+          <option value="source">source</option>
+          <option value="output">output</option>
+        </select>
+      </div>
     </div>
 
     <div v-if="dlStore.queueItems.length === 0" class="empty">Queue is empty.</div>
@@ -181,6 +195,7 @@ import { removeQueueItem, retryQueueItem, retryAllErrored, transcodeAgain as api
 import { unsubscribe, getPlaylistQueueCount } from '@/api/playlists.js'
 import { getConcurrency, setConcurrency } from '@/api/transcode.js'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 const router    = useRouter()
 const dlStore   = useDownloadStore()
@@ -338,6 +353,18 @@ const QueueItemRow = defineComponent({
               onClick: (e) => { e.stopPropagation(); emit('retry', item.id) }
             }, isRetrying ? '…' : '⟳ Retry')
           : null,
+        h(SubtitleBadge, {
+          langs: item.sourceSubtitleLangs,
+          scanned: item.sourceSubtitlesScanned,
+          'data-testid': 'subtitle-badge-src'
+        }),
+        (item.status === 'DONE')
+          ? h(SubtitleBadge, {
+              langs: item.outputSubtitleLangs,
+              scanned: item.outputSubtitlesScanned,
+              'data-testid': 'subtitle-badge-out'
+            })
+          : null,
         h('button', {
           class: 'btn-remove',
           'data-testid': `remove-btn-${item.id}`,
@@ -351,9 +378,11 @@ const QueueItemRow = defineComponent({
 })
 
 // ── Filter state ──────────────────────────────────────────────────────────────
-const typeFilter   = ref('ALL')
-const statusFilter = ref(new Set())
-const textFilter   = ref('')
+const typeFilter      = ref('ALL')
+const statusFilter    = ref(new Set())
+const textFilter      = ref('')
+const subFilterNone   = ref(false)   // "No subtitles" toggle
+const subFilterTarget = ref('source') // 'source' | 'output'
 
 const STATUS_CHIPS = [
   { key: 'QUEUED',      label: 'Queued'      },
@@ -385,6 +414,32 @@ function matchesText(item) {
     .filter(Boolean).some(s => s.toLowerCase().includes(q))
 }
 
+/**
+ * Parse subtitle CSV into array of lang codes.
+ * ",eng,fra," → ["eng","fra"]
+ */
+function parseLangs(langs) {
+  if (!langs) return []
+  return langs.replace(/^,+|,+$/g, '').split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 0)
+}
+
+function isSubsMissing(langs, scanned) {
+  if (!scanned) return false // not scanned = unknown, don't filter
+  return parseLangs(langs).length === 0
+}
+
+function matchesSubtitle(item) {
+  if (!subFilterNone.value) return true
+  if (subFilterTarget.value === 'source') {
+    return isSubsMissing(item.sourceSubtitleLangs, item.sourceSubtitlesScanned)
+  }
+  if (subFilterTarget.value === 'output') {
+    // output subs only apply to DONE items; non-DONE items won't have output subs
+    return isSubsMissing(item.outputSubtitleLangs, item.outputSubtitlesScanned)
+  }
+  return true
+}
+
 function setTypeFilter(type) {
   typeFilter.value = typeFilter.value === type ? 'ALL' : type
 }
@@ -397,7 +452,7 @@ function toggleStatusFilter(status) {
 
 // ── Tree computation ──────────────────────────────────────────────────────────
 const filteredItems = computed(() =>
-  dlStore.queueItems.filter(matchesType).filter(matchesStatus).filter(matchesText)
+  dlStore.queueItems.filter(matchesType).filter(matchesStatus).filter(matchesText).filter(matchesSubtitle)
 )
 
 const totalVisible = computed(() => filteredItems.value.length)

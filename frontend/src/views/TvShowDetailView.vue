@@ -26,7 +26,11 @@
           :subtitle="`${s.episodeCount} episodes`"
           :watched="s.watched"
           @click="router.push(`/tv/${show.id}/seasons/${s.id}`)"
-        />
+        >
+          <template v-if="s.hasEpisodesMissingSubtitles" #badge>
+            <span data-testid="missing-subs-badge" class="missing-subs-badge">missing subs</span>
+          </template>
+        </PosterCard>
       </div>
     </div>
 
@@ -46,6 +50,7 @@ import { getShow, getSeasons } from '@/api/library.js'
 import { useWatchedStore } from '@/stores/watched.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SubscribeButton from '@/components/SubscribeButton.vue'
+import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 const route        = useRoute()
 const router       = useRouter()

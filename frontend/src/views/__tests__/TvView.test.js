@@ -12,14 +12,23 @@ import { getShows } from '../../api/library.js'
 
 const fakeShows = {
   content: [
-    { id: 1, plexId: 'tv1', title: 'Breaking Bad', year: 2008, totalSeasons: 5 },
-    { id: 2, plexId: 'tv2', title: 'The Wire',     year: 2002, totalSeasons: 5 },
-    { id: 3, plexId: 'tv3', title: 'Arrested Development', year: 2003, totalSeasons: 5 }
+    { id: 1, plexId: 'tv1', title: 'Breaking Bad',        year: 2008, totalSeasons: 5, hasEpisodesMissingSubtitles: true },
+    { id: 2, plexId: 'tv2', title: 'The Wire',            year: 2002, totalSeasons: 5, hasEpisodesMissingSubtitles: false },
+    { id: 3, plexId: 'tv3', title: 'Arrested Development', year: 2003, totalSeasons: 5, hasEpisodesMissingSubtitles: false }
   ],
   totalPages: 1, totalElements: 3, number: 0
 }
 
-const PcStub = { template: '<div class="pc">{{ title }}</div>', props: ['title','plexId','subtitle','watched'] }
+// Stub that surfaces both title text and badge slot
+const PcStub = {
+  template: '<div class="pc">{{ title }}<slot name="badge" /></div>',
+  props: ['title','plexId','subtitle','watched']
+}
+
+const SubBadgeStub = {
+  template: '<span class="sub-badge" :data-langs="langs" :data-scanned="scanned ? \'true\' : \'false\'" />',
+  props: ['langs','scanned']
+}
 
 describe('TvView', () => {
   beforeEach(() => {
@@ -96,5 +105,23 @@ describe('TvView', () => {
 
   it('has name TvView for keep-alive', () => {
     expect(TvView.name ?? TvView.__name).toBe('TvView')
+  })
+
+  // ── Aggregate subtitle badge ──────────────────────────────────────────────────
+
+  it('shows missing-subs aggregate badge for show with hasEpisodesMissingSubtitles=true', async () => {
+    const w = mount(TvView, { global: { plugins: [createTestingPinia()],
+      stubs: { PosterCard: PcStub, SearchFilter: true, SubtitleBadge: SubBadgeStub } } })
+    await flushPromises()
+    // Breaking Bad has hasEpisodesMissingSubtitles: true → should have an aggregate badge
+    expect(w.find('[data-testid="missing-subs-badge"]').exists()).toBe(true)
+  })
+
+  it('only shows missing-subs aggregate badge when flag is true, not for all shows', async () => {
+    const w = mount(TvView, { global: { plugins: [createTestingPinia()],
+      stubs: { PosterCard: PcStub, SearchFilter: true, SubtitleBadge: SubBadgeStub } } })
+    await flushPromises()
+    // Only 1 of 3 shows has the flag
+    expect(w.findAll('[data-testid="missing-subs-badge"]')).toHaveLength(1)
   })
 })

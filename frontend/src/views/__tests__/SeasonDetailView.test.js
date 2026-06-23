@@ -18,9 +18,14 @@ import { getShow, getSeason, getEpisodes } from '../../api/library.js'
 const fakeShow    = { id: 10, plexId: 'show-1', title: 'Breaking Bad' }
 const fakeSeason  = { id: 100, plexId: 's1', seasonNumber: 1, title: 'Season 1', episodeCount: 2 }
 const fakeEpisodes = [
-  { id: 200, plexId: 'ep-200', episodeNumber: 1, title: 'Pilot',              airDate: '2008-01-20', thumbnailUrl: null },
-  { id: 201, plexId: 'ep-201', episodeNumber: 2, title: "Cat's in the Bag",   airDate: '2008-01-27', thumbnailUrl: null }
+  { id: 200, plexId: 'ep-200', episodeNumber: 1, title: 'Pilot',              airDate: '2008-01-20', thumbnailUrl: null, subtitleLangs: ',eng,', subtitlesScanned: true },
+  { id: 201, plexId: 'ep-201', episodeNumber: 2, title: "Cat's in the Bag",   airDate: '2008-01-27', thumbnailUrl: null, subtitleLangs: null,    subtitlesScanned: false }
 ]
+
+const SubBadgeStub = {
+  template: '<span class="sub-badge" :data-langs="langs" :data-scanned="scanned ? \'true\' : \'false\'" />',
+  props: ['langs','scanned']
+}
 
 function factory(overrides = {}) {
   const pinia = createTestingPinia({ createSpy: vi.fn })
@@ -34,7 +39,8 @@ function factory(overrides = {}) {
       plugins: [pinia],
       stubs: {
         SubscribeButton: { template: '<div class="sb" :data-season-id="seasonId" />', props: ['showId', 'small', 'seasonId'] },
-        DownloadButton:  { template: '<button class="dl-btn" />', props: ['type', 'mediaId', 'small'] }
+        DownloadButton:  { template: '<button class="dl-btn" />', props: ['type', 'mediaId', 'small'] },
+        SubtitleBadge:   SubBadgeStub
       }
     }
   })
@@ -109,5 +115,46 @@ describe('SeasonDetailView', () => {
     const sb = w.find('.sb')
     expect(sb.exists()).toBe(true)
     expect(sb.attributes('data-season-id')).toBe('100')
+  })
+
+  // ── Subtitle filter + badge tests ────────────────────────────────────────────
+
+  it('toggling "No subtitles" filter re-calls getEpisodes with subtitles: none', async () => {
+    const { w } = factory()
+    await flushPromises()
+    getEpisodes.mockClear()
+    await w.find('[data-testid="sub-filter-none"]').trigger('click')
+    await flushPromises()
+    expect(getEpisodes).toHaveBeenCalledWith('10', '100', expect.objectContaining({ subtitles: 'none' }))
+  })
+
+  it('entering a lang code with has-mode passes hasLang to getEpisodes', async () => {
+    const { w } = factory()
+    await flushPromises()
+    getEpisodes.mockClear()
+    await w.find('[data-testid="sub-lang-mode"]').setValue('has')
+    await w.find('[data-testid="sub-lang-input"]').setValue('eng')
+    await flushPromises()
+    expect(getEpisodes).toHaveBeenCalledWith('10', '100', expect.objectContaining({ hasLang: 'eng' }))
+  })
+
+  it('entering a lang code with missing-mode passes missingLang to getEpisodes', async () => {
+    const { w } = factory()
+    await flushPromises()
+    getEpisodes.mockClear()
+    await w.find('[data-testid="sub-lang-mode"]').setValue('missing')
+    await w.find('[data-testid="sub-lang-input"]').setValue('fra')
+    await flushPromises()
+    expect(getEpisodes).toHaveBeenCalledWith('10', '100', expect.objectContaining({ missingLang: 'fra' }))
+  })
+
+  it('renders a SubtitleBadge per episode', async () => {
+    const { w } = factory()
+    await flushPromises()
+    const badges = w.findAll('.sub-badge')
+    expect(badges).toHaveLength(2)
+    expect(badges[0].attributes('data-langs')).toBe(',eng,')
+    expect(badges[0].attributes('data-scanned')).toBe('true')
+    expect(badges[1].attributes('data-scanned')).toBe('false')
   })
 })

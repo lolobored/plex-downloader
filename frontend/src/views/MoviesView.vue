@@ -3,6 +3,19 @@
     <div class="toolbar">
       <h2>Movies <span v-if="totalElements > 0" class="count-badge" data-testid="count-badge">{{ totalElements }}</span></h2>
       <SearchFilter v-model:search="search" v-model:year="year" />
+      <div class="sub-filter-bar">
+        <button type="button"
+                data-testid="sub-filter-none"
+                class="chip"
+                :class="{ active: subNone }"
+                @click="subNone = !subNone">No subtitles</button>
+        <select data-testid="sub-lang-mode" class="sub-lang-mode" v-model="subLangMode">
+          <option value="has">has</option>
+          <option value="missing">missing</option>
+        </select>
+        <input data-testid="sub-lang-input" type="text" class="sub-lang-input"
+               v-model="subLang" placeholder="lang code…" />
+      </div>
     </div>
 
     <div class="content-wrap">
@@ -30,6 +43,7 @@
             @click="router.push(`/movies/${m.id}`)"
           >
             <template #badge>
+              <SubtitleBadge :langs="m.subtitleLangs" :scanned="m.subtitlesScanned" />
               <DownloadButton type="MOVIE" :mediaId="m.id" small />
             </template>
           </PosterCard>
@@ -60,6 +74,7 @@ import { getMovies } from '@/api/library.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
 import DownloadButton from '@/components/DownloadButton.vue'
+import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 defineOptions({ name: 'MoviesView' })
 
@@ -73,6 +88,9 @@ const hasMore        = ref(true)
 const totalElements  = ref(0)
 const search         = ref('')
 const year           = ref(null)
+const subNone        = ref(false)   // "No subtitles" toggle
+const subLang        = ref('')      // language code input
+const subLangMode    = ref('has')   // 'has' | 'missing'
 const sentinel     = ref(null)
 const activeLetter = ref('')
 const sectionRefs  = {}   // plain object — DOM refs only, no reactivity needed
@@ -120,7 +138,10 @@ async function loadMore() {
       search: search.value || undefined,
       year: year.value || undefined,
       page: page.value,
-      size: 100
+      size: 100,
+      subtitles: subNone.value ? 'none' : undefined,
+      hasLang: (!subNone.value && subLangMode.value === 'has' && subLang.value) ? subLang.value : undefined,
+      missingLang: (!subNone.value && subLangMode.value === 'missing' && subLang.value) ? subLang.value : undefined
     })
     allMovies.value.push(...data.content)
     hasMore.value = page.value < data.totalPages - 1
@@ -148,7 +169,7 @@ function reset() {
   Object.keys(sectionRefs).forEach(k => delete sectionRefs[k])
 }
 
-watch([search, year], () => { reset(); loadMore() })
+watch([search, year, subNone, subLang, subLangMode], () => { reset(); loadMore() })
 
 // Infinite scroll via IntersectionObserver on sentinel
 let scrollObserver = null

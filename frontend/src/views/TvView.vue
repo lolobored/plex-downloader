@@ -28,7 +28,11 @@
             :subtitle="`${s.totalSeasons} season${s.totalSeasons === 1 ? '' : 's'}`"
             :watched="s.watched"
             @click="router.push(`/tv/${s.id}`)"
-          />
+          >
+            <template v-if="s.hasEpisodesMissingSubtitles" #badge>
+              <span data-testid="missing-subs-badge" class="missing-subs-badge">missing subs</span>
+            </template>
+          </PosterCard>
         </div>
 
         <div ref="sentinel" class="sentinel" />
@@ -55,6 +59,7 @@ import { useRouter } from 'vue-router'
 import { getShows } from '@/api/library.js'
 import PosterCard from '@/components/PosterCard.vue'
 import SearchFilter from '@/components/SearchFilter.vue'
+import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 defineOptions({ name: 'TvView' })
 

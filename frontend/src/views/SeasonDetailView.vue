@@ -15,6 +15,19 @@
 
     <div class="episodes-section">
       <h3>Episodes</h3>
+      <div class="sub-filter-bar">
+        <button type="button"
+                data-testid="sub-filter-none"
+                class="chip"
+                :class="{ active: subNone }"
+                @click="subNone = !subNone">No subtitles</button>
+        <select data-testid="sub-lang-mode" class="sub-lang-mode" v-model="subLangMode">
+          <option value="has">has</option>
+          <option value="missing">missing</option>
+        </select>
+        <input data-testid="sub-lang-input" type="text" class="sub-lang-input"
+               v-model="subLang" placeholder="lang code…" />
+      </div>
       <div class="episodes-grid">
         <div v-for="ep in episodes" :key="ep.id" class="ep-card"
              @click="router.push(`/tv/${show.id}/seasons/${season.id}/episodes/${ep.id}`)">
@@ -27,6 +40,7 @@
             <p class="ep-title">{{ ep.title }}</p>
             <p class="ep-air">{{ ep.airDate }}</p>
           </div>
+          <SubtitleBadge :langs="ep.subtitleLangs" :scanned="ep.subtitlesScanned" />
           <span v-if="watchedStore.isWatched(show.id, ep.id)" class="watched-badge">✓</span>
           <DownloadButton v-else type="EPISODE" :mediaId="ep.id" small />
         </div>
@@ -36,12 +50,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getShow, getSeason, getEpisodes } from '@/api/library.js'
 import { useWatchedStore } from '@/stores/watched.js'
 import SubscribeButton from '@/components/SubscribeButton.vue'
 import DownloadButton from '@/components/DownloadButton.vue'
+import SubtitleBadge from '@/components/SubtitleBadge.vue'
 
 const route        = useRoute()
 const router       = useRouter()
@@ -50,6 +65,21 @@ const show         = ref(null)
 const season       = ref(null)
 const episodes     = ref([])
 const loading      = ref(true)
+
+// Subtitle filter state
+const subNone     = ref(false)
+const subLang     = ref('')
+const subLangMode = ref('has')
+
+async function loadEpisodes() {
+  const { showId, seasonId } = route.params
+  const eps = await getEpisodes(showId, seasonId, {
+    subtitles: subNone.value ? 'none' : undefined,
+    hasLang: (!subNone.value && subLangMode.value === 'has' && subLang.value) ? subLang.value : undefined,
+    missingLang: (!subNone.value && subLangMode.value === 'missing' && subLang.value) ? subLang.value : undefined
+  })
+  episodes.value = eps
+}
 
 async function load() {
   const { showId, seasonId } = route.params
@@ -68,6 +98,9 @@ async function load() {
     loading.value  = false
   }
 }
+
+watch([subNone, subLang, subLangMode], () => { loadEpisodes() })
+
 load()
 </script>
 

@@ -39,6 +39,8 @@ function movieItem(overrides = {}) {
     queuePosition: 1, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
     compressionRatio: null, sourceSizeBytes: null, outputSizeBytes: null,
     transcodeStartedAt: null,
+    sourceSubtitleLangs: null, sourceSubtitlesScanned: false,
+    outputSubtitleLangs: null, outputSubtitlesScanned: false,
     ...overrides
   }
 }
@@ -51,6 +53,8 @@ function episodeItem(overrides = {}) {
     queuePosition: 2, requestedAt: '2026-01-01T00:00:00Z', completedAt: null,
     compressionRatio: null, sourceSizeBytes: null, outputSizeBytes: null,
     transcodeStartedAt: null,
+    sourceSubtitleLangs: null, sourceSubtitlesScanned: false,
+    outputSubtitleLangs: null, outputSubtitlesScanned: false,
     ...overrides
   }
 }
@@ -633,6 +637,75 @@ describe('QueueView', () => {
     })])
     await wrapper.find('[data-testid="info-btn"]').trigger('click')
     expect(wrapper.find('[data-testid="info-duration"]').text()).toBe('45s')
+  })
+
+  // ── Subtitle badges in queue rows ─────────────────────────────────────────────
+
+  it('source subtitle badge visible on QUEUED row', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'QUEUED',
+      sourceSubtitleLangs: ',eng,', sourceSubtitlesScanned: true
+    })])
+    expect(wrapper.find('[data-testid="subtitle-badge-src"]').exists()).toBe(true)
+  })
+
+  it('output subtitle badge NOT visible on non-DONE row', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'QUEUED',
+      outputSubtitleLangs: ',eng,', outputSubtitlesScanned: true
+    })])
+    expect(wrapper.find('[data-testid="subtitle-badge-out"]').exists()).toBe(false)
+  })
+
+  it('output subtitle badge visible on DONE row', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE',
+      outputSubtitleLangs: ',eng,', outputSubtitlesScanned: true
+    })])
+    expect(wrapper.find('[data-testid="subtitle-badge-out"]').exists()).toBe(true)
+  })
+
+  it('both source and output subtitle badges visible on DONE row', () => {
+    const { wrapper } = factory([movieItem({
+      status: 'DONE',
+      sourceSubtitleLangs: ',eng,', sourceSubtitlesScanned: true,
+      outputSubtitleLangs: ',fra,', outputSubtitlesScanned: true
+    })])
+    expect(wrapper.find('[data-testid="subtitle-badge-src"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="subtitle-badge-out"]').exists()).toBe(true)
+  })
+
+  // ── Subtitle client-side filter ───────────────────────────────────────────────
+
+  it('"No subtitles (source)" filter keeps only items missing source subs', async () => {
+    const items = [
+      movieItem({ id: 1, title: 'No Source Subs', sourceSubtitleLangs: null,   sourceSubtitlesScanned: true }),
+      movieItem({ id: 2, mediaId: 11, title: 'Has Source Subs', sourceSubtitleLangs: ',eng,', sourceSubtitlesScanned: true }),
+    ]
+    const { wrapper } = factory(items)
+    // enable "no subtitles" filter targeting source
+    await wrapper.find('[data-testid="sub-filter-none"]').trigger('click')
+    // target should default to 'source' or select it
+    const target = wrapper.find('[data-testid="sub-filter-target"]')
+    if (target.exists()) await target.setValue('source')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+    expect(wrapper.text()).toContain('No Source Subs')
+    expect(wrapper.text()).not.toContain('Has Source Subs')
+  })
+
+  it('"No subtitles (output)" filter keeps only DONE items missing output subs', async () => {
+    const items = [
+      movieItem({ id: 1, title: 'No Output Subs',  status: 'DONE', outputSubtitleLangs: null,   outputSubtitlesScanned: true }),
+      movieItem({ id: 2, mediaId: 11, title: 'Has Output Subs', status: 'DONE', outputSubtitleLangs: ',eng,', outputSubtitlesScanned: true }),
+    ]
+    const { wrapper } = factory(items)
+    await wrapper.find('[data-testid="sub-filter-none"]').trigger('click')
+    await wrapper.find('[data-testid="sub-filter-target"]').setValue('output')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="count-badge"]').text()).toBe('1')
+    expect(wrapper.text()).toContain('No Output Subs')
+    expect(wrapper.text()).not.toContain('Has Output Subs')
   })
 
   // ── Transcode again ───────────────────────────────────────────────────────────

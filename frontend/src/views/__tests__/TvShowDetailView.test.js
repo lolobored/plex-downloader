@@ -14,6 +14,11 @@ vi.mock('vue-router', () => ({
 }))
 import { getShow, getSeasons } from '../../api/library.js'
 
+const SubBadgeStub = {
+  template: '<span class="sub-badge" />',
+  props: ['langs','scanned']
+}
+
 describe('TvShowDetailView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -22,7 +27,8 @@ describe('TvShowDetailView', () => {
       year: 2008, totalSeasons: 2, summary: 'Chemistry teacher.', rating: 9.5
     })
     getSeasons.mockResolvedValue([
-      { id: 100, plexId: 's1', seasonNumber: 1, title: 'Season 1', episodeCount: 7 }
+      { id: 100, plexId: 's1', seasonNumber: 1, title: 'Season 1', episodeCount: 7, hasEpisodesMissingSubtitles: true },
+      { id: 101, plexId: 's2', seasonNumber: 2, title: 'Season 2', episodeCount: 6, hasEpisodesMissingSubtitles: false }
     ])
   })
 
@@ -54,7 +60,8 @@ describe('TvShowDetailView', () => {
         plugins: [pinia],
         stubs: {
           SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small', 'seasonId'] },
-          PosterCard: { template: '<div class="pc"><slot name="badge" /></div>', props: ['plexId','title','subtitle','watched'] }
+          PosterCard: { template: '<div class="pc"><slot name="badge" /></div>', props: ['plexId','title','subtitle','watched'] },
+          SubtitleBadge: SubBadgeStub
         }
       }
     })
@@ -64,5 +71,46 @@ describe('TvShowDetailView', () => {
     cards.forEach(card => {
       expect(card.find('.sb').exists()).toBe(false)
     })
+  })
+
+  // ── Aggregate subtitle badge ──────────────────────────────────────────────────
+
+  it('shows missing-subs badge for season with hasEpisodesMissingSubtitles=true', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useWatchedStore(pinia)
+    store.fetchWatched = vi.fn()
+    store.fetchSubscriptions = vi.fn()
+    const w = mount(TvShowDetailView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small', 'seasonId'] },
+          PosterCard: { template: '<div class="pc"><slot name="badge" /></div>', props: ['plexId','title','subtitle','watched'] },
+          SubtitleBadge: SubBadgeStub
+        }
+      }
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="missing-subs-badge"]').exists()).toBe(true)
+  })
+
+  it('shows missing-subs badge only for seasons with flag=true', async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn })
+    const store = useWatchedStore(pinia)
+    store.fetchWatched = vi.fn()
+    store.fetchSubscriptions = vi.fn()
+    const w = mount(TvShowDetailView, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          SubscribeButton: { template: '<div class="sb" />', props: ['showId', 'small', 'seasonId'] },
+          PosterCard: { template: '<div class="pc"><slot name="badge" /></div>', props: ['plexId','title','subtitle','watched'] },
+          SubtitleBadge: SubBadgeStub
+        }
+      }
+    })
+    await flushPromises()
+    // 2 seasons: only season 1 has the flag
+    expect(w.findAll('[data-testid="missing-subs-badge"]')).toHaveLength(1)
   })
 })
