@@ -40,8 +40,11 @@ public class DownloadController {
             @RequestParam(required = false) String sourceSubtitles,
             @RequestParam(required = false) String outputSubtitles,
             @RequestParam(required = false) String hasLang,
-            @RequestParam(required = false) String missingLang) {
-        return downloadService.getQueue(user.getId(), sourceSubtitles, outputSubtitles, hasLang, missingLang);
+            @RequestParam(required = false) String missingLang,
+            @RequestParam(required = false) String outputHasLang,
+            @RequestParam(required = false) String outputMissingLang) {
+        return downloadService.getQueue(user.getId(), sourceSubtitles, outputSubtitles, hasLang, missingLang,
+                outputHasLang, outputMissingLang);
     }
 
     @DeleteMapping("/{id}")

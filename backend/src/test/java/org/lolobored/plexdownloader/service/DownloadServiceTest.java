@@ -798,4 +798,56 @@ class DownloadServiceTest {
             && item.getDestFilePath().contains("s01e01.mkv")
         ));
     }
+
+    @Test
+    void getQueue_outputHasLang_eng_keepsOnlyItemsWithEngInOutputLangs() {
+        DownloadQueueItem withEng = new DownloadQueueItem();
+        withEng.setId(1L); withEng.setMediaType(DownloadQueueItem.MediaType.MOVIE); withEng.setMediaId(1L);
+        withEng.setStatus(DownloadQueueItem.Status.DONE); withEng.setOutputSubtitleLangs(",eng,");
+
+        DownloadQueueItem noEng = new DownloadQueueItem();
+        noEng.setId(2L); noEng.setMediaType(DownloadQueueItem.MediaType.MOVIE); noEng.setMediaId(2L);
+        noEng.setStatus(DownloadQueueItem.Status.DONE); noEng.setOutputSubtitleLangs(",fra,");
+
+        DownloadQueueItem nullOut = new DownloadQueueItem();
+        nullOut.setId(3L); nullOut.setMediaType(DownloadQueueItem.MediaType.MOVIE); nullOut.setMediaId(3L);
+        nullOut.setStatus(DownloadQueueItem.Status.DONE); nullOut.setOutputSubtitleLangs(null);
+
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L))
+            .thenReturn(List.of(withEng, noEng, nullOut));
+        when(movieRepo.findAllById(any())).thenReturn(List.of());
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
+
+        List<DownloadQueueItemResponse> result =
+            service.getQueue(1L, null, null, null, null, "eng", null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(1L);
+    }
+
+    @Test
+    void getQueue_outputMissingLang_eng_excludesItemsWithEngOrNullOutputLangs() {
+        DownloadQueueItem withEng = new DownloadQueueItem();
+        withEng.setId(1L); withEng.setMediaType(DownloadQueueItem.MediaType.MOVIE); withEng.setMediaId(1L);
+        withEng.setStatus(DownloadQueueItem.Status.DONE); withEng.setOutputSubtitleLangs(",eng,");
+
+        DownloadQueueItem noEng = new DownloadQueueItem();
+        noEng.setId(2L); noEng.setMediaType(DownloadQueueItem.MediaType.MOVIE); noEng.setMediaId(2L);
+        noEng.setStatus(DownloadQueueItem.Status.DONE); noEng.setOutputSubtitleLangs(",fra,");
+
+        DownloadQueueItem nullOut = new DownloadQueueItem();
+        nullOut.setId(3L); nullOut.setMediaType(DownloadQueueItem.MediaType.MOVIE); nullOut.setMediaId(3L);
+        nullOut.setStatus(DownloadQueueItem.Status.DONE); nullOut.setOutputSubtitleLangs(null);
+
+        when(queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(1L))
+            .thenReturn(List.of(withEng, noEng, nullOut));
+        when(movieRepo.findAllById(any())).thenReturn(List.of());
+        when(playlistRepo.findAllById(any())).thenReturn(List.of());
+
+        List<DownloadQueueItemResponse> result =
+            service.getQueue(1L, null, null, null, null, null, "eng");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(2L);
+    }
 }

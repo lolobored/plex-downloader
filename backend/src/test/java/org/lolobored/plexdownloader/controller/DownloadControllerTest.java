@@ -82,7 +82,7 @@ class DownloadControllerTest {
             "Breaking Bad", 1,
             null, null, null, null
         );
-        when(downloadService.getQueue(eq(1L), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of(resp));
+        when(downloadService.getQueue(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), isNull())).thenReturn(List.of(resp));
 
         mockMvc.perform(get("/api/download/queue"))
             .andExpect(status().isOk())

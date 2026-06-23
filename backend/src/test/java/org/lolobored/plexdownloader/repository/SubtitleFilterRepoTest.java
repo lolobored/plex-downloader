@@ -116,6 +116,22 @@ class SubtitleFilterRepoTest {
             .doesNotContain(epEnga.getId(), epNull.getId());
     }
 
+    @Test
+    void episodes_missingLang_eng_onSeasonScoped_returnsScannedWithoutEng_excludesUnknown() {
+        TvShow show = savedShow("show-sub-test-3");
+        Season season = savedSeason(show, "season-sub-test-3", 1);
+        Episode epNone = savedEpisode(season, "ep-sub-none-3",  1, ",");
+        Episode epEng  = savedEpisode(season, "ep-sub-eng-3",   2, ",eng,");
+        Episode epEnga = savedEpisode(season, "ep-sub-enga-3",  3, ",enga,");
+        Episode epNull = savedEpisode(season, "ep-sub-null-3",  4, null);
+
+        String token = SubtitleLangs.token("eng");
+        List<Episode> results = episodeRepo.findBySeasonIdFilteredBySubtitles(season.getId(), false, null, token);
+        assertThat(results).extracting(Episode::getId)
+            .containsExactlyInAnyOrder(epNone.getId(), epEnga.getId())
+            .doesNotContain(epEng.getId(), epNull.getId());
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private Movie savedMovie(String plexId, String subtitleLangs) {

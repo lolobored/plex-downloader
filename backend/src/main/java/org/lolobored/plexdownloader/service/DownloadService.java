@@ -156,23 +156,27 @@ public class DownloadService {
 
     /** Zero-arg overload for callers that don't apply subtitle filters (unchanged behaviour). */
     public List<DownloadQueueItemResponse> getQueue(Long userId) {
-        return getQueue(userId, null, null, null, null);
+        return getQueue(userId, null, null, null, null, null, null);
     }
 
     /**
      * Returns the queue for a user with optional subtitle filters applied Java-side
      * (queue is per-user and small, so in-memory filtering is acceptable).
      *
-     * @param sourceSubtitles "none" → source item has no subtitles; null → unfiltered
-     * @param outputSubtitles "none" → output has no subtitles; null → unfiltered
-     * @param hasLang         language code — keep items whose source subtitle_langs contains this lang
-     * @param missingLang     language code — keep items whose source subtitle_langs is scanned but lacks this lang
+     * @param sourceSubtitles  "none" → source item has no subtitles; null → unfiltered
+     * @param outputSubtitles  "none" → output has no subtitles; null → unfiltered
+     * @param hasLang          language code — keep items whose source subtitle_langs contains this lang
+     * @param missingLang      language code — keep items whose source subtitle_langs is scanned but lacks this lang
+     * @param outputHasLang    language code — keep items whose output subtitle_langs contains this lang
+     * @param outputMissingLang language code — keep items whose output subtitle_langs is scanned but lacks this lang
      */
     public List<DownloadQueueItemResponse> getQueue(Long userId,
                                                     String sourceSubtitles,
                                                     String outputSubtitles,
                                                     String hasLang,
-                                                    String missingLang) {
+                                                    String missingLang,
+                                                    String outputHasLang,
+                                                    String outputMissingLang) {
         List<DownloadQueueItem> items = queueRepo.findAllByUserIdWithProfileOrderByQueuePositionAsc(userId);
 
         // Batch-fetch episode → season → show metadata
@@ -220,9 +224,12 @@ public class DownloadService {
         // Build subtitle filter predicates
         boolean srcNone = "none".equalsIgnoreCase(sourceSubtitles);
         boolean outNone = "none".equalsIgnoreCase(outputSubtitles);
-        String hasToken     = hasLang     != null ? SubtitleLangs.token(hasLang)     : null;
-        String missingToken = missingLang != null ? SubtitleLangs.token(missingLang) : null;
-        boolean applyFilter = srcNone || outNone || hasToken != null || missingToken != null;
+        String hasToken          = hasLang          != null ? SubtitleLangs.token(hasLang)          : null;
+        String missingToken      = missingLang      != null ? SubtitleLangs.token(missingLang)      : null;
+        String outHasToken       = outputHasLang    != null ? SubtitleLangs.token(outputHasLang)    : null;
+        String outMissingToken   = outputMissingLang != null ? SubtitleLangs.token(outputMissingLang) : null;
+        boolean applyFilter = srcNone || outNone || hasToken != null || missingToken != null
+                || outHasToken != null || outMissingToken != null;
 
         return items.stream()
             .filter(item -> {
@@ -236,8 +243,10 @@ public class DownloadService {
                 if (srcNone   && !",".equals(srcLangs))                                      return false;
                 if (hasToken  != null && (srcLangs == null || !srcLangs.contains(hasToken))) return false;
                 if (missingToken != null && (srcLangs == null || srcLangs.contains(missingToken))) return false;
-                // Apply output-side subtitle filter
-                if (outNone   && !",".equals(outLangs))                                      return false;
+                // Apply output-side subtitle filters
+                if (outNone          && !",".equals(outLangs))                                         return false;
+                if (outHasToken      != null && (outLangs == null || !outLangs.contains(outHasToken))) return false;
+                if (outMissingToken  != null && (outLangs == null || outLangs.contains(outMissingToken))) return false;
                 return true;
             })
             .map(item -> {
