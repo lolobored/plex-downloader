@@ -29,6 +29,10 @@ public class Movie {
     private Long tmdbId;
     @Column(name = "imdb_id")
     private String imdbId;
+    @Column(name = "subtitle_langs", columnDefinition = "TEXT")
+    private String subtitleLangs;
+    @Column(name = "subtitles_scanned_at")
+    private Instant subtitlesScannedAt;
     private Float rating;
     private String studio;
 

@@ -34,4 +34,8 @@ public class Episode {
     private String videoResolution;
     @Column(name = "synced_at")
     private Instant syncedAt;
+    @Column(name = "subtitle_langs", columnDefinition = "TEXT")
+    private String subtitleLangs;
+    @Column(name = "subtitles_scanned_at")
+    private Instant subtitlesScannedAt;
 }

@@ -64,6 +64,11 @@ public class DownloadQueueItem {
     @Column(name = "output_size_bytes")
     private Long outputSizeBytes;
 
+    @Column(name = "output_subtitle_langs", columnDefinition = "TEXT")
+    private String outputSubtitleLangs;
+    @Column(name = "output_subtitles_scanned_at")
+    private Instant outputSubtitlesScannedAt;
+
     public enum MediaType { MOVIE, EPISODE }
     public enum Status { QUEUED, TRANSCODING, DONE, ERROR }
 }

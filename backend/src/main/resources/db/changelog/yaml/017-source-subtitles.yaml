@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 017-source-subtitles
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: "ALTER TABLE movies ADD COLUMN subtitle_langs TEXT"
+        - sql:
+            sql: "ALTER TABLE movies ADD COLUMN subtitles_scanned_at TIMESTAMP"
+        - sql:
+            sql: "ALTER TABLE episodes ADD COLUMN subtitle_langs TEXT"
+        - sql:
+            sql: "ALTER TABLE episodes ADD COLUMN subtitles_scanned_at TIMESTAMP"

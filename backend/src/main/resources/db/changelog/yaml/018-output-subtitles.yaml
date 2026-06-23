@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 018-output-subtitles
+      author: plexdownloader
+      changes:
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN output_subtitle_langs TEXT"
+        - sql:
+            sql: "ALTER TABLE download_queue ADD COLUMN output_subtitles_scanned_at TIMESTAMP"
