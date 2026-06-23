@@ -14,7 +14,8 @@ vi.mock('../../api/admin.js', () => ({
   deleteQualityProfile:     vi.fn(),
   setDefaultQualityProfile: vi.fn(),
   fsList:                   vi.fn(),
-  fsMkdir:                  vi.fn()
+  fsMkdir:                  vi.fn(),
+  relocateOutput:           vi.fn()
 }))
 vi.mock('../../api/download.js', () => ({
   getQualityProfiles: vi.fn()
@@ -23,7 +24,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 import { getSettings, getSyncStatus, triggerSync, putSettings, getPlexLibraries,
          createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile,
-         fsList, fsMkdir } from '../../api/admin.js'
+         fsList, fsMkdir, relocateOutput } from '../../api/admin.js'
 import { getQualityProfiles } from '../../api/download.js'
 
 beforeEach(() => {
@@ -290,5 +291,89 @@ describe('SettingsView', () => {
       'output.movies.dir':  '/plex-conversion/libraries/movies',
       'output.tvshows.dir': '/plex-conversion/libraries/tvshows'
     }))
+  })
+})
+
+describe('Output relocation modal', () => {
+  function factoryWithChangedDir(overrides = {}) {
+    // Loads settings with one dir, then we simulate user changing it
+    const pinia = createTestingPinia({ createSpy: vi.fn, initialState: { auth: { role: 'ADMIN' } } })
+    getSettings.mockResolvedValue(fullSettings(overrides))
+    getSyncStatus.mockResolvedValue({ state: 'IDLE', lastSyncAt: null, itemsSynced: 0, error: null })
+    getPlexLibraries.mockResolvedValue([])
+    putSettings.mockResolvedValue(undefined)
+    relocateOutput.mockResolvedValue({ moved: 2, updatedOnly: 1, failed: 0 })
+    fsList.mockResolvedValue({ path: '/', parent: null, entries: [] })
+    fsMkdir.mockResolvedValue({})
+    getQualityProfiles.mockResolvedValue([])
+    return mount(SettingsView, { global: { plugins: [pinia] } })
+  }
+
+  it('does NOT show relocate modal when dir is unchanged', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="relocate-modal"]').exists()).toBe(false)
+    expect(putSettings).toHaveBeenCalled()
+  })
+
+  it('shows relocate modal when movies dir changes', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="relocate-modal"]').exists()).toBe(true)
+  })
+
+  it('Move calls relocateOutput then saves settings', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="relocate-move-btn"]').trigger('click')
+    await flushPromises()
+    expect(relocateOutput).toHaveBeenCalledWith('MOVIE', '/plex-conversion/libraries/movies', '/new/movies')
+    expect(putSettings).toHaveBeenCalled()
+  })
+
+  it('Keep saves settings without calling relocateOutput', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="relocate-keep-btn"]').trigger('click')
+    await flushPromises()
+    expect(relocateOutput).not.toHaveBeenCalled()
+    expect(putSettings).toHaveBeenCalled()
+  })
+
+  it('Cancel reverts field and does NOT save', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="relocate-cancel-btn"]').trigger('click')
+    await flushPromises()
+    expect(relocateOutput).not.toHaveBeenCalled()
+    expect(putSettings).not.toHaveBeenCalled()
+    // field reverted
+    expect(w.find('input[name="moviesDir"]').element.value).toBe('/plex-conversion/libraries/movies')
+  })
+
+  it('shows relocate result after move', async () => {
+    const w = factoryWithChangedDir()
+    await flushPromises()
+    await w.find('input[name="moviesDir"]').setValue('/new/movies')
+    await w.find('[data-testid="save-output-dirs-btn"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="relocate-move-btn"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="relocate-result"]').exists()).toBe(true)
+    expect(w.find('[data-testid="relocate-result"]').text()).toContain('2')
   })
 })

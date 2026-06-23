@@ -3,8 +3,11 @@ package org.lolobored.plexdownloader.controller;
 import org.lolobored.plexdownloader.client.PlexMediaServerClient;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.dto.SyncStatusResponse;
+import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.service.LibrarySyncScheduler;
 import org.lolobored.plexdownloader.service.LibrarySyncService;
+import org.lolobored.plexdownloader.service.OutputRelocationService;
+import org.lolobored.plexdownloader.service.OutputRelocationService.RelocationResult;
 import org.lolobored.plexdownloader.service.SettingsService;
 import org.lolobored.plexdownloader.transcode.FileBrowserService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +35,7 @@ public class AdminController {
     private final LibrarySyncScheduler syncScheduler;
     private final PlexMediaServerClient plexClient;
     private final FileBrowserService fileBrowserService;
+    private final OutputRelocationService relocationService;
 
     @GetMapping("/settings")
     public Map<String, String> getSettings() {
@@ -80,5 +84,16 @@ public class AdminController {
         }
         syncScheduler.triggerManual();
         return ResponseEntity.accepted().build();
+    }
+
+    record RelocateRequest(String mediaType, String oldRoot, String newRoot) {}
+
+    @PostMapping("/output/relocate")
+    public RelocationResult relocateOutput(@RequestBody RelocateRequest req) {
+        if (req.newRoot() == null || req.newRoot().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "newRoot must not be blank");
+        }
+        DownloadQueueItem.MediaType mt = DownloadQueueItem.MediaType.valueOf(req.mediaType());
+        return relocationService.relocate(mt, req.oldRoot(), req.newRoot());
     }
 }

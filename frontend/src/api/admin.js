@@ -53,3 +53,8 @@ export async function fsMkdir(path) {
   const { data } = await http.post('/api/admin/fs/mkdir', { path })
   return data  // { path }
 }
+
+export async function relocateOutput(mediaType, oldRoot, newRoot) {
+  const { data } = await http.post('/api/admin/output/relocate', { mediaType, oldRoot, newRoot })
+  return data  // { moved, updatedOnly, failed }
+}

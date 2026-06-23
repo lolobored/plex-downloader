@@ -102,6 +102,24 @@
         @select="onPickerSelect"
         @close="pickerOpen = false"
       />
+
+      <!-- Relocation confirm modal -->
+      <div v-if="relocateModal" class="relocate-overlay" data-testid="relocate-modal">
+        <div class="relocate-dialog">
+          <p class="relocate-msg">
+            You have existing files under <code>{{ relocateModal.oldRoot }}</code>.<br>
+            Move them to <code>{{ relocateModal.newRoot }}</code>?
+          </p>
+          <div class="relocate-actions">
+            <button class="btn-save" data-testid="relocate-move-btn" @click="onRelocateMove" :disabled="relocating">Move</button>
+            <button class="btn-sm"   data-testid="relocate-keep-btn" @click="onRelocateKeep" :disabled="relocating">Keep in place</button>
+            <button class="btn-sm"   data-testid="relocate-cancel-btn" @click="onRelocateCancel" :disabled="relocating">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <p v-if="relocateResult" class="relocate-result" data-testid="relocate-result">
+        Moved {{ relocateResult.moved }} file(s), {{ relocateResult.updatedOnly }} path(s) updated in place, {{ relocateResult.failed }} failed.
+      </p>
     </section>
 
     <section class="card-section">
@@ -184,7 +202,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSettings, putSettings, getSyncStatus, triggerSync, getPlexLibraries,
-         createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile } from '@/api/admin.js'
+         createQualityProfile, updateQualityProfile, deleteQualityProfile, setDefaultQualityProfile,
+         relocateOutput } from '@/api/admin.js'
 import { getQualityProfiles } from '@/api/download.js'
 import FolderPicker from '@/components/FolderPicker.vue'
 
@@ -299,6 +318,14 @@ const form = reactive({
 })
 
 const outputDirError = ref(null)
+const originalMoviesDir  = ref('')
+const originalTvshowsDir = ref('')
+
+// Relocation confirm modal
+const relocateModal = ref(null)  // null | { mediaType, oldRoot, newRoot, label }
+const relocateResult = ref(null) // null | { moved, updatedOnly, failed }
+const relocating = ref(false)
+
 const pickerOpen = ref(false)
 const pickerField = ref(null)
 const pickerInitialPath = ref(null)
@@ -312,6 +339,8 @@ onMounted(async () => {
     selectedLibraryKeys.value = storedLibs ? storedLibs.split(',').map(k => k.trim()).filter(Boolean) : []
     form.moviesDir  = s['output.movies.dir']  ?? '/plex-conversion/libraries/movies'
     form.tvshowsDir = s['output.tvshows.dir'] ?? '/plex-conversion/libraries/tvshows'
+    originalMoviesDir.value  = form.moviesDir
+    originalTvshowsDir.value = form.tvshowsDir
     syncStatus.value = ss
     // Resume progress bar if sync was already running when page loaded
     if (ss.state === 'RUNNING') resumePolling()
@@ -400,12 +429,54 @@ async function saveOutputDirs() {
   saving.value = true
   saveOk.value = false
   outputDirError.value = null
+  relocateResult.value = null
+
+  // Collect changed dirs (non-blank and different from originally loaded)
+  const changes = []
+  if (form.moviesDir && form.moviesDir !== originalMoviesDir.value) {
+    changes.push({ mediaType: 'MOVIE', oldRoot: originalMoviesDir.value, newRoot: form.moviesDir, label: 'movies' })
+  }
+  if (form.tvshowsDir && form.tvshowsDir !== originalTvshowsDir.value) {
+    changes.push({ mediaType: 'EPISODE', oldRoot: originalTvshowsDir.value, newRoot: form.tvshowsDir, label: 'tv shows' })
+  }
+
+  // Process each changed dir sequentially — show modal for each
+  for (const change of changes) {
+    const action = await promptRelocate(change)
+    if (action === 'cancel') {
+      // Revert this field
+      if (change.mediaType === 'MOVIE') form.moviesDir = originalMoviesDir.value
+      else form.tvshowsDir = originalTvshowsDir.value
+      saving.value = false
+      return
+    }
+    if (action === 'move') {
+      try {
+        relocating.value = true
+        const result = await relocateOutput(change.mediaType, change.oldRoot, change.newRoot)
+        relocateResult.value = result
+      } catch (e) {
+        outputDirError.value = e?.response?.data?.message ?? 'Relocation failed.'
+        saving.value = false
+        relocating.value = false
+        return
+      } finally {
+        relocating.value = false
+      }
+    }
+    // 'keep' → just proceed to save
+  }
+
+  // Now save the settings
   const payload = {
     'output.movies.dir':  form.moviesDir,
     'output.tvshows.dir': form.tvshowsDir,
   }
   try {
     await putSettings(payload)
+    // Update originals to new values after successful save
+    originalMoviesDir.value  = form.moviesDir
+    originalTvshowsDir.value = form.tvshowsDir
     saveOk.value = true
     clearTimeout(saveOkTimer)
     saveOkTimer = setTimeout(() => { saveOk.value = false }, 2000)
@@ -414,6 +485,28 @@ async function saveOutputDirs() {
   } finally {
     saving.value = false
   }
+}
+
+let _resolveRelocate = null
+
+function promptRelocate(change) {
+  relocateModal.value = change
+  return new Promise(resolve => { _resolveRelocate = resolve })
+}
+
+function onRelocateMove() {
+  relocateModal.value = null
+  if (_resolveRelocate) { _resolveRelocate('move'); _resolveRelocate = null }
+}
+
+function onRelocateKeep() {
+  relocateModal.value = null
+  if (_resolveRelocate) { _resolveRelocate('keep'); _resolveRelocate = null }
+}
+
+function onRelocateCancel() {
+  relocateModal.value = null
+  if (_resolveRelocate) { _resolveRelocate('cancel'); _resolveRelocate = null }
 }
 </script>
 
@@ -497,4 +590,10 @@ input.readonly { opacity: 0.6; cursor: default; }
 .btn-browse { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
               border-radius: 6px; padding: 8px 14px; font-size: .85rem; cursor: pointer; white-space: nowrap; }
 .btn-browse:hover { border-color: var(--accent-blue); }
+.relocate-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.relocate-dialog  { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; max-width: 500px; width: 90%; }
+.relocate-msg     { font-size: .9rem; line-height: 1.6; margin-bottom: 16px; }
+.relocate-msg code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-size: .85rem; }
+.relocate-actions  { display: flex; gap: 10px; flex-wrap: wrap; }
+.relocate-result  { font-size: .85rem; color: var(--green); margin-top: 8px; }
 </style>
