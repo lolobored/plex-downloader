@@ -37,10 +37,18 @@ public class FfmpegCommandBuilder {
         args.add("-map"); args.add("0:a?");
         args.add("-map"); args.add("0:s?");
 
+        // ALWAYS route video through vpp_qsv, even when not downscaling. With the full-GPU
+        // passthrough (-hwaccel_output_format qsv), raw decoder surfaces carry picture types
+        // hevc_qsv rejects (Invalid FrameType:0 -> "Error submitting video frame to the
+        // encoder" -> exit 183 / AVERROR_INVALIDDATA -1094995529). A VPP pass emits fresh
+        // surfaces with valid frame metadata, decoupling decode from encode. vpp_qsv also
+        // handles 8-bit/10-bit format on-GPU; scale_qsv chokes on 10-bit.
         int cap = profile.getResolutionCap().maxHeight();
         if (cap > 0 && source.height() > cap) {
-            // vpp_qsv handles 8-bit/10-bit format on-GPU; scale_qsv chokes on 10-bit.
             args.add("-vf"); args.add("vpp_qsv=w=-1:h=" + cap);
+        } else {
+            // Identity resize (same dimensions) — still goes through the VPP pipeline.
+            args.add("-vf"); args.add("vpp_qsv=w=" + source.width() + ":h=" + source.height());
         }
 
         args.add("-c:v"); args.add(profile.getCodec().ffmpegName());

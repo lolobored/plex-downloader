@@ -36,7 +36,9 @@ class FfmpegCommandBuilderTest {
         assertThat(args).containsSubsequence("-c:s", "copy"); // MKV preserves subs as-is
         assertThat(args).containsSubsequence("-progress", "pipe:1", "-nostats");
         assertThat(args.get(args.size() - 1)).isEqualTo("/out/a.mkv");
-        assertThat(args).doesNotContain("-vf");
+        // Identity vpp_qsv pass even without downscaling: forces fresh VPP surfaces so the
+        // decoder's picture types don't reach hevc_qsv raw (Invalid FrameType:0).
+        assertThat(args).containsSubsequence("-vf", "vpp_qsv=w=1920:h=1080");
     }
 
     @Test
@@ -67,10 +69,11 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
-    void resolutionCapAboveSource_noScaleFilter() {
+    void resolutionCapAboveSource_identityVppFilter() {
         QualityProfile p = profile(QualityProfile.Codec.HEVC_QSV, QualityProfile.AudioMode.COPY,
                                    QualityProfile.ResolutionCap.P1080, 23);
         List<String> args = builder.build(p, "/m/d.mkv", "/out/d.mkv", new MediaInfo(60, 1280, 720));
-        assertThat(args).doesNotContain("-vf");
+        // Not downscaled, but still runs an identity vpp_qsv pass to normalize surfaces.
+        assertThat(args).containsSubsequence("-vf", "vpp_qsv=w=1280:h=720");
     }
 }
