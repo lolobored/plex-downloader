@@ -365,6 +365,38 @@ public class DownloadService {
         return cancelled;
     }
 
+    /**
+     * Cancels queue items for a show whose episode has been watched. Mirrors {@link #cancelAllForShow}
+     * but scoped to the given watched episode ids — removes QUEUED rows, kills in-flight TRANSCODING,
+     * and deletes DONE output files from disk. Used by subscription replenish to keep a rolling window
+     * of unwatched episodes.
+     */
+    @Transactional
+    public int cancelWatchedForShow(Long userId, Long showId, Set<Long> watchedEpisodeIds) {
+        if (watchedEpisodeIds.isEmpty()) return 0;
+        return cancelWatchedItems(queueRepo.findAllByUserIdAndShowId(userId, showId), watchedEpisodeIds);
+    }
+
+    /** Season-scoped counterpart of {@link #cancelWatchedForShow}. */
+    @Transactional
+    public int cancelWatchedForSeason(Long userId, Long seasonId, Set<Long> watchedEpisodeIds) {
+        if (watchedEpisodeIds.isEmpty()) return 0;
+        return cancelWatchedItems(queueRepo.findAllByUserIdAndSeasonId(userId, seasonId), watchedEpisodeIds);
+    }
+
+    private int cancelWatchedItems(List<DownloadQueueItem> items, Set<Long> watchedEpisodeIds) {
+        int cancelled = 0;
+        for (DownloadQueueItem item : items) {
+            if (!watchedEpisodeIds.contains(item.getMediaId())) continue;
+            if (item.getStatus() == DownloadQueueItem.Status.TRANSCODING) {
+                transcodeService.cancel(item.getId());
+            }
+            doCancelItem(item);
+            cancelled++;
+        }
+        return cancelled;
+    }
+
     // Package-private for testing
     void doCancelItem(DownloadQueueItem item) {
         if (item.getDestFilePath() != null) {

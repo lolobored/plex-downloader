@@ -386,6 +386,81 @@ class DownloadServiceTest {
     }
 
     @Test
+    void cancelWatchedForShow_removesOnlyWatchedItems(@TempDir Path tmp) throws Exception {
+        Path watchedFile = tmp.resolve("watched.mkv");
+        Files.writeString(watchedFile, "data");
+
+        DownloadQueueItem watched = new DownloadQueueItem();
+        watched.setId(30L); watched.setMediaId(1L);
+        watched.setStatus(DownloadQueueItem.Status.DONE);
+        watched.setDestFilePath(watchedFile.toString());
+
+        DownloadQueueItem unwatched = new DownloadQueueItem();
+        unwatched.setId(31L); unwatched.setMediaId(2L);
+        unwatched.setStatus(DownloadQueueItem.Status.QUEUED);
+        unwatched.setDestFilePath("/conv/libraries/ep2.mkv");
+
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(watched, unwatched));
+
+        int count = service.cancelWatchedForShow(1L, 10L, Set.of(1L));
+
+        assertThat(count).isEqualTo(1);
+        verify(queueRepo).delete(watched);          // watched DONE removed...
+        assertThat(watchedFile).doesNotExist();      // ...and its file deleted from disk
+        verify(queueRepo, never()).delete(unwatched); // unwatched left alone
+    }
+
+    @Test
+    void cancelWatchedForShow_cancelsInFlightTranscodeWhenWatched() {
+        DownloadQueueItem active = new DownloadQueueItem();
+        active.setId(32L); active.setMediaId(5L);
+        active.setStatus(DownloadQueueItem.Status.TRANSCODING);
+        active.setDestFilePath("/conv/libraries/ep.mkv");
+
+        when(queueRepo.findAllByUserIdAndShowId(1L, 10L)).thenReturn(List.of(active));
+
+        int count = service.cancelWatchedForShow(1L, 10L, Set.of(5L));
+
+        assertThat(count).isEqualTo(1);
+        verify(transcodeService).cancel(32L);
+        verify(queueRepo).delete(active);
+    }
+
+    @Test
+    void cancelWatchedForShow_noopWhenWatchedSetEmpty() {
+        int count = service.cancelWatchedForShow(1L, 10L, Set.of());
+
+        assertThat(count).isEqualTo(0);
+        verify(queueRepo, never()).findAllByUserIdAndShowId(anyLong(), anyLong());
+        verify(queueRepo, never()).delete(any());
+    }
+
+    @Test
+    void cancelWatchedForSeason_removesOnlyWatchedItems(@TempDir Path tmp) throws Exception {
+        Path watchedFile = tmp.resolve("watched.mkv");
+        Files.writeString(watchedFile, "data");
+
+        DownloadQueueItem watched = new DownloadQueueItem();
+        watched.setId(40L); watched.setMediaId(1L);
+        watched.setStatus(DownloadQueueItem.Status.DONE);
+        watched.setDestFilePath(watchedFile.toString());
+
+        DownloadQueueItem unwatched = new DownloadQueueItem();
+        unwatched.setId(41L); unwatched.setMediaId(2L);
+        unwatched.setStatus(DownloadQueueItem.Status.QUEUED);
+        unwatched.setDestFilePath("/conv/libraries/ep2.mkv");
+
+        when(queueRepo.findAllByUserIdAndSeasonId(1L, 100L)).thenReturn(List.of(watched, unwatched));
+
+        int count = service.cancelWatchedForSeason(1L, 100L, Set.of(1L));
+
+        assertThat(count).isEqualTo(1);
+        verify(queueRepo).delete(watched);
+        assertThat(watchedFile).doesNotExist();
+        verify(queueRepo, never()).delete(unwatched);
+    }
+
+    @Test
     void cancelAllForSeason_cancelsPendingItems() {
         DownloadQueueItem item = new DownloadQueueItem();
         item.setId(1L);

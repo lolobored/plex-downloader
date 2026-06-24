@@ -79,6 +79,8 @@ public class SubscriptionService {
         Long showId = sub.getShow().getId();
 
         Set<Long> watchedIds = watchedRepo.findWatchedEpisodeIds(userId, showId);
+        // Rolling window: drop queue items for episodes now watched (removes rows, deletes DONE files).
+        downloadService.cancelWatchedForShow(userId, showId, watchedIds);
         Set<Long> activeIds  = queueRepo.findActiveEpisodeIdsForShow(userId, showId);
 
         long activeUnwatched = activeIds.stream().filter(id -> !watchedIds.contains(id)).count();
@@ -148,6 +150,8 @@ public class SubscriptionService {
         Long showId   = sub.getSeason().getShow().getId();
 
         Set<Long> watchedIds = watchedRepo.findWatchedEpisodeIds(userId, showId);
+        // Rolling window: drop queue items for episodes now watched (removes rows, deletes DONE files).
+        downloadService.cancelWatchedForSeason(userId, seasonId, watchedIds);
         Set<Long> activeIds  = queueRepo.findActiveEpisodeIdsForSeason(userId, seasonId);
 
         long activeUnwatched = activeIds.stream().filter(id -> !watchedIds.contains(id)).count();

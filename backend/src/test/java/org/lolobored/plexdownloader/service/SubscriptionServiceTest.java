@@ -176,6 +176,51 @@ class SubscriptionServiceTest {
     }
 
     @Test
+    void replenish_cancelsWatchedQueuedItems() {
+        ShowSubscription sub = new ShowSubscription();
+        sub.setUser(user); sub.setShow(show); sub.setTargetCount(2);
+
+        when(watchedRepo.findWatchedEpisodeIds(1L, 10L)).thenReturn(Set.of(1L));
+        when(queueRepo.findActiveEpisodeIdsForShow(1L, 10L)).thenReturn(Set.of(1L, 2L));
+
+        service.replenish(sub);
+
+        // ep1 is watched but still queued → must be cleaned, using the same watched set
+        verify(downloadService).cancelWatchedForShow(1L, 10L, Set.of(1L));
+    }
+
+    @Test
+    void replenish_cleansWatchedEvenWhenBufferOtherwiseFull() {
+        ShowSubscription sub = new ShowSubscription();
+        sub.setUser(user); sub.setShow(show); sub.setTargetCount(1);
+
+        // one active item, and it is watched → deficit would be 0, but cleanup must still run
+        when(watchedRepo.findWatchedEpisodeIds(1L, 10L)).thenReturn(Set.of(1L));
+        when(queueRepo.findActiveEpisodeIdsForShow(1L, 10L)).thenReturn(Set.of(1L));
+        when(seasonRepo.findByShowIdOrderBySeasonNumber(10L)).thenReturn(List.of(season));
+        when(episodeRepo.findBySeasonIdOrderByEpisodeNumber(100L)).thenReturn(List.of(ep1, ep2));
+        when(downloadService.enqueueEpisode(anyLong(), any())).thenReturn(List.of(99L));
+
+        service.replenish(sub);
+
+        verify(downloadService).cancelWatchedForShow(1L, 10L, Set.of(1L));
+    }
+
+    @Test
+    void replenishSeason_cancelsWatchedQueuedItems() {
+        Season s = new Season(); s.setId(100L); s.setShow(show);
+        SeasonSubscription sub = new SeasonSubscription();
+        sub.setUser(user); sub.setSeason(s); sub.setTargetCount(2);
+
+        when(watchedRepo.findWatchedEpisodeIds(1L, 10L)).thenReturn(Set.of(1L));
+        when(queueRepo.findActiveEpisodeIdsForSeason(1L, 100L)).thenReturn(Set.of(1L, 2L));
+
+        service.replenishSeason(sub);
+
+        verify(downloadService).cancelWatchedForSeason(1L, 100L, Set.of(1L));
+    }
+
+    @Test
     void listSubscriptions_returnsUserSubs() {
         ShowSubscription sub = new ShowSubscription();
         sub.setId(1L); sub.setUser(user); sub.setShow(show);
