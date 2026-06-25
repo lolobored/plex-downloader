@@ -35,6 +35,10 @@ class FfmpegCommandBuilderTest {
         assertThat(args).containsSubsequence("-c:a", "copy");
         assertThat(args).containsSubsequence("-c:s", "copy"); // MKV preserves subs as-is
         assertThat(args).containsSubsequence("-progress", "pipe:1", "-nostats");
+        // CFR + unbounded interleave delta normalize jumpy source timestamps so the mp4 muxer
+        // doesn't reject bad packet durations (Non-monotonic DTS / "duration is invalid" -> -22).
+        assertThat(args).containsSubsequence("-fps_mode", "cfr");
+        assertThat(args).containsSubsequence("-max_interleave_delta", "0");
         assertThat(args.get(args.size() - 1)).isEqualTo("/out/a.mkv");
         // Identity vpp_qsv pass even without downscaling: forces fresh VPP surfaces so the
         // decoder's picture types don't reach hevc_qsv raw (Invalid FrameType:0).

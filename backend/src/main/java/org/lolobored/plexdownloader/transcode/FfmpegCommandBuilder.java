@@ -51,6 +51,13 @@ public class FfmpegCommandBuilder {
             args.add("-vf"); args.add("vpp_qsv=w=" + source.width() + ":h=" + source.height());
         }
 
+        // Force constant frame rate so the encoder regenerates clean, monotonic timestamps.
+        // Some sources carry jumpy/garbage input timestamps that survive to the muxer as
+        // "Non-monotonic DTS" plus an absurd packet duration (e.g. 2303893000), which the mp4
+        // muxer rejects with "Application provided duration ... is invalid" -> -22 (EINVAL) ->
+        // "Conversion failed!" (ffmpeg exit 234). CFR emits uniform frame durations and fixes it.
+        args.add("-fps_mode"); args.add("cfr");
+
         args.add("-c:v"); args.add(profile.getCodec().ffmpegName());
         args.add("-global_quality"); args.add(Integer.toString(profile.getQualityLevel()));
 
@@ -61,6 +68,10 @@ public class FfmpegCommandBuilder {
         // mov_text, so convert text subs (image-based subs can't go in MP4 — use MKV).
         args.add("-c:s");
         args.add(profile.getContainer() == QualityProfile.Container.MP4 ? "mov_text" : "copy");
+
+        // Disable the interleave-delta cap so the muxer never bails when one stream's
+        // timestamps drift far from another's (defensive belt-and-braces with -fps_mode cfr).
+        args.add("-max_interleave_delta"); args.add("0");
 
         args.add("-progress"); args.add("pipe:1");
         args.add("-nostats");
