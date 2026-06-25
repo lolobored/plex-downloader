@@ -90,7 +90,7 @@ class WatchedSyncServiceTest {
     }
 
     @Test
-    void syncShow_skipsUnwatchedEpisodes() {
+    void syncShow_deletesWatchRecordWhenUnwatchedInPlex() {
         when(userRepo.findById(1L)).thenReturn(Optional.of(user));
         when(showRepo.findById(10L)).thenReturn(Optional.of(show));
         when(settings.getRequired("plex.server.url")).thenReturn("http://plex:32400");
@@ -103,8 +103,45 @@ class WatchedSyncServiceTest {
         doReturn(java.util.List.of(item))
             .when(service).fetchAllLeavesPages(anyString(), anyString(), anyString());
 
+        Episode ep = new Episode();
+        ep.setId(7L);
+        ep.setPlexId("ep-plex-2");
+        when(episodeRepo.findByPlexId("ep-plex-2")).thenReturn(Optional.of(ep));
+
+        UserEpisodeWatched existing = new UserEpisodeWatched();
+        existing.setUser(user);
+        existing.setEpisode(ep);
+        when(watchedRepo.findByUserIdAndEpisodeId(1L, 7L)).thenReturn(Optional.of(existing));
+
         service.syncShow(1L, 10L);
 
+        verify(watchedRepo).delete(existing);
+        verify(watchedRepo, never()).save(any());
+    }
+
+    @Test
+    void syncShow_noDeleteWhenUnwatchedAndNoExistingRecord() {
+        when(userRepo.findById(1L)).thenReturn(Optional.of(user));
+        when(showRepo.findById(10L)).thenReturn(Optional.of(show));
+        when(settings.getRequired("plex.server.url")).thenReturn("http://plex:32400");
+
+        WatchedSyncService.PlexEpisodeWatchStatus item =
+            new WatchedSyncService.PlexEpisodeWatchStatus();
+        item.setRatingKey("ep-plex-3");
+        item.setViewCount(0);
+
+        doReturn(java.util.List.of(item))
+            .when(service).fetchAllLeavesPages(anyString(), anyString(), anyString());
+
+        Episode ep = new Episode();
+        ep.setId(8L);
+        ep.setPlexId("ep-plex-3");
+        when(episodeRepo.findByPlexId("ep-plex-3")).thenReturn(Optional.of(ep));
+        when(watchedRepo.findByUserIdAndEpisodeId(1L, 8L)).thenReturn(Optional.empty());
+
+        service.syncShow(1L, 10L);
+
+        verify(watchedRepo, never()).delete(any());
         verify(watchedRepo, never()).save(any());
     }
 

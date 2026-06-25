@@ -98,16 +98,21 @@ public class WatchedSyncService {
 
         Instant now = Instant.now();
         for (PlexEpisodeWatchStatus item : allEpisodes) {
-            if (item.getViewCount() == null || item.getViewCount() == 0) continue;
+            boolean watchedInPlex = item.getViewCount() != null && item.getViewCount() > 0;
             episodeRepo.findByPlexId(item.getRatingKey()).ifPresent(episode -> {
-                UserEpisodeWatched watched = watchedRepo
-                    .findByUserIdAndEpisodeId(userId, episode.getId())
-                    .orElseGet(() -> {
-                        UserEpisodeWatched w = new UserEpisodeWatched();
-                        w.setUser(user);
-                        w.setEpisode(episode);
-                        return w;
-                    });
+                Optional<UserEpisodeWatched> existing =
+                    watchedRepo.findByUserIdAndEpisodeId(userId, episode.getId());
+                if (!watchedInPlex) {
+                    // Unwatched in Plex — remove any stale watched record so it propagates back.
+                    existing.ifPresent(watchedRepo::delete);
+                    return;
+                }
+                UserEpisodeWatched watched = existing.orElseGet(() -> {
+                    UserEpisodeWatched w = new UserEpisodeWatched();
+                    w.setUser(user);
+                    w.setEpisode(episode);
+                    return w;
+                });
                 if (item.getLastViewedAt() != null) {
                     watched.setWatchedAt(Instant.ofEpochSecond(item.getLastViewedAt()));
                 }
@@ -232,10 +237,16 @@ public class WatchedSyncService {
                     || resp.getMediaContainer().getMetadata() == null) continue;
 
             for (PlexMovieWatchStatus item : resp.getMediaContainer().getMetadata()) {
-                if (item.getViewCount() == null || item.getViewCount() == 0) continue;
+                boolean watchedInPlex = item.getViewCount() != null && item.getViewCount() > 0;
                 movieRepo.findByPlexId(item.getRatingKey()).ifPresent(movie -> {
-                    UserMovieWatched watched = movieWatchedRepo
-                        .findByUserIdAndMovieId(userId, movie.getId())
+                    Optional<UserMovieWatched> existing =
+                        movieWatchedRepo.findByUserIdAndMovieId(userId, movie.getId());
+                    if (!watchedInPlex) {
+                        // Unwatched in Plex — remove any stale watched record so it propagates back.
+                        existing.ifPresent(movieWatchedRepo::delete);
+                        return;
+                    }
+                    UserMovieWatched watched = existing
                         .orElseGet(() -> { var w = new UserMovieWatched(); w.setUser(user); w.setMovie(movie); return w; });
                     if (item.getLastViewedAt() != null) {
                         watched.setWatchedAt(Instant.ofEpochSecond(item.getLastViewedAt()));
