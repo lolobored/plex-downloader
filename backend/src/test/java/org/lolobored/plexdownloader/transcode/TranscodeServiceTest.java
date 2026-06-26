@@ -33,13 +33,16 @@ class TranscodeServiceTest {
     @Mock MediaProbe mediaProbe;
     @Mock ProcessRunner processRunner;
     @Mock SubtitleProbe subtitleProbe;
+    @Mock org.lolobored.plexdownloader.repository.MovieRepository movieRepo;
+    @Mock org.lolobored.plexdownloader.repository.EpisodeRepository episodeRepo;
 
     private TranscodeService service() {
         TranscodeConfig cfg = new TranscodeConfig("ffmpeg", "ffprobe", "/dev/dri/renderD128");
         when(subtitleProbe.probe(anyString()))
             .thenReturn(new SubtitleProbe.ProbeResult(true, List.of()));
         return new TranscodeService(queueRepo, mediaProbe,
-            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner, subtitleProbe);
+            new FfmpegCommandBuilder(cfg), new ProgressParser(), processRunner, subtitleProbe,
+            movieRepo, episodeRepo);
     }
 
     private DownloadQueueItem item(Long id, String src, String dest) {
@@ -89,6 +92,46 @@ class TranscodeServiceTest {
         assertThat(it.getProgressPercent()).isEqualTo(100);
         assertThat(it.getCompletedAt()).isNotNull();
         assertThat(dest).exists();
+    }
+
+    @Test
+    void staleSourcePath_refreshedFromMovieBeforeTranscode(@TempDir Path tmp) throws Exception {
+        // Disk file lives at the NEW path; the queue snapshot still holds the OLD (renamed) path.
+        Path stale = tmp.resolve("movie old-2160p.m4v");
+        Path current = tmp.resolve("movie remux-1080p.m4v");
+        Files.write(current, new byte[1000]);
+        Path dest = tmp.resolve("dest/movie.mkv");
+
+        DownloadQueueItem it = item(7L, stale.toString(), dest.toString());
+        it.setMediaType(DownloadQueueItem.MediaType.MOVIE);
+        it.setMediaId(42L);
+
+        org.lolobored.plexdownloader.model.Movie movie = new org.lolobored.plexdownloader.model.Movie();
+        movie.setFilePath(current.toString());
+        when(movieRepo.findById(42L)).thenReturn(Optional.of(movie));
+
+        when(queueRepo.findByIdWithProfile(7L)).thenReturn(Optional.of(it));
+        when(queueRepo.findById(7L)).thenReturn(Optional.of(it));
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mediaProbe.probe(anyString())).thenReturn(new MediaInfo(60, 1920, 1080));
+        when(processRunner.start(anyList(), any(), any())).thenAnswer(inv -> {
+            List<String> cmd = inv.getArgument(0);
+            Path outFile = Path.of(cmd.get(cmd.size() - 1));
+            Files.createDirectories(outFile.getParent());
+            Files.write(outFile, new byte[400]);
+            return new RunningTranscode() {
+                public int waitForExit() { return 0; }
+                public void cancel() {}
+            };
+        });
+
+        service().transcode(7L);
+
+        // Snapshot is corrected and ffmpeg is fed the CURRENT path, not the stale one.
+        assertThat(it.getSourceFilePath()).isEqualTo(current.toString());
+        verify(mediaProbe).probe(current.toString());
+        verify(mediaProbe, never()).probe(stale.toString());
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.DONE);
     }
 
     @Test

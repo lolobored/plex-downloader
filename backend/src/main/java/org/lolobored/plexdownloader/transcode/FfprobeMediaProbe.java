@@ -30,7 +30,31 @@ public class FfprobeMediaProbe implements MediaProbe {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        return parse(new ArrayList<>(lines));
+        MediaInfo base = parse(new ArrayList<>(lines));
+        return new MediaInfo(base.durationSeconds(), base.width(), base.height(),
+            probeSubtitleCodecs(sourcePath));
+    }
+
+    /** codec_name of each subtitle stream, in stream order. Empty on failure / no subtitles. */
+    private List<String> probeSubtitleCodecs(String sourcePath) {
+        List<String> lines = new CopyOnWriteArrayList<>();
+        List<String> cmd = List.of(
+            config.ffprobe(), "-v", "error",
+            "-select_streams", "s",
+            "-show_entries", "stream=codec_name",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            sourcePath);
+        RunningTranscode rt = processRunner.start(cmd, lines::add, l -> {});
+        try {
+            rt.waitForExit();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        List<String> codecs = new ArrayList<>();
+        for (String line : lines) {
+            if (line != null && !line.isBlank()) codecs.add(line.trim());
+        }
+        return codecs;
     }
 
     static MediaInfo parse(List<String> lines) {

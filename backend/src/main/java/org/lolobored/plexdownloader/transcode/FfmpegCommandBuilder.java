@@ -64,10 +64,25 @@ public class FfmpegCommandBuilder {
         args.add("-c:a");
         args.add(profile.getAudioMode() == QualityProfile.AudioMode.AAC ? "aac" : "copy");
 
-        // Preserve subtitles. MKV carries any subtitle codec as-is; MP4 only supports
-        // mov_text, so convert text subs (image-based subs can't go in MP4 — use MKV).
-        args.add("-c:s");
-        args.add(profile.getContainer() == QualityProfile.Container.MP4 ? "mov_text" : "copy");
+        // Preserve subtitles. MKV carries any subtitle codec as-is (copy). MP4 only supports
+        // mov_text, so text subs must be converted — EXCEPT a source stream that is ALREADY
+        // mov_text, which we COPY per-stream. Re-encoding mov_text -> mov_text makes ffmpeg
+        // regenerate trailing gap-fill samples whose duration can exceed INT_MAX once rescaled
+        // to the mp4 microsecond timescale; movenc then rejects them ("Application provided
+        // duration ... is invalid" -> -22 / exit 234). Copying keeps the source track timescale
+        // and sidesteps the overflow. Image-based subs still can't go in MP4 — use MKV.
+        if (profile.getContainer() != QualityProfile.Container.MP4) {
+            args.add("-c:s"); args.add("copy");
+        } else if (source.subtitleCodecs().isEmpty()) {
+            // No probed sub codecs (or none present): keep the historical default.
+            args.add("-c:s"); args.add("mov_text");
+        } else {
+            List<String> subs = source.subtitleCodecs();
+            for (int i = 0; i < subs.size(); i++) {
+                args.add("-c:s:" + i);
+                args.add("mov_text".equals(subs.get(i)) ? "copy" : "mov_text");
+            }
+        }
 
         // Disable the interleave-delta cap so the muxer never bails when one stream's
         // timestamps drift far from another's (defensive belt-and-braces with -fps_mode cfr).

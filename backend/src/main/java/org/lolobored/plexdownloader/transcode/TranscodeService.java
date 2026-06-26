@@ -2,6 +2,8 @@ package org.lolobored.plexdownloader.transcode;
 
 import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
+import org.lolobored.plexdownloader.repository.EpisodeRepository;
+import org.lolobored.plexdownloader.repository.MovieRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +30,8 @@ public class TranscodeService {
     private final ProgressParser progressParser;
     private final ProcessRunner processRunner;
     private final SubtitleProbe subtitleProbe;
+    private final MovieRepository movieRepo;
+    private final EpisodeRepository episodeRepo;
 
     private final ConcurrentHashMap<Long, RunningTranscode> running = new ConcurrentHashMap<>();
 
@@ -36,18 +40,29 @@ public class TranscodeService {
                             FfmpegCommandBuilder commandBuilder,
                             ProgressParser progressParser,
                             ProcessRunner processRunner,
-                            SubtitleProbe subtitleProbe) {
+                            SubtitleProbe subtitleProbe,
+                            MovieRepository movieRepo,
+                            EpisodeRepository episodeRepo) {
         this.queueRepo = queueRepo;
         this.mediaProbe = mediaProbe;
         this.commandBuilder = commandBuilder;
         this.progressParser = progressParser;
         this.processRunner = processRunner;
         this.subtitleProbe = subtitleProbe;
+        this.movieRepo = movieRepo;
+        this.episodeRepo = episodeRepo;
     }
 
     public void transcode(Long itemId) {
         DownloadQueueItem item = queueRepo.findByIdWithProfile(itemId).orElse(null);
         if (item == null) { log.warn("Transcode skipped, item {} gone", itemId); return; }
+
+        // The queue item's source path is a snapshot taken at enqueue time. If the file was
+        // renamed on disk afterwards (e.g. a re-download at a different quality), library sync
+        // updates the canonical Movie/Episode.filePath but NOT this snapshot — leaving ffmpeg to
+        // open a stale path ("No such file or directory"). Re-resolve from the canonical record
+        // so the transcode self-heals, including on retry.
+        refreshSourcePath(item);
 
         item.setStatus(DownloadQueueItem.Status.TRANSCODING);
         item.setTranscodeStartedAt(Instant.now());
@@ -125,6 +140,27 @@ public class TranscodeService {
             deletePartial(item.getDestFilePath());
             DownloadQueueItem freshOnError = queueRepo.findById(itemId).orElse(item);
             failItem(freshOnError, "Transcode setup failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Re-resolves the queue item's source path from the canonical Movie/Episode record and
+     * updates the snapshot if it drifted (file renamed on disk since enqueue). No-op when the
+     * media record is gone or its path is unset — ffmpeg then surfaces the original error.
+     */
+    private void refreshSourcePath(DownloadQueueItem item) {
+        if (item.getMediaType() == null || item.getMediaId() == null) return;
+        String current = switch (item.getMediaType()) {
+            case MOVIE -> movieRepo.findById(item.getMediaId())
+                .map(org.lolobored.plexdownloader.model.Movie::getFilePath).orElse(null);
+            case EPISODE -> episodeRepo.findById(item.getMediaId())
+                .map(org.lolobored.plexdownloader.model.Episode::getFilePath).orElse(null);
+        };
+        if (current != null && !current.equals(item.getSourceFilePath())) {
+            log.info("Source path drifted for item {}: {} -> {}",
+                item.getId(), item.getSourceFilePath(), current);
+            item.setSourceFilePath(current);
+            queueRepo.save(item);
         }
     }
 

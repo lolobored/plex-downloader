@@ -56,6 +56,30 @@ class FfmpegCommandBuilderTest {
     }
 
     @Test
+    void mp4Container_copiesSubsThatAreAlreadyMovText() {
+        // Re-encoding mov_text -> mov_text can emit a gap-fill sample whose duration overflows
+        // INT_MAX in the mp4 microsecond timescale ("duration is invalid" -> exit 234). Copy it.
+        QualityProfile p = profile(QualityProfile.Codec.HEVC_QSV, QualityProfile.AudioMode.COPY,
+                                   QualityProfile.ResolutionCap.KEEP, 23);
+        p.setContainer(QualityProfile.Container.MP4);
+        List<String> args = builder.build(p, "/m/e.mkv", "/out/e.mp4",
+            new MediaInfo(60, 1280, 720, List.of("mov_text")));
+        assertThat(args).containsSubsequence("-c:s:0", "copy");
+        assertThat(args).doesNotContain("mov_text");
+    }
+
+    @Test
+    void mp4Container_mixedSubs_copiesMovTextConvertsOthersPerStream() {
+        QualityProfile p = profile(QualityProfile.Codec.HEVC_QSV, QualityProfile.AudioMode.COPY,
+                                   QualityProfile.ResolutionCap.KEEP, 23);
+        p.setContainer(QualityProfile.Container.MP4);
+        List<String> args = builder.build(p, "/m/e.mkv", "/out/e.mp4",
+            new MediaInfo(60, 1280, 720, List.of("subrip", "mov_text")));
+        assertThat(args).containsSubsequence("-c:s:0", "mov_text"); // subrip -> convert
+        assertThat(args).containsSubsequence("-c:s:1", "copy");      // already mov_text -> copy
+    }
+
+    @Test
     void h264Aac_setsCodecAndAac() {
         QualityProfile p = profile(QualityProfile.Codec.H264_QSV, QualityProfile.AudioMode.AAC,
                                    QualityProfile.ResolutionCap.KEEP, 20);
