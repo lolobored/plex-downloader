@@ -62,7 +62,7 @@ public class TranscodeService {
         // updates the canonical Movie/Episode.filePath but NOT this snapshot — leaving ffmpeg to
         // open a stale path ("No such file or directory"). Re-resolve from the canonical record
         // so the transcode self-heals, including on retry.
-        refreshSourcePath(item);
+        if (!refreshSourcePath(item)) return;   // media gone: item already failed with a clear message
 
         item.setStatus(DownloadQueueItem.Status.TRANSCODING);
         item.setTranscodeStartedAt(Instant.now());
@@ -144,24 +144,41 @@ public class TranscodeService {
     }
 
     /**
-     * Re-resolves the queue item's source path from the canonical Movie/Episode record and
-     * updates the snapshot if it drifted (file renamed on disk since enqueue). No-op when the
-     * media record is gone or its path is unset — ffmpeg then surfaces the original error.
+     * Re-resolves the queue item's source path from the canonical Movie/Episode record.
+     * Returns false (after failing the item) when the media record no longer exists —
+     * e.g. Plex reissued the ratingKey on an upgrade and sync pruned the old row, orphaning
+     * this item's mediaId. Otherwise updates the snapshot if the path drifted and returns true.
      */
-    private void refreshSourcePath(DownloadQueueItem item) {
-        if (item.getMediaType() == null || item.getMediaId() == null) return;
-        String current = switch (item.getMediaType()) {
-            case MOVIE -> movieRepo.findById(item.getMediaId())
-                .map(org.lolobored.plexdownloader.model.Movie::getFilePath).orElse(null);
-            case EPISODE -> episodeRepo.findById(item.getMediaId())
-                .map(org.lolobored.plexdownloader.model.Episode::getFilePath).orElse(null);
-        };
+    private boolean refreshSourcePath(DownloadQueueItem item) {
+        if (item.getMediaType() == null || item.getMediaId() == null) return true;
+
+        boolean present = false;
+        String current = null;
+        switch (item.getMediaType()) {
+            case MOVIE -> {
+                var m = movieRepo.findById(item.getMediaId());
+                present = m.isPresent();
+                current = m.map(org.lolobored.plexdownloader.model.Movie::getFilePath).orElse(null);
+            }
+            case EPISODE -> {
+                var e = episodeRepo.findById(item.getMediaId());
+                present = e.isPresent();
+                current = e.map(org.lolobored.plexdownloader.model.Episode::getFilePath).orElse(null);
+            }
+        }
+
+        if (!present) {
+            failItem(item, "Source media no longer in Plex - likely replaced by an upgrade; re-enqueue from library");
+            return false;
+        }
+
         if (current != null && !current.equals(item.getSourceFilePath())) {
             log.info("Source path drifted for item {}: {} -> {}",
                 item.getId(), item.getSourceFilePath(), current);
             item.setSourceFilePath(current);
             queueRepo.save(item);
         }
+        return true;
     }
 
     public boolean cancel(Long itemId) {
