@@ -386,6 +386,28 @@ class TranscodeServiceTest {
     }
 
     @Test
+    void missingMediaRecord_failsFastWithoutRunningFfmpeg(@TempDir Path tmp) {
+        Path src = tmp.resolve("obsession webdl-2160p.m4v"); // deliberately not created
+        Path dest = tmp.resolve("dest/obsession.mkv");
+
+        DownloadQueueItem it = item(99L, src.toString(), dest.toString());
+        it.setMediaType(DownloadQueueItem.MediaType.MOVIE);
+        it.setMediaId(2166L);
+
+        when(queueRepo.findByIdWithProfile(99L)).thenReturn(Optional.of(it));
+        when(movieRepo.findById(2166L)).thenReturn(Optional.empty()); // pruned row
+        when(queueRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service().transcode(99L);
+
+        assertThat(it.getStatus()).isEqualTo(DownloadQueueItem.Status.ERROR);
+        assertThat(it.getTranscodeError())
+            .contains("Source media no longer in Plex");
+        verify(mediaProbe, never()).probe(anyString());
+        verify(processRunner, never()).start(anyList(), any(), any());
+    }
+
+    @Test
     void cancel_unknownItem_returnsFalse() {
         assertThat(service().cancel(999L)).isFalse();
     }
