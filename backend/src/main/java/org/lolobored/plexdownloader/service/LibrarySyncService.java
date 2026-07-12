@@ -36,6 +36,8 @@ public class LibrarySyncService {
 
     private static final int PAGE_SIZE = 50;
     private static final String AGENT_NONE = "com.plexapp.agents.none";
+    private static final String ORPHAN_MSG =
+        "Source media no longer in Plex - likely replaced by an upgrade; re-enqueue from library";
 
     private final PlexMediaServerClient plexClient;
     private final PosterStorageService posterStorage;
@@ -46,6 +48,7 @@ public class LibrarySyncService {
     private final SeasonRepository seasonRepo;
     private final EpisodeRepository episodeRepo;
     private final ActorRepository actorRepo;
+    private final DownloadQueueRepository queueRepo;
     private final SettingsService settings;
 
     public enum SyncState { IDLE, RUNNING, ERROR }
@@ -123,6 +126,11 @@ public class LibrarySyncService {
             if (!seenMoviePlexIds.isEmpty()) {
                 List<Movie> orphanMovies = movieRepo.findByPlexIdNotIn(seenMoviePlexIds);
                 if (!orphanMovies.isEmpty()) {
+                    Set<Long> orphanMovieIds = orphanMovies.stream().map(Movie::getId).collect(Collectors.toSet());
+                    failOrphanedQueueItems(
+                        queueRepo.findByMediaTypeAndStatusAndMediaIdIn(
+                            DownloadQueueItem.MediaType.MOVIE, DownloadQueueItem.Status.QUEUED, orphanMovieIds),
+                        "movie(s)");
                     log.info("Pruning {} movie(s) no longer in Plex", orphanMovies.size());
                     movieRepo.deleteAll(orphanMovies);
                 }
@@ -130,6 +138,8 @@ public class LibrarySyncService {
             if (!seenShowPlexIds.isEmpty()) {
                 List<TvShow> orphanShows = showRepo.findByPlexIdNotIn(seenShowPlexIds);
                 if (!orphanShows.isEmpty()) {
+                    Set<Long> orphanShowIds = orphanShows.stream().map(TvShow::getId).collect(Collectors.toSet());
+                    failOrphanedQueueItems(queueRepo.findQueuedEpisodeItemsForShows(orphanShowIds), "show(s)");
                     log.info("Pruning {} show(s) no longer in Plex", orphanShows.size());
                     showRepo.deleteAll(orphanShows);
                 }
@@ -155,6 +165,17 @@ public class LibrarySyncService {
         } catch (Exception e) {
             log.error("Watched sync failed", e);
         }
+    }
+
+    private void failOrphanedQueueItems(List<DownloadQueueItem> stuck, String kind) {
+        if (stuck.isEmpty()) return;
+        for (DownloadQueueItem i : stuck) {
+            i.setStatus(DownloadQueueItem.Status.ERROR);
+            i.setTranscodeError(ORPHAN_MSG);
+            i.setErrorMessage("Transcoding failed");
+        }
+        queueRepo.saveAll(stuck);
+        log.info("Failed {} orphaned queue item(s) for pruned {}", stuck.size(), kind);
     }
 
     private void syncMovieLibrary(String libraryKey, Set<String> seenPlexIds) {

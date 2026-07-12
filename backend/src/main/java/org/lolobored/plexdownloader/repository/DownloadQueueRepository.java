@@ -73,4 +73,13 @@ public interface DownloadQueueRepository extends JpaRepository<DownloadQueueItem
            "      SELECT pi.plexId FROM PlaylistItem pi WHERE pi.playlistId = :playlistId AND pi.mediaType = 'EPISODE'))))")
     List<DownloadQueueItem> findAllByUserIdAndPlaylistId(@Param("userId") Long userId,
                                                          @Param("playlistId") Long playlistId);
+
+    List<DownloadQueueItem> findByMediaTypeAndStatusAndMediaIdIn(
+        DownloadQueueItem.MediaType mediaType,
+        DownloadQueueItem.Status status,
+        Collection<Long> mediaIds);
+
+    @Query("SELECT i FROM DownloadQueueItem i WHERE i.mediaType = 'EPISODE' AND i.status = 'QUEUED' "
+         + "AND i.mediaId IN (SELECT e.id FROM Episode e WHERE e.season.show.id IN :showIds)")
+    List<DownloadQueueItem> findQueuedEpisodeItemsForShows(@Param("showIds") Collection<Long> showIds);
 }

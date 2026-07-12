@@ -5,10 +5,12 @@ import org.lolobored.plexdownloader.client.dto.PlexItem;
 import org.lolobored.plexdownloader.client.dto.PlexLibrary;
 import org.lolobored.plexdownloader.client.dto.PlexLibraryPage;
 import org.lolobored.plexdownloader.model.Actor;
+import org.lolobored.plexdownloader.model.DownloadQueueItem;
 import org.lolobored.plexdownloader.model.Movie;
 import org.lolobored.plexdownloader.model.Season;
 import org.lolobored.plexdownloader.model.TvShow;
 import org.lolobored.plexdownloader.repository.*;
+import org.lolobored.plexdownloader.repository.DownloadQueueRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,7 @@ class LibrarySyncServiceTest {
     @Mock ActorRepository actorRepo;
     @Mock SettingsService settings;
     @Mock PlaylistSyncService playlistSyncService;
+    @Mock DownloadQueueRepository queueRepo;
     @InjectMocks LibrarySyncService service;
 
     @BeforeEach
@@ -209,6 +212,64 @@ class LibrarySyncServiceTest {
         when(plexClient.getLibraries()).thenReturn(List.of());
         service.syncAll();
         verify(playlistSyncService).syncAll();
+    }
+
+    @Test
+    void prunedMovie_failsQueuedOrphanItems() {
+        PlexLibrary movieLib = new PlexLibrary();
+        movieLib.setKey("1");
+        movieLib.setType("movie");
+        movieLib.setAgent("tv.plex.agents.movie");
+
+        PlexItem live = new PlexItem();
+        live.setRatingKey("52365");
+        live.setType("movie");
+        live.setTitle("Obsession");
+        live.setYear(2026);
+        live.setThumb("/library/metadata/52365/thumb");
+        live.setUpdatedAt(1000L);
+        PlexItem liveDetail = new PlexItem();
+        liveDetail.setRatingKey("52365");
+        liveDetail.setType("movie");
+        liveDetail.setTitle("Obsession");
+        liveDetail.setYear(2026);
+        liveDetail.setThumb("/library/metadata/52365/thumb");
+        liveDetail.setUpdatedAt(1000L);
+        liveDetail.setRole(List.of());
+        liveDetail.setGenre(List.of());
+        liveDetail.setDirector(List.of());
+
+        when(plexClient.getLibraries()).thenReturn(List.of(movieLib));
+        when(plexClient.getLibraryContents("1", 0)).thenReturn(new PlexLibraryPage(1, List.of(live)));
+        when(plexClient.getItemDetail("52365")).thenReturn(liveDetail);
+        when(movieRepo.findByPlexId("52365")).thenReturn(Optional.empty());
+        when(movieRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(posterStorage.posterUrl("52365")).thenReturn("/api/posters/52365.jpg");
+
+        // The pre-upgrade row Plex no longer lists.
+        Movie orphan = new Movie();
+        orphan.setId(2166L);
+        orphan.setPlexId("old-rating-key");
+        when(movieRepo.findByPlexIdNotIn(anySet())).thenReturn(List.of(orphan));
+
+        // A QUEUED queue item still pointing at the orphaned PK.
+        DownloadQueueItem stuck = new DownloadQueueItem();
+        stuck.setId(713L);
+        stuck.setMediaType(DownloadQueueItem.MediaType.MOVIE);
+        stuck.setMediaId(2166L);
+        stuck.setStatus(DownloadQueueItem.Status.QUEUED);
+        when(queueRepo.findByMediaTypeAndStatusAndMediaIdIn(
+                eq(DownloadQueueItem.MediaType.MOVIE),
+                eq(DownloadQueueItem.Status.QUEUED),
+                anySet()))
+            .thenReturn(List.of(stuck));
+        when(queueRepo.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.syncAll();
+
+        assertThat(stuck.getStatus()).isEqualTo(DownloadQueueItem.Status.ERROR);
+        assertThat(stuck.getTranscodeError()).contains("Source media no longer in Plex");
+        verify(movieRepo).deleteAll(List.of(orphan));
     }
 
     private PlexLibrary lib(String key, String title, String type, String agent) {
