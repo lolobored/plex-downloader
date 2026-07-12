@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'org.lolobored'
-version = '2026.2.32'
+version = '2026.2.33'
 
 java {
     toolchain {
