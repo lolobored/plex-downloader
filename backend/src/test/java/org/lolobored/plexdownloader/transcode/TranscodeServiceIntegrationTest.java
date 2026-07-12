@@ -40,6 +40,7 @@ class TranscodeServiceIntegrationTest {
     @Autowired DownloadQueueRepository queueRepo;
     @Autowired QualityProfileRepository profileRepo;
     @Autowired UserRepository userRepo;
+    @Autowired org.lolobored.plexdownloader.repository.MovieRepository movieRepo;
 
     @MockitoBean MediaProbe mediaProbe;
     @MockitoBean ProcessRunner processRunner;
@@ -64,10 +65,16 @@ class TranscodeServiceIntegrationTest {
         java.nio.file.Files.write(src, new byte[]{0x00, 0x01, 0x02, 0x03});
         java.nio.file.Path dest = tempBase.resolve("out.mkv");
 
+        org.lolobored.plexdownloader.model.Movie movie = new org.lolobored.plexdownloader.model.Movie();
+        movie.setPlexId("it-movie-1");
+        movie.setTitle("It Movie");
+        movie.setFilePath(src.toString());
+        movie = movieRepo.save(movie);
+
         DownloadQueueItem item = new DownloadQueueItem();
         item.setUser(user);
         item.setMediaType(DownloadQueueItem.MediaType.MOVIE);
-        item.setMediaId(1L);
+        item.setMediaId(movie.getId());
         item.setTitle("It Movie");
         item.setSourceFilePath(src.toString());
         item.setDestFilePath(dest.toString());
