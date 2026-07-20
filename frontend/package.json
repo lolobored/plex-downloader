@@ -12,7 +12,7 @@
     "axios": "^1.18.1",
     "esbuild": "^0.28.1",
     "pinia": "^3.0.4",
-    "vue": "^3.5.39",
+    "vue": "^3.5.40",
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
